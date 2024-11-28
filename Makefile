@@ -1,9 +1,15 @@
-.PHONY: check-deps bump-patch bump-minor bump-major bump-release bump-prepatch bump-preminor bump-premajor bump-prerelease
+.PHONY: check-deps bump-patch bump-minor bump-major bump-release bump-prepatch bump-preminor bump-premajor bump-prerelease re-tag
 
 # Ensure dependencies are available
 check-deps:
 	@command -v git >/dev/null 2>&1 || { echo "Error: 'git' is not installed or not in PATH." >&2; exit 1; }
 	@command -v poetry >/dev/null 2>&1 || { echo "Error: 'poetry' is not installed or not in PATH." >&2; exit 1; }
+
+re-tag: check-deps
+	git push --delete origin refs/tags/$(TAG) &&\
+	git tag --delete $(TAG) &&\
+	git tag $(TAG) &&\
+	git push --tags
 
 # Helper function to bump version, commit, and tag
 bump-version: check-deps

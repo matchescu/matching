@@ -37,8 +37,6 @@ jobs:
     name: Publish Package
     runs-on: ubuntu-latest
     environment: pypi
-    permissions:
-      id-token: write
     container:
       image: andreiolar1/python-poetry-mkdocs:3.12.7
     if: startsWith(github.ref, 'refs/tags/v')
