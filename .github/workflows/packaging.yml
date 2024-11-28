@@ -1,0 +1,55 @@
+name: Python Package Workflow
+
+env:
+  LC_ALL: "en_US.UTF-8"
+  LC_CTYPE: "en_US.UTF-8"
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'pyproject.toml'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pre-merge-check:
+    name: Pre-Merge Check (Build & Test)
+    runs-on: ubuntu-latest
+    container:
+      image: andreiolar1/python-poetry-mkdocs:3.12.7
+    if: startsWith(github.head_ref, 'feature/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run tests
+        run: poetry run pytest
+
+  publish:
+    name: Publish Package
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    container:
+      image: andreiolar1/python-poetry-mkdocs:3.12.7
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Build the package
+        run: poetry build
+
+      - name: Publish to PyPI
+        env:
+          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_API_TOKEN }}
+        run: poetry publish
