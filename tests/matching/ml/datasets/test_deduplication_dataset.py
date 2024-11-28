@@ -3,7 +3,10 @@ import itertools
 import polars as pl
 import pytest
 
-from matchescu.matching.entity_reference import RawComparison, EntityReferenceComparisonConfig
+from matchescu.matching.entity_reference import (
+    RawComparison,
+    EntityReferenceComparisonConfig,
+)
 from matchescu.matching.ml.datasets import CsvDataSource, Traits, DeduplicationDataSet
 
 
@@ -15,7 +18,9 @@ def dataset_dir(data_dir):
 @pytest.fixture(scope="module")
 def cora(dataset_dir):
     traits = list(Traits().int([0]).string([2, 3, 5, 7]))
-    return CsvDataSource("cora", traits, has_header=False).read_csv(dataset_dir / "cora.csv")
+    return CsvDataSource("cora", traits, has_header=False).read_csv(
+        dataset_dir / "cora.csv"
+    )
 
 
 @pytest.fixture(scope="module")
@@ -33,14 +38,14 @@ def cora_ground_truth(dataset_dir):
 
 @pytest.fixture(scope="module")
 def comparison_config() -> EntityReferenceComparisonConfig:
-    return (
-        RawComparison().levenshtein("name", 2, 2)
-    )
+    return RawComparison().levenshtein("name", 2, 2)
 
 
 @pytest.fixture(scope="module")
 def dataset(cora, cora_ground_truth, comparison_config) -> DeduplicationDataSet:
-    result = DeduplicationDataSet(cora, cora_ground_truth).attr_compare(comparison_config)
+    result = DeduplicationDataSet(cora, cora_ground_truth).attr_compare(
+        comparison_config
+    )
     result.cross_sources()
     return result
 
@@ -48,7 +53,7 @@ def dataset(cora, cora_ground_truth, comparison_config) -> DeduplicationDataSet:
 def test_feature_matrix(cora, dataset):
     n = len(cora)
 
-    assert len(dataset.feature_matrix) == (n*(n-1)) / 2
+    assert len(dataset.feature_matrix) == (n * (n - 1)) / 2
 
 
 def test_target_vector(cora_ground_truth, dataset):

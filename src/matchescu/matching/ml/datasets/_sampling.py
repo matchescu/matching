@@ -3,7 +3,10 @@ from abc import ABCMeta, abstractmethod
 from itertools import product
 from typing import Hashable, Callable, Generator
 
-from matchescu.matching.entity_reference import EntityReferenceComparisonConfig, AttrComparisonSpec
+from matchescu.matching.entity_reference import (
+    EntityReferenceComparisonConfig,
+    AttrComparisonSpec,
+)
 from matchescu.typing import EntityReference
 
 

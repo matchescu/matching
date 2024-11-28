@@ -30,13 +30,20 @@ def perfect_mapping(abt_buy_dir):
 
 @pytest.fixture(scope="module")
 def corpus(abt, buy, perfect_mapping) -> list[tuple[str, str]]:
-    perfect_abt = abt.join(perfect_mapping, left_on="id", right_on="idAbt", how="inner").select("name")
-    perfect_buy = buy.join(perfect_mapping, left_on="id", right_on="idBuy", how="inner").select("name")
-    matching_names = pl.concat([perfect_abt.rename({"name": "abt_name"}), perfect_buy.rename({"name": "buy_name"})], how="horizontal")
-    return [
-        (str(val[0]), str(val[1]))
-        for val in matching_names.iter_rows()
-    ]
+    perfect_abt = abt.join(
+        perfect_mapping, left_on="id", right_on="idAbt", how="inner"
+    ).select("name")
+    perfect_buy = buy.join(
+        perfect_mapping, left_on="id", right_on="idBuy", how="inner"
+    ).select("name")
+    matching_names = pl.concat(
+        [
+            perfect_abt.rename({"name": "abt_name"}),
+            perfect_buy.rename({"name": "buy_name"}),
+        ],
+        how="horizontal",
+    )
+    return [(str(val[0]), str(val[1])) for val in matching_names.iter_rows()]
 
 
 @pytest.fixture(scope="module")
@@ -49,10 +56,12 @@ def model(corpus) -> LevenshteinLearner:
 def test_similarity(model):
     same = round(model("linksys", "linksys"), 2)
     slight_difference = round(model("astana", "agata"), 2)
-    bigger_difference = round(model(
-        "Linksys EtherFast 8-Port 10/100 Switch - EZXS88W",
-        "Linksys EtherFast EZXS88W Ethernet Switch - EZXS88W"
-    ))
+    bigger_difference = round(
+        model(
+            "Linksys EtherFast 8-Port 10/100 Switch - EZXS88W",
+            "Linksys EtherFast EZXS88W Ethernet Switch - EZXS88W",
+        )
+    )
 
     assert same >= slight_difference >= bigger_difference
 
@@ -60,9 +69,11 @@ def test_similarity(model):
 def test_distance(model):
     same = round(model.compute_distance("linksys", "linksys"), 2)
     slight_difference = round(model.compute_distance("astana", "agata"), 2)
-    bigger_difference = round(model.compute_distance(
-        "Linksys EtherFast 8-Port 10/100 Switch - EZXS88W",
-        "Linksys EtherFast EZXS88W Ethernet Switch - EZXS88W"
-    ))
+    bigger_difference = round(
+        model.compute_distance(
+            "Linksys EtherFast 8-Port 10/100 Switch - EZXS88W",
+            "Linksys EtherFast EZXS88W Ethernet Switch - EZXS88W",
+        )
+    )
 
     assert same < slight_difference < bigger_difference

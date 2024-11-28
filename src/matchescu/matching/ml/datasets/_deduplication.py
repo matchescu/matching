@@ -7,7 +7,10 @@ from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
 )
-from matchescu.matching.ml.datasets._sampling import AttributeComparison, PatternEncodedComparison
+from matchescu.matching.ml.datasets._sampling import (
+    AttributeComparison,
+    PatternEncodedComparison,
+)
 from matchescu.typing import DataSource, Record
 
 
@@ -78,15 +81,16 @@ class DeduplicationDataSet:
         mid = len(source[0])
         data = []
         for i, left_row in enumerate(source):
-            for j in range(i+1, len(source)):
+            for j in range(i + 1, len(source)):
                 row = {
-                    f"left_column_{idx+1}": value
-                    for idx, value in enumerate(left_row)
+                    f"left_column_{idx+1}": value for idx, value in enumerate(left_row)
                 }
-                row.update({
-                    f"right_column_{idx + 1}": value
-                    for idx, value in enumerate(source[j])
-                })
+                row.update(
+                    {
+                        f"right_column_{idx + 1}": value
+                        for idx, value in enumerate(source[j])
+                    }
+                )
                 data.append(row)
         sample_factory = partial(self.__sample_factory, divider=mid)
         df = pl.DataFrame(data)

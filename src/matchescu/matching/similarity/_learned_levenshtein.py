@@ -22,7 +22,9 @@ class LevenshteinLearner(StringSimilarity):
         self._transitions = set()
 
     def _init_transitions(self):
-        self._updates = set(itertools.product(self._underlying_alphabet, self._surface_alphabet))
+        self._updates = set(
+            itertools.product(self._underlying_alphabet, self._surface_alphabet)
+        )
         self._inserts = set(itertools.product([None], self._surface_alphabet))
         self._deletes = set(itertools.product(self._underlying_alphabet, [None]))
         self._transitions = self._inserts | self._updates | self._deletes
@@ -35,8 +37,10 @@ class LevenshteinLearner(StringSimilarity):
                 surface.add(surface_char)
             for underlying_char in pair[1]:
                 underlying.add(underlying_char)
-        self._surface_alphabet = {c: idx+1 for idx, c in enumerate(sorted(surface))}
-        self._underlying_alphabet = {c: idx+1 for idx, c in enumerate(sorted(underlying))}
+        self._surface_alphabet = {c: idx + 1 for idx, c in enumerate(sorted(surface))}
+        self._underlying_alphabet = {
+            c: idx + 1 for idx, c in enumerate(sorted(underlying))
+        }
         self._init_transitions()
 
     def _init_probabilities(self) -> None:
@@ -59,7 +63,7 @@ class LevenshteinLearner(StringSimilarity):
     def _pos(self, x_t: str, y_v) -> tuple[int, int]:
         return (
             self._underlying_alphabet.get(x_t, 0),
-            self._surface_alphabet.get(y_v, 0)
+            self._surface_alphabet.get(y_v, 0),
         )
 
     def _underlying_index(self, char: str) -> int:
@@ -115,10 +119,10 @@ class LevenshteinLearner(StringSimilarity):
         return beta
 
     def _compute_expectations(
-            self,
-            x: str,
-            y: str,
-            lambda_: float = 0.1,
+        self,
+        x: str,
+        y: str,
+        lambda_: float = 0.1,
     ) -> None:
         alpha = self.forward_eval(x, y)
         beta = self.backward_eval(x, y)
@@ -134,22 +138,28 @@ class LevenshteinLearner(StringSimilarity):
         for t in range(T + 1):
             for v in range(V + 1):
                 if t > 0:
-                    delta = self._delta(x[t-1], None)
-                    gamma_val = (lambda_ * alpha[t-1, v] * delta * beta[t, v]) / norm_factor
-                    x_t = self._underlying_index(x[t-1])
+                    delta = self._delta(x[t - 1], None)
+                    gamma_val = (
+                        lambda_ * alpha[t - 1, v] * delta * beta[t, v]
+                    ) / norm_factor
+                    x_t = self._underlying_index(x[t - 1])
                     if x_t > 0:  # if it's a symbol from the underlying alphabet
                         self._gamma[x_t, 0] += gamma_val
                 if v > 0:
-                    delta = self._delta(None, y[v-1])
-                    y_v = self._surface_index(y[v-1])
+                    delta = self._delta(None, y[v - 1])
+                    y_v = self._surface_index(y[v - 1])
                     if y_v > 0:  # if it's a symbol from the surface alphabet
-                        gamma_val = (lambda_ * alpha[t, v-1] * delta * beta[t, v]) / norm_factor
+                        gamma_val = (
+                            lambda_ * alpha[t, v - 1] * delta * beta[t, v]
+                        ) / norm_factor
                         self._gamma[0, y_v] += gamma_val
                 if t > 0 and v > 0:
-                    delta = self._delta(x[t-1], y[v-1])
-                    x_t, y_v = self._pos(x[t-1], y[v-1])
+                    delta = self._delta(x[t - 1], y[v - 1])
+                    x_t, y_v = self._pos(x[t - 1], y[v - 1])
                     if x_t > 0 and y_v > 0:
-                        gamma_val = (lambda_ * alpha[t-1, v-1] * delta * beta[t, v]) / norm_factor
+                        gamma_val = (
+                            lambda_ * alpha[t - 1, v - 1] * delta * beta[t, v]
+                        ) / norm_factor
                         self._gamma[x_t, y_v] += gamma_val
 
     def _maximize_expectations(self) -> None:
@@ -159,13 +169,17 @@ class LevenshteinLearner(StringSimilarity):
             self._deltas[row, col] = self._gamma[row, col] / n
         self._delta_sharp = self._gamma_sharp / n
 
-    def fit(self, corpus: list[tuple[str, str]], epochs: int = 10) -> "LevenshteinLearner":
+    def fit(
+        self, corpus: list[tuple[str, str]], epochs: int = 10
+    ) -> "LevenshteinLearner":
         self._init_alphabets(corpus)
         self._init_probabilities()
         epoch = 0
         prev_likelihood = 0
         while epoch < epochs:
-            self._gamma = np.zeros((len(self._underlying_alphabet) + 1, len(self._surface_alphabet) + 1))
+            self._gamma = np.zeros(
+                (len(self._underlying_alphabet) + 1, len(self._surface_alphabet) + 1)
+            )
             for x, y in corpus:
                 self._compute_expectations(x, y)
             self._maximize_expectations()
@@ -186,5 +200,5 @@ class LevenshteinLearner(StringSimilarity):
     def _compute_string_similarity(self, x: str, _: int, y: str, __: int) -> float:
         d = self.compute_distance(x, y)
         c = 100
-        exponent = - (math.pow(d, 2) / (2 * math.pow(c, 2)))
+        exponent = -(math.pow(d, 2) / (2 * math.pow(c, 2)))
         return math.exp(exponent)

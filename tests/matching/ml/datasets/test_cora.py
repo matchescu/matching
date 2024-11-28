@@ -14,17 +14,18 @@ def cora(dataset_dir):
     return pl.read_csv(dataset_dir / "cora.csv", ignore_errors=True, has_header=False)
 
 
-
 def test_cora_classes(data_dir, cora):
     groups = cora.group_by(pl.col("column_3"))
     gt = []
     group_count = 0
     for group_name, df in groups:
         ids = [row[0] for row in df.iter_rows()]
-        gt.extend([
-            {"id_left": row[0], "id_right": row[1]}
-            for row in itertools.combinations(ids, 2)
-        ])
+        gt.extend(
+            [
+                {"id_left": row[0], "id_right": row[1]}
+                for row in itertools.combinations(ids, 2)
+            ]
+        )
         group_count += 1
     print("found", group_count, "groups")
     df = pl.DataFrame(gt)
