@@ -1,6 +1,11 @@
 import pytest
 
-from matchescu.matching.similarity import Jaro, JaroWinkler, Jaccard, Levenshtein
+from matchescu.matching.similarity import (
+    Jaro,
+    JaroWinkler,
+    Jaccard,
+    LevenshteinSimilarity,
+)
 
 
 @pytest.mark.parametrize(
@@ -20,13 +25,15 @@ from matchescu.matching.similarity import Jaro, JaroWinkler, Jaccard, Levenshtei
     ],
 )
 def test_levenshtein(a, b, expected):
-    similarity = Levenshtein()
+    similarity = LevenshteinSimilarity()
 
     assert 0 <= similarity(a, b) <= 1
     assert similarity(a, b) == expected
 
 
-@pytest.mark.parametrize("factory_method", [Levenshtein, Jaro, JaroWinkler, Jaccard])
+@pytest.mark.parametrize(
+    "factory_method", [LevenshteinSimilarity, Jaro, JaroWinkler, Jaccard]
+)
 @pytest.mark.parametrize(
     "a, b",
     [

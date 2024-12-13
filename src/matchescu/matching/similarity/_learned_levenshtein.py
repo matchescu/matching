@@ -197,7 +197,7 @@ class LevenshteinLearner(StringSimilarity):
             return 0
         return -np.log(dist)  # return value in log space
 
-    def _compute_string_similarity(self, x: str, _: int, y: str, __: int) -> float:
+    def _compute_string_similarity(self, x: str, y: str) -> float:
         d = self.compute_distance(x, y)
         c = 100
         exponent = -(math.pow(d, 2) / (2 * math.pow(c, 2)))

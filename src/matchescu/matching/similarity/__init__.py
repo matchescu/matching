@@ -7,7 +7,7 @@ from matchescu.matching.similarity._string import (
     Jaccard,
     Jaro,
     JaroWinkler,
-    Levenshtein,
+    LevenshteinSimilarity,
 )
 
 
@@ -18,6 +18,6 @@ __all__ = [
     "Jaccard",
     "Jaro",
     "JaroWinkler",
-    "Levenshtein",
+    "LevenshteinSimilarity",
     "LevenshteinLearner",
 ]

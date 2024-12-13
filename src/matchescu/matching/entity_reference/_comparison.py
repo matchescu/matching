@@ -14,7 +14,7 @@ from matchescu.matching.similarity import (
     Jaro,
     Jaccard,
     JaroWinkler,
-    Levenshtein,
+    LevenshteinSimilarity,
     Similarity,
 )
 
@@ -128,7 +128,12 @@ class EntityReferenceComparisonConfig:
     ) -> "EntityReferenceComparisonConfig":
         self.__specs.append(
             self._new_spec(
-                Levenshtein, label, left_key, right_key, threshold, ignore_case
+                LevenshteinSimilarity,
+                label,
+                left_key,
+                right_key,
+                threshold,
+                ignore_case,
             )
         )
         return self
