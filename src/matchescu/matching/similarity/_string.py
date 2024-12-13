@@ -64,5 +64,10 @@ class Jaccard(StringSimilarity):
         self.__threshold = threshold
 
     def _compute_string_similarity(self, x: str, y: str) -> float:
-        threshold = self.__threshold or min(len(x), len(y))
+        y_len = len(y)
+        x_len = len(x)
+        threshold = self.__threshold or min(x_len, y_len)
+        if threshold == 0:
+            return 0 if x_len > 0 or y_len > 0 else 1
+
         return jaccard_similarity(x, y, threshold)

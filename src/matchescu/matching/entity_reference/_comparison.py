@@ -16,6 +16,8 @@ from matchescu.matching.similarity import (
     JaroWinkler,
     LevenshteinSimilarity,
     Similarity,
+    LevenshteinDistance,
+    Norm,
 )
 
 
@@ -60,6 +62,23 @@ class EntityReferenceComparisonConfig:
         label: str,
         left_key: int | str,
         right_key: int | str,
+    ) -> "EntityReferenceComparisonConfig":
+        self.__specs.append(
+            self._new_spec(
+                Norm,
+                label,
+                left_key,
+                right_key,
+                0.0,
+            )
+        )
+        return self
+
+    def bounded_diff(
+        self,
+        label: str,
+        left_key: int | str,
+        right_key: int | str,
         threshold: float = 0.5,
         max_diff: float = 1.0,
     ) -> "EntityReferenceComparisonConfig":
@@ -73,6 +92,7 @@ class EntityReferenceComparisonConfig:
                 max_diff,
             )
         )
+        return self
 
     def jaro(
         self,
@@ -129,6 +149,26 @@ class EntityReferenceComparisonConfig:
         self.__specs.append(
             self._new_spec(
                 LevenshteinSimilarity,
+                label,
+                left_key,
+                right_key,
+                threshold,
+                ignore_case,
+            )
+        )
+        return self
+
+    def levenshtein_distance(
+        self,
+        label: str,
+        left_key: int | str,
+        right_key: int | str,
+        threshold=0.5,
+        ignore_case: bool = False,
+    ) -> "EntityReferenceComparisonConfig":
+        self.__specs.append(
+            self._new_spec(
+                LevenshteinDistance,
                 label,
                 left_key,
                 right_key,
