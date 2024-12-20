@@ -45,6 +45,20 @@ class Sampling(metaclass=ABCMeta):
         return (result,)  # need to return a tuple
 
 
+class NoOp(Sampling):
+
+    def _process_cross_join_record(self, left: EntityReference, right: EntityReference) -> dict:
+        result = {
+            f"left_{idx}": value
+            for idx, value in enumerate(left, 1)
+        }
+        result.update({
+            f"right_{idx}": value
+            for idx, value in enumerate(right, 1)
+        })
+        return result
+
+
 class AttributeComparison(Sampling):
     @staticmethod
     def __compare_attr_values(
@@ -110,9 +124,13 @@ class RecordLinkageDataSet:
         left: DataSource[Record],
         right: DataSource[Record],
         ground_truth: set[tuple[Any, Any]],
+        left_id: Callable[[EntityReference], Hashable] = None,
+        right_id: Callable[[EntityReference], Hashable] = None,
     ) -> None:
-        self.__extract_left = EntityReferenceExtraction(left, lambda ref: ref[0])
-        self.__extract_right = EntityReferenceExtraction(right, lambda ref: ref[0])
+        left_id = left_id or (lambda ref: ref[0])
+        right_id = right_id or (lambda ref: ref[0])
+        self.__extract_left = EntityReferenceExtraction(left, left_id)
+        self.__extract_right = EntityReferenceExtraction(right, right_id)
         self.__true_matches = ground_truth
         self.__comparison_data = None
         self.__sample_factory = None
@@ -162,11 +180,11 @@ class RecordLinkageDataSet:
         return self
 
     def cross_sources(self) -> "RecordLinkageDataSet":
-        if self.__sample_factory is None:
-            raise ValueError("specify type of sampling")
         left = self.__with_col_suffix(self.__extract_left, "_left")
         right = self.__with_col_suffix(self.__extract_right, "_right")
+        no_op = NoOp(self.__true_matches, None, self.__extract_left.identify, self.__extract_right.identify,
+                  self.__TARGET_COL)
+        sample_factory = no_op if self.__sample_factory is None else partial(self.__sample_factory, divider=len(left.columns))
         cross_join = left.join(right, how="cross")
-        sample_factory = partial(self.__sample_factory, divider=len(left.columns))
         self.__comparison_data = cross_join.map_rows(sample_factory).unnest("column_0")
         return self

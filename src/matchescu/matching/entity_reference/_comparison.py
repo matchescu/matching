@@ -1,6 +1,8 @@
 from abc import abstractmethod
 from typing import Any, Type, Iterable
 
+import torch.nn
+
 from matchescu.matching.attribute import (
     BinarySimilarityMatchOnThreshold,
     RawMatch,
@@ -17,7 +19,7 @@ from matchescu.matching.similarity import (
     LevenshteinSimilarity,
     Similarity,
     LevenshteinDistance,
-    Norm,
+    Norm, TensorSimilarity,
 )
 
 
@@ -174,6 +176,42 @@ class EntityReferenceComparisonConfig:
                 right_key,
                 threshold,
                 ignore_case,
+            )
+        )
+        return self
+
+
+    def euclidian_distance(
+        self,
+        label: str,
+            left_key: int | str,
+            right_key: int | str,
+    ) -> "EntityReferenceComparisonConfig":
+        self.__specs.append(
+            self._new_spec(
+                TensorSimilarity,
+                label,
+                left_key,
+                right_key,
+                0,
+            )
+        )
+        return self
+
+    def cosine_similarity(
+        self,
+        label: str,
+        left_key: int | str,
+        right_key: int | str,
+    ) -> "EntityReferenceComparisonConfig":
+        self.__specs.append(
+            self._new_spec(
+                TensorSimilarity,
+                label,
+                left_key,
+                right_key,
+                0,
+                torch.nn.CosineSimilarity()
             )
         )
         return self
