@@ -27,4 +27,4 @@ class HighwayMatchClassifier(nn.Sequential):
                 output_activation=highway_output_activation,
             )
         )
-        self.add_module("softmax", nn.LogSoftmax())
+        self.add_module("softmax", nn.LogSoftmax(dim=-1))

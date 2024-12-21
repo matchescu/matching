@@ -16,4 +16,4 @@ def highway_net(request, input_size, hidden_size, output_size):
 def test_init_args(input_size, output_size, test_input, highway_net):
     out = highway_net.forward(test_input)
 
-    assert out.shape[0] == output_size
+    assert out.shape == (1, output_size)

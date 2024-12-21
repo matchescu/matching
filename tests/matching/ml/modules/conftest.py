@@ -25,4 +25,4 @@ def output_size(request):
 
 @pytest.fixture
 def test_input(input_size):
-    return torch.rand(input_size)
+    return torch.rand(input_size).unsqueeze(0)

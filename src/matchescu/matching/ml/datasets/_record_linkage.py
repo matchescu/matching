@@ -11,6 +11,7 @@ from matchescu.matching.entity_reference import (
     AttrComparisonSpec,
     EntityReferenceComparisonConfig,
 )
+from matchescu.matching.ml.datasets._torch import PlTorchDataset
 from matchescu.typing import DataSource, Record, EntityReference
 
 
@@ -141,6 +142,9 @@ class RecordLinkageDataSet:
         if self.__comparison_data is None:
             raise ValueError("comparison matrix was not computed")
         return self.__comparison_data.drop([self.__TARGET_COL])
+
+    def create_torch_dataset(self):
+        return PlTorchDataset(self.__comparison_data, self.__TARGET_COL)
 
     @staticmethod
     def __with_col_suffix(
