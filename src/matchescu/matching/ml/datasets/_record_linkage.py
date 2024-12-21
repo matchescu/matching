@@ -36,9 +36,9 @@ class ComparisonEngine(metaclass=ABCMeta):
 
     def __call__(self, left_side: EntityReference, right_side: EntityReference) -> dict:
         result = self._compare(left_side, right_side)
-        result[self._target_col] = int(
-            (self._left_id(left_side), self._right_id(right_side)) in self._gt
-        )
+        lid = self._left_id(left_side)
+        rid = self._right_id(right_side)
+        result[self._target_col] = int((lid, rid) in self._gt)
         return result
 
 
