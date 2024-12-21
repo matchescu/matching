@@ -1,3 +1,4 @@
+from functools import partial
 from typing import Callable
 
 from torch import nn, Tensor
@@ -14,7 +15,7 @@ class HighwayLayer(nn.Module):
         super(HighwayLayer, self).__init__()
         self._activation = activation or f.relu
         self._basic_processor = nn.Linear(unit_count, unit_count)
-        nn.init.xavier_uniform(self._basic_processor.weight)
+        nn.init.xavier_uniform_(self._basic_processor.weight)
         self._transform_gate = nn.Linear(unit_count, unit_count)
         self._transform_gate.bias.data.fill_(initial_bias)
 
@@ -38,7 +39,7 @@ class HighwayNetwork(nn.Module):
     ):
         super().__init__()
 
-        self._output_activation = output_activation or f.softmax
+        self._output_activation = output_activation or partial(f.softmax, dim=-1)
 
         self._scale_in = nn.Linear(input_size, hidden_size)
         self._layers = nn.ModuleList([
