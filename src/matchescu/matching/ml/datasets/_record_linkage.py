@@ -1,6 +1,6 @@
+import itertools
 import math
 from abc import ABCMeta, abstractmethod
-from functools import partial
 from itertools import product
 from typing import Any, Callable, Hashable, Generator
 
@@ -14,7 +14,7 @@ from matchescu.matching.entity_reference import (
 from matchescu.typing import DataSource, Record, EntityReference
 
 
-class Sampling(metaclass=ABCMeta):
+class ComparisonEngine(metaclass=ABCMeta):
     def __init__(
         self,
         ground_truth: set[tuple[Hashable, Hashable]],
@@ -30,24 +30,19 @@ class Sampling(metaclass=ABCMeta):
         self._target_col = target_col_name
 
     @abstractmethod
-    def _process_cross_join_record(
-        self, left: EntityReference, right: EntityReference
-    ) -> dict:
+    def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         pass
 
-    def __call__(self, cross_join_row: tuple, divider: int) -> tuple[dict]:
-        left_side = cross_join_row[:divider]
-        right_side = cross_join_row[divider:]
-        result = self._process_cross_join_record(left_side, right_side)
+    def __call__(self, left_side: EntityReference, right_side: EntityReference) -> dict:
+        result = self._compare(left_side, right_side)
         result[self._target_col] = int(
             (self._left_id(left_side), self._right_id(right_side)) in self._gt
         )
-        return (result,)  # need to return a tuple
+        return result
 
 
-class NoOp(Sampling):
-
-    def _process_cross_join_record(self, left: EntityReference, right: EntityReference) -> dict:
+class NoOp(ComparisonEngine):
+    def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         result = {
             f"left_{idx}": value
             for idx, value in enumerate(left, 1)
@@ -59,7 +54,7 @@ class NoOp(Sampling):
         return result
 
 
-class AttributeComparison(Sampling):
+class AttributeComparison(ComparisonEngine):
     @staticmethod
     def __compare_attr_values(
         left_ref: EntityReference,
@@ -70,7 +65,7 @@ class AttributeComparison(Sampling):
         b = right_ref[config.right_ref_key]
         return config.match_strategy(a, b)
 
-    def _process_cross_join_record(
+    def _compare(
         self, left: EntityReference, right: EntityReference
     ) -> dict:
         return {
@@ -79,7 +74,7 @@ class AttributeComparison(Sampling):
         }
 
 
-class PatternEncodedComparison(Sampling):
+class PatternEncodedComparison(ComparisonEngine):
     _BASE = 2
 
     def __init__(
@@ -98,7 +93,7 @@ class PatternEncodedComparison(Sampling):
         possible_outcomes = tuple(range(self._possible_outcomes))
         yield from product(possible_outcomes, repeat=len(self._config))
 
-    def _process_cross_join_record(
+    def _compare(
         self, left: EntityReference, right: EntityReference
     ) -> dict:
         comparison_results = [
@@ -180,11 +175,12 @@ class RecordLinkageDataSet:
         return self
 
     def cross_sources(self) -> "RecordLinkageDataSet":
-        left = self.__with_col_suffix(self.__extract_left, "_left")
-        right = self.__with_col_suffix(self.__extract_right, "_right")
-        no_op = NoOp(self.__true_matches, None, self.__extract_left.identify, self.__extract_right.identify,
-                  self.__TARGET_COL)
-        sample_factory = no_op if self.__sample_factory is None else partial(self.__sample_factory, divider=len(left.columns))
-        cross_join = left.join(right, how="cross")
-        self.__comparison_data = cross_join.map_rows(sample_factory).unnest("column_0")
+        left_entity_references = list(self.__extract_left())
+        right_entity_references = list(self.__extract_right())
+        cross_entity_references = itertools.product(left_entity_references, right_entity_references)
+
+        no_op = NoOp(self.__true_matches, EntityReferenceComparisonConfig(), self.__extract_left.identify, self.__extract_right.identify, self.__TARGET_COL)
+        sample_factory = self.__sample_factory or no_op
+
+        self.__comparison_data = pl.DataFrame(itertools.starmap(sample_factory, cross_entity_references))
         return self
