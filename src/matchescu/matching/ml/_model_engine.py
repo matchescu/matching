@@ -1,5 +1,6 @@
 import torch
 
+from sklearn.metrics import precision_score, recall_score, f1_score
 from torch import nn
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
@@ -11,6 +12,11 @@ class TorchEngine:
         self._loss = loss_fn
         self._optimizer = optimizer
         self._device = device
+        self._stats = {}
+
+    @property
+    def stats(self):
+        return self._stats
 
     def _train_epoch(self, data_loader: DataLoader) -> float:
         self._model.train(True)
@@ -30,9 +36,21 @@ class TorchEngine:
         total_loss /= len(data_loader)
         return total_loss
 
-    def evaluate(self, data_loader: DataLoader) -> float:
+    def _compute_stats(self, predictions: list, target: list) -> None:
+        predictions = list(map(lambda x: torch.argmax(x).item(), predictions))
+        target = list(map(lambda x: x.item(), target))
+        self._stats = {
+            "precision": precision_score(target, predictions),
+            "recall": recall_score(target, predictions),
+            "f1": f1_score(target, predictions),
+        }
+
+    def evaluate(self, data_loader: DataLoader, compute_stats: bool = False) -> float:
         self._model.eval()
         total_loss = 0.0
+        predictions = []
+        target = []
+
         with torch.no_grad():
             for feats, labels in data_loader:
                 feats = feats.to(self._device)
@@ -40,8 +58,12 @@ class TorchEngine:
 
                 out = self._model(feats)
                 loss_val = self._loss(out, labels)
-
+                if compute_stats:
+                    predictions.extend(out)
+                    target.extend(labels.float())
                 total_loss += loss_val.item()
+        if compute_stats:
+            self._compute_stats(predictions, target)
         total_loss /= len(data_loader)
         return total_loss
 
