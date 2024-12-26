@@ -5,7 +5,8 @@ from matchescu.matching.entity_reference._comparison import (
     FellegiSunterComparison,
     EntityReferenceComparisonConfig,
 )
-from matchescu.matching.ml.datasets import CsvDataSource, Traits, RecordLinkageDataSet
+from matchescu.matching.extraction import CsvDataSource, Traits
+from matchescu.matching.ml.datasets import RecordLinkageDataSet
 
 
 @pytest.fixture

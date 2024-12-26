@@ -1226,13 +1226,13 @@ files = [
 
 [[package]]
 name = "matchescu-base"
-version = "0.7.0"
+version = "0.8.0"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.11"
 files = [
-    {file = "matchescu_base-0.7.0-py3-none-any.whl", hash = "sha256:f33ef7393db586295619d0745c1edf80400f3cdad18435e868aaeb0bd5e25d83"},
-    {file = "matchescu_base-0.7.0.tar.gz", hash = "sha256:a335671cff6dafc4c9e3743e7e8d42f0e5f084c583d094f13fff1a2ef8dc878c"},
+    {file = "matchescu_base-0.8.0-py3-none-any.whl", hash = "sha256:b410ea3d08698a6e777de54d0bcf46cff7b9fb861b73edce03c791c2756fa5eb"},
+    {file = "matchescu_base-0.8.0.tar.gz", hash = "sha256:a00691f5afcb265da35b0dc8d1f912449f2f5a73813b98985a580bce9ede8285"},
 ]
 
 [[package]]
@@ -2578,4 +2578,4 @@ test = ["websockets"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.13"
-content-hash = "9f6ae4fbcec52bc925cf97a9f16071756e088697af57f7eed89f5036c34f53dd"
+content-hash = "ebacb86b50d8df341e31c8e745d6cfcd95f18f456418844257cf682dad437c9d"

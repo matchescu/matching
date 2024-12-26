@@ -1,13 +1,10 @@
 import csv
-from typing import Hashable, Callable
 
-import polars as pl
 import pytest
-import spacy
 
 from matchescu.data import EntityReferenceExtraction
-from matchescu.matching.blocking._blocker import BlockingEngine
-from matchescu.matching.ml.datasets import Traits, CsvDataSource
+from matchescu.matching.blocking import BlockingEngine
+from matchescu.matching.extraction import CsvDataSource, Traits
 from matchescu.typing import Record, DataSource
 
 

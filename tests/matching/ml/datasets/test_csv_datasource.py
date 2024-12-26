@@ -1,6 +1,6 @@
 import pytest
 
-from matchescu.matching.ml.datasets import Traits, CsvDataSource
+from matchescu.matching.extraction import CsvDataSource, Traits
 
 
 @pytest.fixture

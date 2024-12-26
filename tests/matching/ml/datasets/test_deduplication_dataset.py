@@ -7,7 +7,8 @@ from matchescu.matching.entity_reference import (
     RawComparison,
     EntityReferenceComparisonConfig,
 )
-from matchescu.matching.ml.datasets import CsvDataSource, Traits, DeduplicationDataSet
+from matchescu.matching.extraction import CsvDataSource, Traits
+from matchescu.matching.ml.datasets import DeduplicationDataSet
 
 
 @pytest.fixture(scope="module")
