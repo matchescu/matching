@@ -16,9 +16,7 @@ bump-version: check-deps
 	@poetry version $(PART)
 	@VERSION=$$(poetry version -s); \
 	git add pyproject.toml; \
-	git commit -m "Bump version to $$VERSION"; \
-	git tag -a "v$$VERSION" -m "Version $$VERSION"; \
-	echo "Bumped version to $$VERSION and tagged as v$$VERSION"
+	git commit -m "Bump version to $$VERSION";
 
 # Targets for different version increments
 bump-patch:
@@ -44,3 +42,10 @@ bump-premajor:
 
 bump-prerelease:
 	@$(MAKE) PART=prerelease bump-version
+
+new-tag:
+	@VERSION=$$(poetry version -s); \
+	git tag -a "v$$VERSION" -m "Version $$VERSION" &&\
+	git push --tags &&\
+	echo "Pushed tag v$$VERSION" ||\
+	echo "Failed to push tag v$$VERSION"
