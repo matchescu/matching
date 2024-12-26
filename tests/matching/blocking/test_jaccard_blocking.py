@@ -4,8 +4,7 @@ import pytest
 
 from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.blocking import BlockingEngine
-from matchescu.matching.extraction import CsvDataSource
-from matchescu.matching.ml.datasets import Traits
+from matchescu.matching.extraction import CsvDataSource, Traits
 from matchescu.typing import Record, DataSource
 
 

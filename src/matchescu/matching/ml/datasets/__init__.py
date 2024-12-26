@@ -4,13 +4,11 @@ from matchescu.matching.ml.datasets._sampling import (
     AttributeComparison,
     PatternEncodedComparison,
 )
-from matchescu.matching.ml.datasets._traits import Traits
 
 
 __all__ = [
     "DeduplicationDataSet",
     "RecordLinkageDataSet",
-    "Traits",
     "AttributeComparison",
     "PatternEncodedComparison",
 ]
