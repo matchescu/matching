@@ -10,7 +10,7 @@ from matchescu.matching.entity_reference import (
 from matchescu.typing import EntityReference
 
 
-class Sampling(metaclass=ABCMeta):
+class ComparisonEngine(metaclass=ABCMeta):
     def __init__(
         self,
         ground_truth: set[tuple[Hashable, Hashable]],
@@ -26,22 +26,31 @@ class Sampling(metaclass=ABCMeta):
         self._target_col = target_col_name
 
     @abstractmethod
-    def _process_cross_join_record(
-        self, left: EntityReference, right: EntityReference
-    ) -> dict:
+    def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         pass
 
-    def __call__(self, cross_join_row: tuple, divider: int) -> tuple[dict]:
-        left_side = cross_join_row[:divider]
-        right_side = cross_join_row[divider:]
-        result = self._process_cross_join_record(left_side, right_side)
-        result[self._target_col] = int(
-            (self._left_id(left_side), self._right_id(right_side)) in self._gt
-        )
-        return (result,)  # need to return a tuple
+    def __call__(self, left_side: EntityReference, right_side: EntityReference) -> dict:
+        result = self._compare(left_side, right_side)
+        lid = self._left_id(left_side)
+        rid = self._right_id(right_side)
+        result[self._target_col] = int((lid, rid) in self._gt)
+        return result
 
 
-class AttributeComparison(Sampling):
+class NoOp(ComparisonEngine):
+    def _compare(self, left: EntityReference, right: EntityReference) -> dict:
+        result = {
+            f"left_{idx}": value
+            for idx, value in enumerate(left, 1)
+        }
+        result.update({
+            f"right_{idx}": value
+            for idx, value in enumerate(right, 1)
+        })
+        return result
+
+
+class AttributeComparison(ComparisonEngine):
     @staticmethod
     def __compare_attr_values(
         left_ref: EntityReference,
@@ -52,7 +61,7 @@ class AttributeComparison(Sampling):
         b = right_ref[config.right_ref_key]
         return config.match_strategy(a, b)
 
-    def _process_cross_join_record(
+    def _compare(
         self, left: EntityReference, right: EntityReference
     ) -> dict:
         return {
@@ -61,7 +70,7 @@ class AttributeComparison(Sampling):
         }
 
 
-class PatternEncodedComparison(Sampling):
+class PatternEncodedComparison(ComparisonEngine):
     _BASE = 2
 
     def __init__(
@@ -80,7 +89,7 @@ class PatternEncodedComparison(Sampling):
         possible_outcomes = tuple(range(self._possible_outcomes))
         yield from product(possible_outcomes, repeat=len(self._config))
 
-    def _process_cross_join_record(
+    def _compare(
         self, left: EntityReference, right: EntityReference
     ) -> dict:
         comparison_results = [

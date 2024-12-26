@@ -1,5 +1,5 @@
-from functools import partial
-from typing import Any
+import itertools
+from typing import Any, Iterator
 
 import polars as pl
 
@@ -7,9 +7,9 @@ from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
 )
-from matchescu.matching.ml.datasets._sampling import (
+from matchescu.matching.ml.datasets._reference_comparison import (
     AttributeComparison,
-    PatternEncodedComparison,
+    PatternEncodedComparison, NoOp,
 )
 from matchescu.typing import DataSource, Record
 
@@ -71,28 +71,22 @@ class DeduplicationDataSet:
         )
         return self
 
+    @staticmethod
+    def _self_product(data: list) -> Iterator[tuple]:
+        for i, a in enumerate(data):
+            for j in range(i+1, len(data)):
+                b = data[j]
+                yield a, b
+
     def cross_sources(self) -> "DeduplicationDataSet":
         if self.__sample_factory is None:
             raise ValueError("specify type of sampling")
         source = list(self.__extract())
+
         if len(source) < 1:
             raise ValueError("no data")
+        no_op = NoOp(self.__true_matches, EntityReferenceComparisonConfig(), self.__extract.identify, self.__extract.identify, self.__TARGET_COL)
+        sample_factory = self.__sample_factory or no_op
 
-        mid = len(source[0])
-        data = []
-        for i, left_row in enumerate(source):
-            for j in range(i + 1, len(source)):
-                row = {
-                    f"left_column_{idx+1}": value for idx, value in enumerate(left_row)
-                }
-                row.update(
-                    {
-                        f"right_column_{idx + 1}": value
-                        for idx, value in enumerate(source[j])
-                    }
-                )
-                data.append(row)
-        sample_factory = partial(self.__sample_factory, divider=mid)
-        df = pl.DataFrame(data)
-        self.__comparison_data = df.map_rows(sample_factory).unnest("column_0")
+        self.__comparison_data = pl.DataFrame(itertools.starmap(sample_factory, self._self_product(source)))
         return self
