@@ -19,7 +19,8 @@ from matchescu.matching.similarity import (
     LevenshteinSimilarity,
     Similarity,
     LevenshteinDistance,
-    Norm, TensorSimilarity,
+    Norm,
+    TensorSimilarity,
 )
 
 
@@ -180,12 +181,11 @@ class EntityReferenceComparisonConfig:
         )
         return self
 
-
     def euclidian_distance(
         self,
         label: str,
-            left_key: int | str,
-            right_key: int | str,
+        left_key: int | str,
+        right_key: int | str,
     ) -> "EntityReferenceComparisonConfig":
         self.__specs.append(
             self._new_spec(
@@ -211,7 +211,7 @@ class EntityReferenceComparisonConfig:
                 left_key,
                 right_key,
                 0,
-                torch.nn.CosineSimilarity()
+                torch.nn.CosineSimilarity(),
             )
         )
         return self

@@ -9,7 +9,8 @@ from matchescu.matching.entity_reference import (
 )
 from matchescu.matching.ml.datasets._reference_comparison import (
     AttributeComparison,
-    PatternEncodedComparison, NoOp,
+    PatternEncodedComparison,
+    NoOp,
 )
 from matchescu.typing import DataSource, Record
 
@@ -74,7 +75,7 @@ class DeduplicationDataSet:
     @staticmethod
     def _self_product(data: list) -> Iterator[tuple]:
         for i, a in enumerate(data):
-            for j in range(i+1, len(data)):
+            for j in range(i + 1, len(data)):
                 b = data[j]
                 yield a, b
 
@@ -85,8 +86,16 @@ class DeduplicationDataSet:
 
         if len(source) < 1:
             raise ValueError("no data")
-        no_op = NoOp(self.__true_matches, EntityReferenceComparisonConfig(), self.__extract.identify, self.__extract.identify, self.__TARGET_COL)
+        no_op = NoOp(
+            self.__true_matches,
+            EntityReferenceComparisonConfig(),
+            self.__extract.identify,
+            self.__extract.identify,
+            self.__TARGET_COL,
+        )
         sample_factory = self.__sample_factory or no_op
 
-        self.__comparison_data = pl.DataFrame(itertools.starmap(sample_factory, self._self_product(source)))
+        self.__comparison_data = pl.DataFrame(
+            itertools.starmap(sample_factory, self._self_product(source))
+        )
         return self

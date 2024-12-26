@@ -10,7 +10,7 @@ from matchescu.typing import Record, DataSource
 
 @pytest.fixture
 def abt_traits() -> Traits:
-    return Traits().int([0]).string([1,2]).currency([3])
+    return Traits().int([0]).string([1, 2]).currency([3])
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def abt(data_dir, abt_traits) -> DataSource[Record]:
 
 @pytest.fixture
 def buy_traits() -> Traits:
-    return Traits().int([0]).string([1,2,3]).currency([4])
+    return Traits().int([0]).string([1, 2, 3]).currency([4])
 
 
 @pytest.fixture
@@ -37,9 +37,7 @@ def perfect_mapping(data_dir) -> set[tuple[int, int]]:
     with open(data_dir / "abt-buy" / "abt_buy_perfectMapping.csv", "r") as f:
         reader = csv.reader(f)
         next(reader)
-        return set(
-            (id_abt, id_buy) for (id_abt, id_buy) in reader
-        )
+        return set((id_abt, id_buy) for (id_abt, id_buy) in reader)
 
 
 @pytest.fixture
@@ -68,5 +66,5 @@ def test_block_cross_source_filtering(blocking_engine):
     num_unfiltered_blocks = len(engine.blocks)
     engine = engine.cross_sources_filter()
 
-    assert all(len(b.references)>1 for b in engine.blocks)
+    assert all(len(b.references) > 1 for b in engine.blocks)
     assert num_unfiltered_blocks > len(engine.blocks)

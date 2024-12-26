@@ -6,7 +6,10 @@ from matchescu.matching.similarity import Similarity
 
 
 class TensorSimilarity(Similarity):
-    def __init__(self, similarity_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None):
+    def __init__(
+        self,
+        similarity_func: Callable[[torch.Tensor, torch.Tensor], torch.Tensor] = None,
+    ):
         self._compute_distance = similarity_func or torch.nn.PairwiseDistance()
 
     def _compute_similarity(self, a: Any, b: Any) -> float:

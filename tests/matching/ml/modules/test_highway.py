@@ -1,7 +1,6 @@
 import pytest
 
 from matchescu.matching.ml.modules import HighwayNetwork
-from matching.ml.modules.conftest import input_size, hidden_size, output_size, test_input
 
 
 @pytest.fixture

@@ -39,14 +39,8 @@ class ComparisonEngine(metaclass=ABCMeta):
 
 class NoOp(ComparisonEngine):
     def _compare(self, left: EntityReference, right: EntityReference) -> dict:
-        result = {
-            f"left_{idx}": value
-            for idx, value in enumerate(left, 1)
-        }
-        result.update({
-            f"right_{idx}": value
-            for idx, value in enumerate(right, 1)
-        })
+        result = {f"left_{idx}": value for idx, value in enumerate(left, 1)}
+        result.update({f"right_{idx}": value for idx, value in enumerate(right, 1)})
         return result
 
 
@@ -61,9 +55,7 @@ class AttributeComparison(ComparisonEngine):
         b = right_ref[config.right_ref_key]
         return config.match_strategy(a, b)
 
-    def _compare(
-        self, left: EntityReference, right: EntityReference
-    ) -> dict:
+    def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         return {
             spec.label: self.__compare_attr_values(left, right, spec)
             for spec in self._config.specs
@@ -89,9 +81,7 @@ class PatternEncodedComparison(ComparisonEngine):
         possible_outcomes = tuple(range(self._possible_outcomes))
         yield from product(possible_outcomes, repeat=len(self._config))
 
-    def _compare(
-        self, left: EntityReference, right: EntityReference
-    ) -> dict:
+    def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         comparison_results = [
             spec.match_strategy(left[spec.left_ref_key], right[spec.right_ref_key])
             for spec in self._config.specs

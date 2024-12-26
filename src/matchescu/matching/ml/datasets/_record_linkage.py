@@ -7,7 +7,11 @@ from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
 )
-from matchescu.matching.ml.datasets._reference_comparison import AttributeComparison, NoOp, PatternEncodedComparison
+from matchescu.matching.ml.datasets._reference_comparison import (
+    AttributeComparison,
+    NoOp,
+    PatternEncodedComparison,
+)
 from matchescu.matching.ml.datasets._torch import PlTorchDataset
 from matchescu.typing import DataSource, Record, EntityReference
 
@@ -81,10 +85,20 @@ class RecordLinkageDataSet:
     def cross_sources(self) -> "RecordLinkageDataSet":
         left_entity_references = list(self.__extract_left())
         right_entity_references = list(self.__extract_right())
-        cross_entity_references = itertools.product(left_entity_references, right_entity_references)
+        cross_entity_references = itertools.product(
+            left_entity_references, right_entity_references
+        )
 
-        no_op = NoOp(self.__true_matches, EntityReferenceComparisonConfig(), self.__extract_left.identify, self.__extract_right.identify, self.__TARGET_COL)
+        no_op = NoOp(
+            self.__true_matches,
+            EntityReferenceComparisonConfig(),
+            self.__extract_left.identify,
+            self.__extract_right.identify,
+            self.__TARGET_COL,
+        )
         sample_factory = self.__sample_factory or no_op
 
-        self.__comparison_data = pl.DataFrame(itertools.starmap(sample_factory, cross_entity_references))
+        self.__comparison_data = pl.DataFrame(
+            itertools.starmap(sample_factory, cross_entity_references)
+        )
         return self

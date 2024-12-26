@@ -7,7 +7,13 @@ from torch.utils.data import DataLoader
 
 
 class TorchEngine:
-    def __init__(self, model: nn.Module, loss_fn: nn.Module, optimizer: Optimizer, device: str = "cpu") -> None:
+    def __init__(
+        self,
+        model: nn.Module,
+        loss_fn: nn.Module,
+        optimizer: Optimizer,
+        device: str = "cpu",
+    ) -> None:
         self._model = model
         self._loss = loss_fn
         self._optimizer = optimizer
@@ -79,6 +85,8 @@ class TorchEngine:
             train_loss = self._train_epoch(train_loader)
             x_validation_loss = self.evaluate(x_validation_loader)
 
-            print(f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {x_validation_loss:.4f}")
+            print(
+                f"Epoch {epoch + 1}/{epochs}, Train Loss: {train_loss:.4f}, Val Loss: {x_validation_loss:.4f}"
+            )
 
         return self._model

@@ -23,7 +23,7 @@ class HighwayLayer(nn.Module):
         h = self._activation(self._basic_processor(x))
         t = f.sigmoid(self._transform_gate(x))
 
-        return h*t + (1.0 - t)*x
+        return h * t + (1.0 - t) * x
 
 
 class HighwayNetwork(nn.Module):
@@ -42,9 +42,9 @@ class HighwayNetwork(nn.Module):
         self._output_activation = output_activation or partial(f.softmax, dim=-1)
 
         self._scale_in = nn.Linear(input_size, hidden_size)
-        self._layers = nn.ModuleList([
-            HighwayLayer(hidden_size, activation, initial_bias) for _ in range(layers)
-        ])
+        self._layers = nn.ModuleList(
+            [HighwayLayer(hidden_size, activation, initial_bias) for _ in range(layers)]
+        )
         self._scale_out = nn.Linear(hidden_size, output_size)
 
     def forward(self, x):

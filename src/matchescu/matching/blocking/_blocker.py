@@ -30,7 +30,14 @@ def _jaccard_coefficient(a: set, b: set) -> float:
     return len(a.intersection(b)) / len(a.union(b))
 
 
-def _process_candidate(source: str, candidate: EntityReference, block: Block, jaccard_threshold: float, column: str, center_lemmas: set[str]) -> Iterator[tuple]:
+def _process_candidate(
+    source: str,
+    candidate: EntityReference,
+    block: Block,
+    jaccard_threshold: float,
+    column: str,
+    center_lemmas: set[str],
+) -> Iterator[tuple]:
     cand_lemmas = _tokens(candidate[column])
     similarity = _jaccard_coefficient(center_lemmas, cand_lemmas)
     if similarity >= jaccard_threshold:
@@ -38,13 +45,25 @@ def _process_candidate(source: str, candidate: EntityReference, block: Block, ja
         yield source, candidate
 
 
-def _canopy_clustering(all_data: list[tuple[str, EntityReference]], column: int, jaccard_threshold: float = 0.5) -> Iterator[Block]:
+def _canopy_clustering(
+    all_data: list[tuple[str, EntityReference]],
+    column: int,
+    jaccard_threshold: float = 0.5,
+) -> Iterator[Block]:
     while len(all_data) > 0:
         ref_source, ref_data = all_data.pop(0)
         ref_col_value = ref_data[column]
         reference_tokens = _tokens(ref_col_value)
-        block = Block(key=f"{ref_source}-{ref_col_value}").add_reference(ref_source, ref_data)
-        process_candidate = partial(_process_candidate, block=block, jaccard_threshold=jaccard_threshold, column=column, center_lemmas=reference_tokens)
+        block = Block(key=f"{ref_source}-{ref_col_value}").add_reference(
+            ref_source, ref_data
+        )
+        process_candidate = partial(
+            _process_candidate,
+            block=block,
+            jaccard_threshold=jaccard_threshold,
+            column=column,
+            center_lemmas=reference_tokens,
+        )
 
         for to_remove in itertools.starmap(process_candidate, all_data):
             for item in to_remove:
@@ -58,7 +77,9 @@ class BlockingEngine:
         self._blocks = []
         self._all_data = [(x.source_name, r) for x in reference_extractors for r in x()]
 
-    def canopy_clustering(self, column: int, threshold: float = 0.5) -> "BlockingEngine":
+    def canopy_clustering(
+        self, column: int, threshold: float = 0.5
+    ) -> "BlockingEngine":
         self._blocks.extend(
             _canopy_clustering(self._all_data.copy(), column, threshold)
         )

@@ -2,7 +2,6 @@ import pytest
 import torch
 
 from matchescu.matching.ml.modules import HighwayMatchClassifier
-from matching.ml.modules.conftest import input_size, hidden_size, test_input
 
 
 @pytest.fixture
