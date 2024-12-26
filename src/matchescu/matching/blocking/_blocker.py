@@ -3,6 +3,7 @@ import re
 from functools import partial
 from typing import Iterator
 
+
 from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.blocking._block import Block
 from matchescu.typing import EntityReference
