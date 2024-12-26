@@ -1,13 +1,12 @@
 import itertools
 import re
 from functools import partial
-from typing import Iterator
-
+from typing import Iterator, Iterable
 
 from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.blocking._block import Block
-from matchescu.typing import EntityReference
-
+from matchescu.matching.extraction import ListDataSource
+from matchescu.typing import EntityReference, DataSource, Trait
 
 token_regexp = re.compile(r"[\d\W_]+")
 
@@ -75,3 +74,20 @@ class BlockEngine:
     @property
     def blocks(self) -> list[Block]:
         return self._blocks
+
+    def list_source_names(self) -> Iterator[str]:
+        visited = set()
+        for block in self._blocks:
+            for source_name in block.references.keys():
+                if source_name not in visited:
+                    yield source_name
+                    visited.add(source_name)
+
+    def create_data_sources(self) -> dict[str, DataSource]:
+        data_sources = {}
+        for block in self._blocks:
+            for source_name, references in block.references.items():
+                ds = data_sources.get(source_name) or ListDataSource(source_name, [lambda r: r])
+                ds.extend(references)
+                data_sources[source_name] = ds
+        return data_sources
