@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: andreiolar1/python-poetry-mkdocs:3.12.7
-    if: startsWith(github.head_ref, 'feature/')
+    if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/') || startsWith(github.head_ref, 'refactor/')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
