@@ -1,13 +1,12 @@
 import itertools
 import re
 from functools import partial
-from typing import Iterator
-
+from typing import Iterator, Iterable
 
 from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.blocking._block import Block
-from matchescu.typing import EntityReference
-
+from matchescu.matching.extraction import ListDataSource
+from matchescu.typing import EntityReference, DataSource, Trait
 
 token_regexp = re.compile(r"[\d\W_]+")
 
@@ -72,14 +71,12 @@ def _canopy_clustering(
         yield block
 
 
-class BlockingEngine:
+class BlockEngine:
     def __init__(self, reference_extractors: list[EntityReferenceExtraction]):
         self._blocks = []
         self._all_data = [(x.source_name, r) for x in reference_extractors for r in x()]
 
-    def canopy_clustering(
-        self, column: int, threshold: float = 0.5
-    ) -> "BlockingEngine":
+    def jaccard_blocks(self, column: int, threshold: float = 0.5) -> "BlockEngine":
         self._blocks.extend(
             _canopy_clustering(self._all_data.copy(), column, threshold)
         )
@@ -89,10 +86,29 @@ class BlockingEngine:
     def _at_least_two_sources(block: Block) -> bool:
         return len(block.references) > 1
 
-    def cross_sources_filter(self) -> "BlockingEngine":
+    def cross_sources_filter(self) -> "BlockEngine":
         self._blocks = list(filter(self._at_least_two_sources, self._blocks))
         return self
 
     @property
     def blocks(self) -> list[Block]:
         return self._blocks
+
+    def list_source_names(self) -> Iterator[str]:
+        visited = set()
+        for block in self._blocks:
+            for source_name in block.references.keys():
+                if source_name not in visited:
+                    yield source_name
+                    visited.add(source_name)
+
+    def create_data_sources(self) -> dict[str, DataSource]:
+        data_sources = {}
+        for block in self._blocks:
+            for source_name, references in block.references.items():
+                ds = data_sources.get(source_name) or ListDataSource(
+                    source_name, [lambda r: r]
+                )
+                ds.extend(references)
+                data_sources[source_name] = ds
+        return data_sources
