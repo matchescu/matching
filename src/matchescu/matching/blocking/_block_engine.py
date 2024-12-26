@@ -53,12 +53,12 @@ def _canopy_clustering(all_data: list[tuple[str, EntityReference]], column: int,
         yield block
 
 
-class BlockingEngine:
+class BlockEngine:
     def __init__(self, reference_extractors: list[EntityReferenceExtraction]):
         self._blocks = []
         self._all_data = [(x.source_name, r) for x in reference_extractors for r in x()]
 
-    def canopy_clustering(self, column: int, threshold: float = 0.5) -> "BlockingEngine":
+    def jaccard_blocks(self, column: int, threshold: float = 0.5) -> "BlockEngine":
         self._blocks.extend(
             _canopy_clustering(self._all_data.copy(), column, threshold)
         )
@@ -68,7 +68,7 @@ class BlockingEngine:
     def _at_least_two_sources(block: Block) -> bool:
         return len(block.references) > 1
 
-    def cross_sources_filter(self) -> "BlockingEngine":
+    def cross_sources_filter(self) -> "BlockEngine":
         self._blocks = list(filter(self._at_least_two_sources, self._blocks))
         return self
 

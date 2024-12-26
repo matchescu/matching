@@ -3,7 +3,7 @@ import csv
 import pytest
 
 from matchescu.data import EntityReferenceExtraction
-from matchescu.matching.blocking import BlockingEngine
+from matchescu.matching.blocking import BlockEngine
 from matchescu.matching.extraction import CsvDataSource, Traits
 from matchescu.typing import Record, DataSource
 
@@ -46,25 +46,25 @@ def perfect_mapping(data_dir) -> set[tuple[int, int]]:
 def blocking_engine(abt, buy):
     abt_extractor = EntityReferenceExtraction(abt, lambda x: x[0])
     buy_extractor = EntityReferenceExtraction(buy, lambda x: x[0])
-    return BlockingEngine([abt_extractor, buy_extractor])
+    return BlockEngine([abt_extractor, buy_extractor])
 
 
 def test_canopy_clustering_by_name(blocking_engine):
-    blocking_engine.canopy_clustering(1, 0.5)
+    blocking_engine.jaccard_blocks(1, 0.5)
 
     assert blocking_engine.blocks
 
 
 def test_multi_pass_canopy_clustering(blocking_engine):
-    blocking_engine.canopy_clustering(1, 0.5)
+    blocking_engine.jaccard_blocks(1, 0.5)
     num_blocks = len(blocking_engine.blocks)
-    blocking_engine.canopy_clustering(2, 0.5)
+    blocking_engine.jaccard_blocks(2, 0.5)
 
     assert len(blocking_engine.blocks) > num_blocks
 
 
 def test_block_cross_source_filtering(blocking_engine):
-    engine = blocking_engine.canopy_clustering(1, 0.5)
+    engine = blocking_engine.jaccard_blocks(1, 0.5)
     num_unfiltered_blocks = len(engine.blocks)
     engine = engine.cross_sources_filter()
 
