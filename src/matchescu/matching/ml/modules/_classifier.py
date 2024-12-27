@@ -3,6 +3,7 @@ from typing import Callable
 from torch import nn, Tensor
 
 from matchescu.matching.ml.modules._highway import HighwayNetwork
+from matchescu.matching.ml.modules._residual import ResidualNetwork
 
 
 class HighwayMatchClassifier(nn.Sequential):
@@ -27,4 +28,26 @@ class HighwayMatchClassifier(nn.Sequential):
                 output_activation=highway_output_activation,
             ),
         )
+        self.add_module("softmax", nn.LogSoftmax(dim=-1))
+
+
+class ResidualMatchClassifier(nn.Sequential):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int = 512,
+        layers: int = 2,
+        residual_scale: bool = True,
+    ) -> None:
+        super().__init__()
+        self.add_module(
+            "residual-net",
+            ResidualNetwork(
+                input_size,
+                hidden_size,
+                layers,
+                residual_scale,
+            ),
+        )
+        self.add_module("transform-out", nn.Linear(hidden_size, 2))
         self.add_module("softmax", nn.LogSoftmax(dim=-1))

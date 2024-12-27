@@ -26,7 +26,9 @@ def _tokens(text: str) -> set[str]:
 def _jaccard_coefficient(a: set, b: set) -> float:
     if a is None or b is None:
         return 0
-    return len(a.intersection(b)) / len(a.union(b))
+    count_intersect = len(a.intersection(b))
+    count_union = len(a.union(b))
+    return count_intersect / count_union if count_union else 0.0
 
 
 def _process_candidate(

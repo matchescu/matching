@@ -11,6 +11,7 @@ from matchescu.matching.ml.datasets._reference_comparison import (
     AttributeComparison,
     NoOp,
     PatternEncodedComparison,
+    VectorComparison,
 )
 from matchescu.matching.ml.datasets._torch import PlTorchDataset
 from matchescu.typing import DataSource, Record, EntityReference
@@ -79,6 +80,18 @@ class RecordLinkageDataSet:
             self.__extract_right.identify,
             self.__TARGET_COL,
             possible_outcomes,
+        )
+        return self
+
+    def vector_compare(
+        self, config: EntityReferenceComparisonConfig
+    ) -> "RecordLinkageDataSet":
+        self.__sample_factory = VectorComparison(
+            self.__true_matches,
+            config,
+            self.__extract_left.identify,
+            self.__extract_right.identify,
+            self.__TARGET_COL,
         )
         return self
 
