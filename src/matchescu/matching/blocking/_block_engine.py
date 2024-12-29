@@ -139,11 +139,11 @@ class BlockEngine:
         )
         return self
 
-    def tf_idf(self, column: int) -> "BlockEngine":
+    def tf_idf(self, min_score: float = 0.1) -> "BlockEngine":
         ref_ids = []
         corpus = []
         for ref_id, item in self._all_data.items():
-            corpus.append(" ".join(tok for tok in _tokens(str(item.reference[column]))))
+            corpus.append(" ".join(tok for str_val in map(str, item.reference) for tok in _tokens(str_val) ))
             ref_ids.append(ref_id)
         vectorizer = TfidfVectorizer()
         tfidf_matrix = vectorizer.fit_transform(corpus)
@@ -152,11 +152,13 @@ class BlockEngine:
         blocks: dict[str, Block] = {}
         for idx, ref_id in enumerate(ref_ids):
             tfidf_scores = tfidf_matrix[idx].toarray().flatten()
-            highest_score_idx = np.argmax(tfidf_scores)
-            highest_score_token = token_inverted_map[highest_score_idx]
-            if highest_score_token not in blocks:
-                blocks[highest_score_token] = Block(highest_score_token)
-            blocks[highest_score_token].append(ref_id, self._all_data[ref_id].source)
+            for score_idx, score in enumerate(tfidf_scores):
+                if score < min_score:
+                    continue
+                score_token = token_inverted_map[score_idx]
+                block = blocks.get(score_token, Block(score_token))
+                block.append(ref_id, self._all_data[ref_id].source)
+                blocks[score_token] = block
         self._blocks.extend(blocks.values())
         return self
 

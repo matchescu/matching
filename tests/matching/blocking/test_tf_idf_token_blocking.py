@@ -6,7 +6,7 @@ def test_abt_buy_blocking(abt, buy, abt_buy_identifier):
         BlockEngine()
         .add_source(abt, abt_buy_identifier)
         .add_source(buy, abt_buy_identifier)
-        .tf_idf(1)
+        .tf_idf()
     )
 
     assert engine.blocks
@@ -19,7 +19,7 @@ def test_abt_buy_tf_idf_blocking_metrics(
         BlockEngine()
         .add_source(abt, abt_buy_identifier)
         .add_source(buy, abt_buy_identifier)
-        .tf_idf(1)
+        .tf_idf(0.3)
     )
     engine.update_candidate_pairs(False)
 
