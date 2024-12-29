@@ -3,9 +3,12 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Iterator, Hashable, Callable
 
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from stopwords import clean as remove_stopwords
+
 from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.blocking._block import Block
-from matchescu.matching.extraction import ListDataSource
 from matchescu.typing import EntityReference, DataSource, Record
 
 token_regexp = re.compile(r"[\d\W_]+")
@@ -17,10 +20,15 @@ def _clean(tok: str) -> str:
     return tok.strip("\t\n\r\a ").lower()
 
 
-def _tokens(text: str) -> set[str]:
+def _tokens(text: str, language: str = "en", min_length: int = 3) -> set[str]:
     if text is None:
         return set()
-    return set(t for t in map(_clean, token_regexp.split(text)) if t)
+    return set(
+        t for t in remove_stopwords(
+            list(map(_clean, token_regexp.split(text))),
+            language
+        ) if t and len(t) >= min_length
+    )
 
 
 def _jaccard_coefficient(a: set, b: set) -> float:
@@ -35,6 +43,8 @@ class BlockEngineItem:
     reference: EntityReference
     ref_id: Callable[[EntityReference], Hashable]
 
+    def __repr__(self):
+        return f"{{src={self.source},id={self.ref_id(self.reference)}}}"
 
 def _process_candidate(
     item: BlockEngineItem,
@@ -90,14 +100,6 @@ class BlockEngine:
         self._candidates: list[tuple[BlockEngineItem, BlockEngineItem]] = []
         self._total_possible_pairs: int = 0
 
-    def _update_candidate_pairs(self) -> None:
-        self._candidates.clear()
-        for block in self._blocks:
-            for ref_id1, ref_id2 in block.candidate_pairs():
-                self._candidates.append(
-                    (self._all_data[ref_id1], self._all_data[ref_id2])
-                )
-
     def add_source(
         self,
         data_source: DataSource[Record],
@@ -129,7 +131,27 @@ class BlockEngine:
         self._blocks.extend(
             _canopy_clustering(list(self._all_data.values()), column, jaccard_threshold)
         )
-        self._update_candidate_pairs()
+        return self
+
+    def tf_idf(self, column: int) -> "BlockEngine":
+        ref_ids = []
+        corpus = []
+        for ref_id, item in self._all_data.items():
+            corpus.append(" ".join(tok for tok in _tokens(str(item.reference[column]))))
+            ref_ids.append(ref_id)
+        vectorizer = TfidfVectorizer()
+        tfidf_matrix = vectorizer.fit_transform(corpus)
+        token_inverted_map = vectorizer.get_feature_names_out()
+
+        blocks: dict[str, Block] = {}
+        for idx, ref_id in enumerate(ref_ids):
+            tfidf_scores = tfidf_matrix[idx].toarray().flatten()
+            highest_score_idx = np.argmax(tfidf_scores)
+            highest_score_token = token_inverted_map[highest_score_idx]
+            if highest_score_token not in blocks:
+                blocks[highest_score_token] = Block(highest_score_token)
+            blocks[highest_score_token].append(ref_id, self._all_data[ref_id].source)
+        self._blocks.extend(blocks.values())
         return self
 
     @staticmethod
@@ -144,9 +166,17 @@ class BlockEngine:
     def blocks(self) -> list[Block]:
         return self._blocks
 
+    def update_candidate_pairs(self, generate_deduplication_pairs: bool = True) -> None:
+        self._candidates.clear()
+        for block in self._blocks:
+            for ref_id1, ref_id2 in block.candidate_pairs(generate_deduplication_pairs):
+                self._candidates.append(
+                    (self._all_data[ref_id1], self._all_data[ref_id2])
+                )
+
     def candidate_pairs(self) -> Iterator[tuple[EntityReference, EntityReference]]:
         yield from (
-            map(lambda x: x.reference, candidate) for candidate in self._candidates
+            tuple(map(lambda x: x.reference, candidate)) for candidate in self._candidates
         )
 
     def calculate_metrics(

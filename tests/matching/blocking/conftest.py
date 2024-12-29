@@ -1,9 +1,10 @@
+import csv
 from typing import Hashable
 
 import pytest
 
-from matchescu.matching.extraction import Traits, ListDataSource
-from matchescu.typing import EntityReference
+from matchescu.matching.extraction import Traits, ListDataSource, CsvDataSource
+from matchescu.typing import EntityReference, Record, DataSource
 
 
 @pytest.fixture
@@ -41,4 +42,43 @@ def ds_identifier():
     def _id(x: EntityReference) -> Hashable:
         return x[2]
 
+    return _id
+
+
+@pytest.fixture
+def abt_traits() -> Traits:
+    return Traits().int([0]).string([1, 2]).currency([3])
+
+
+@pytest.fixture
+def abt(data_dir, abt_traits) -> DataSource[Record]:
+    ds = CsvDataSource("abt", abt_traits)
+    ds.read_csv(data_dir / "abt-buy" / "Abt.csv")
+    return ds
+
+
+@pytest.fixture
+def buy_traits() -> Traits:
+    return Traits().int([0]).string([1, 2, 3]).currency([4])
+
+
+@pytest.fixture
+def buy(data_dir, buy_traits) -> DataSource[Record]:
+    ds = CsvDataSource("buy", buy_traits)
+    ds.read_csv(data_dir / "abt-buy" / "Buy.csv")
+    return ds
+
+
+@pytest.fixture
+def abt_buy_perfect_mapping(data_dir) -> set[tuple[int, int]]:
+    with open(data_dir / "abt-buy" / "abt_buy_perfectMapping.csv", "r") as f:
+        reader = csv.reader(f)
+        next(reader)
+        return set((id_abt, id_buy) for (id_abt, id_buy) in reader)
+
+
+@pytest.fixture
+def abt_buy_identifier():
+    def _id(x: EntityReference) -> Hashable:
+        return x[0]
     return _id
