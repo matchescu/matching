@@ -7,7 +7,10 @@ from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
 )
-from matchescu.matching.ml.datasets._sampling import AttributeComparison, PatternEncodedComparison
+from matchescu.matching.ml.datasets._sampling import (
+    AttributeComparison,
+    PatternEncodedComparison,
+)
 from matchescu.typing import DataSource, Record
 
 
