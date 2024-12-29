@@ -190,6 +190,10 @@ class BlockEngine:
     def blocks(self) -> list[Block]:
         return self._blocks
 
+    @property
+    def candidate_count(self) -> int:
+        return len(self._candidates)
+
     def update_candidate_pairs(self, generate_deduplication_pairs: bool = True) -> None:
         self._candidates.clear()
         for block in self._blocks:
