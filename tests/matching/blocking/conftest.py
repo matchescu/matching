@@ -74,11 +74,12 @@ def abt_buy_perfect_mapping(data_dir) -> set[tuple[int, int]]:
     with open(data_dir / "abt-buy" / "abt_buy_perfectMapping.csv", "r") as f:
         reader = csv.reader(f)
         next(reader)
-        return set((id_abt, id_buy) for (id_abt, id_buy) in reader)
+        return set(tuple(map(int, values)) for values in reader)
 
 
 @pytest.fixture
 def abt_buy_identifier():
     def _id(x: EntityReference) -> Hashable:
         return x[0]
+
     return _id

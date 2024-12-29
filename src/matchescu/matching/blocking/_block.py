@@ -41,7 +41,9 @@ class Block:
         self.__update_references(ref_ids, source_name, lambda x: x.extend)
         return self
 
-    def candidate_pairs(self, generate_deduplication_pairs: bool = True) -> Iterator[tuple[Hashable, Hashable]]:
+    def candidate_pairs(
+        self, generate_deduplication_pairs: bool = True
+    ) -> Iterator[tuple[Hashable, Hashable]]:
         n_sources = len(self.references)
         if n_sources < 1:
             yield from ()

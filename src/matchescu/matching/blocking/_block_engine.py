@@ -20,14 +20,17 @@ def _clean(tok: str) -> str:
     return tok.strip("\t\n\r\a ").lower()
 
 
-def _tokens(text: str, language: str = "en", min_length: int = 3) -> set[str]:
+def _tokens(text: str, language: str = "en", min_length: int = 3) -> list[str]:
     if text is None:
-        return set()
-    return set(
-        t for t in remove_stopwords(
-            list(map(_clean, token_regexp.split(text))),
-            language
-        ) if t and len(t) >= min_length
+        return []
+    return list(
+        {
+            t: t
+            for t in remove_stopwords(
+                list(map(_clean, token_regexp.split(text))), language
+            )
+            if t and len(t) >= min_length
+        }
     )
 
 
@@ -46,6 +49,7 @@ class BlockEngineItem:
     def __repr__(self):
         return f"{{src={self.source},id={self.ref_id(self.reference)}}}"
 
+
 def _process_candidate(
     item: BlockEngineItem,
     block: Block,
@@ -53,7 +57,7 @@ def _process_candidate(
     column: str,
     center_lemmas: set[str],
 ) -> Iterator[BlockEngineItem]:
-    cand_lemmas = _tokens(item.reference[column])
+    cand_lemmas = set(_tokens(item.reference[column]))
     similarity = _jaccard_coefficient(center_lemmas, cand_lemmas)
     if similarity >= jaccard_threshold:
         block.append(item.ref_id(item.reference), source_name=item.source)
@@ -66,7 +70,7 @@ def _canopy_clustering(
     while len(all_data) > 0:
         item = all_data.pop(0)
         ref_col_value = item.reference[column]
-        reference_tokens = _tokens(ref_col_value)
+        reference_tokens = set(_tokens(ref_col_value))
         block_key = f"{item.source}-{'-'.join(reference_tokens)}"
         block = Block(key=block_key).append(
             item.ref_id(item.reference), source_name=item.source
@@ -154,6 +158,16 @@ class BlockEngine:
         self._blocks.extend(blocks.values())
         return self
 
+    def token_blocking(self, column: int) -> "BlockEngine":
+        blocks: dict[str, Block] = {}
+        for ref_id, item in self._all_data.items():
+            for tok in _tokens(str(item.reference[column])):
+                block = blocks.get(tok, Block(tok))
+                block.append(ref_id, item.source)
+                blocks[tok] = block
+        self._blocks.extend(blocks.values())
+        return self
+
     @staticmethod
     def _at_least_two_sources(block: Block) -> bool:
         return len(block.references) > 1
@@ -176,7 +190,8 @@ class BlockEngine:
 
     def candidate_pairs(self) -> Iterator[tuple[EntityReference, EntityReference]]:
         yield from (
-            tuple(map(lambda x: x.reference, candidate)) for candidate in self._candidates
+            tuple(map(lambda x: x.reference, candidate))
+            for candidate in self._candidates
         )
 
     def calculate_metrics(
