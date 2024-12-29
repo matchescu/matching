@@ -123,7 +123,7 @@ class BlockEngine:
         )
         return self
 
-    def create_blocks_with_overlap(
+    def jaccard_canopy(
         self, column: int, jaccard_threshold: float = 0.5
     ) -> "BlockEngine":
         self._blocks.extend(
