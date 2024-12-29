@@ -1,16 +1,15 @@
-import csv
-from typing import Hashable
-
 import pytest
 
 from matchescu.matching.blocking import BlockEngine
-from matchescu.matching.extraction import CsvDataSource, Traits
-from matchescu.typing import Record, DataSource, EntityReference
 
 
 @pytest.fixture
-def blocking_engine(abt, buy):
-    return BlockEngine().add_source(abt, _id).add_source(buy, _id)
+def blocking_engine(abt, buy, abt_buy_identifier):
+    return (
+        BlockEngine()
+        .add_source(abt, abt_buy_identifier)
+        .add_source(buy, abt_buy_identifier)
+    )
 
 
 def test_canopy_clustering_by_name(blocking_engine):

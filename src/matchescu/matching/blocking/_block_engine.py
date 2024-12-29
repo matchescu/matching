@@ -37,7 +37,9 @@ def _tokens(text: str, language: str = "en", min_length: int = 3) -> list[str]:
 def _jaccard_coefficient(a: set, b: set) -> float:
     if a is None or b is None:
         return 0
-    return len(a.intersection(b)) / len(a.union(b))
+    n_common = len(a.intersection(b))
+    n_total = len(a.union(b))
+    return n_common / n_total if n_total else 0
 
 
 @dataclass

@@ -10,7 +10,7 @@ def engine(ds1, ds2, ds_identifier):
 
 @pytest.mark.parametrize("overlap,expected", [(0.6, 0), (0.5, 1)])
 def test_blocking_engine_returns_expected_comparisons(engine, overlap, expected):
-    engine.jaccard_canopy(0, overlap)
+    engine.jaccard_canopy(0, overlap).update_candidate_pairs()
 
     pairs = list(engine.candidate_pairs())
 
@@ -18,7 +18,7 @@ def test_blocking_engine_returns_expected_comparisons(engine, overlap, expected)
 
 
 def test_blocking_engine_pair_completeness(engine):
-    engine.jaccard_canopy(0, 0.5)
+    engine.jaccard_canopy(0, 0.5).update_candidate_pairs()
 
     metrics = engine.calculate_metrics(ground_truth={(33053, 10221960)})
 
@@ -26,7 +26,7 @@ def test_blocking_engine_pair_completeness(engine):
 
 
 def test_blocking_engine_pair_completeness_empty_ground_truth(engine):
-    engine.jaccard_canopy(0, 0.5)
+    engine.jaccard_canopy(0, 0.5).update_candidate_pairs()
 
     metrics = engine.calculate_metrics(ground_truth=set())
 
@@ -34,7 +34,7 @@ def test_blocking_engine_pair_completeness_empty_ground_truth(engine):
 
 
 def test_blocking_engine_pair_quality(engine):
-    engine.jaccard_canopy(0, 0.5)
+    engine.jaccard_canopy(0, 0.5).update_candidate_pairs()
 
     metrics = engine.calculate_metrics(ground_truth={(33053, 10221960)})
 
@@ -48,7 +48,7 @@ def test_blocking_engine_pair_quality_no_comparisons(engine):
 
 
 def test_blocking_engine_reduction_ratio(engine):
-    engine.jaccard_canopy(0, 0.5)
+    engine.jaccard_canopy(0, 0.5).update_candidate_pairs()
 
     metrics = engine.calculate_metrics(ground_truth={(33053, 10221960)})
 
