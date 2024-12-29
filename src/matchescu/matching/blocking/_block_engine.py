@@ -143,7 +143,13 @@ class BlockEngine:
         ref_ids = []
         corpus = []
         for ref_id, item in self._all_data.items():
-            corpus.append(" ".join(tok for str_val in map(str, item.reference) for tok in _tokens(str_val) ))
+            corpus.append(
+                " ".join(
+                    tok
+                    for str_val in map(str, item.reference)
+                    for tok in _tokens(str_val)
+                )
+            )
             ref_ids.append(ref_id)
         vectorizer = TfidfVectorizer()
         tfidf_matrix = vectorizer.fit_transform(corpus)
@@ -191,6 +197,30 @@ class BlockEngine:
                 self._candidates.append(
                     (self._all_data[ref_id1], self._all_data[ref_id2])
                 )
+
+    def filter_candidates_jaccard(self, min_threshold: float = 0.5) -> None:
+        i = 0
+        while i < len(self._candidates):
+            c1, c2 = self._candidates[i]
+            tok1 = set(
+                hash(tok)
+                for val in c1.reference
+                if isinstance(val, str)
+                for tok in _tokens(val)
+            )
+            tok1.update(hash(val) for val in c1.reference if not isinstance(val, str))
+            tok2 = set(
+                hash(tok)
+                for val in c2.reference
+                if isinstance(val, str)
+                for tok in _tokens(val)
+            )
+            tok2.update(hash(val) for val in c2.reference if not isinstance(val, str))
+            score = _jaccard_coefficient(tok1, tok2)
+            if score < min_threshold:
+                del self._candidates[i]
+            else:
+                i += 1
 
     def candidate_pairs(self) -> Iterator[tuple[EntityReference, EntityReference]]:
         yield from (
