@@ -79,7 +79,7 @@ class VectorComparison(ComparisonEngine):
                 continue
             comparison_tensors.append(spec.match_strategy(left_val, right_val))
         summary = self._summarizer(comparison_tensors)
-        return {f"col_{idx}": val for idx, val in enumerate(summary, 1)}
+        return {f"col_{idx}": val.detach().item() for idx, val in enumerate(summary, 1)}
 
 
 class PatternEncodedComparison(ComparisonEngine):

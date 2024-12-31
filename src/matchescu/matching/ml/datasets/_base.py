@@ -113,10 +113,7 @@ class BaseDataSet(metaclass=ABCMeta):
             yield a, b
 
     def cross_sources(self) -> "BaseDataSet":
-        self.__comparison_data = pl.DataFrame(
-            itertools.starmap(
-                self._compare_references, self._transform_comparison_tuples()
-            )
-        )
+        data = list(itertools.starmap(self._compare_references, self._transform_comparison_tuples()))
+        self.__comparison_data = pl.DataFrame(data)
         self.__columns = set(self.__comparison_data.columns)
         return self
