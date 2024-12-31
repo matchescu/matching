@@ -1,6 +1,6 @@
 import itertools
 from abc import ABCMeta, abstractmethod
-from typing import Hashable, Callable, Iterator
+from typing import Hashable, Callable, Iterator, Iterable
 
 import numpy as np
 import polars as pl
@@ -15,8 +15,22 @@ from matchescu.matching.ml.datasets._reference_comparison import (
 from matchescu.typing import EntityReference
 
 
+EntityReferenceTransform = Callable[[EntityReference], EntityReference]
+
+
 class BaseDataSet(metaclass=ABCMeta):
     __TARGET_COL = "y"
+
+    class __RefTransforms:
+        def __init__(self):
+            self._transforms: list[EntityReferenceTransform] = []
+
+        def __iter__(self) -> Iterator[EntityReferenceTransform]:
+            return iter(self._transforms)
+
+        def append(self, transform: EntityReferenceTransform):
+            self._transforms.append(transform)
+            return self
 
     def __init__(
         self,
@@ -34,14 +48,7 @@ class BaseDataSet(metaclass=ABCMeta):
 
         self.__comparison_data: pl.DataFrame | None = None
         self.__columns: set[str] | None = None
-
-    @property
-    def target_vector(self) -> np.ndarray:
-        if self.__comparison_data is None:
-            raise ValueError("comparison matrix was not computed")
-        if self.__TARGET_COL not in self.__columns:
-            raise ValueError("target vector was not computed")
-        return self.__comparison_data[self.__TARGET_COL].to_numpy()
+        self.__transforms = BaseDataSet.__RefTransforms()
 
     @property
     def feature_matrix(self) -> np.ndarray:
@@ -54,10 +61,22 @@ class BaseDataSet(metaclass=ABCMeta):
         )
 
     @property
+    def target_vector(self) -> np.ndarray:
+        if self.__comparison_data is None:
+            raise ValueError("comparison matrix was not computed")
+        if self.__TARGET_COL not in self.__columns:
+            raise ValueError("target vector was not computed")
+        return self.__comparison_data[self.__TARGET_COL].to_numpy()
+
+    @property
     def training_data(self) -> np.ndarray:
         if self.__comparison_data is None:
             raise ValueError("comparison matrix was not computed")
         return self.__comparison_data.to_numpy()
+
+    @property
+    def transforms(self) -> "BaseDataSet.__RefTransforms":
+        return self.__transforms
 
     def attr_compare(self, config: EntityReferenceComparisonConfig) -> "BaseDataSet":
         self.__sample_factory = AttributeComparison(config)
@@ -84,9 +103,20 @@ class BaseDataSet(metaclass=ABCMeta):
             comparison_result[self.__TARGET_COL] = compared_ids in self.__true_matches
         return comparison_result
 
+    def _transform_comparison_tuples(
+        self,
+    ) -> Iterator[tuple[EntityReference, EntityReference]]:
+        for a, b in self._comparison_tuples():
+            for t in self.transforms:
+                a = t(a)
+                b = t(b)
+            yield a, b
+
     def cross_sources(self) -> "BaseDataSet":
         self.__comparison_data = pl.DataFrame(
-            itertools.starmap(self._compare_references, self._comparison_tuples())
+            itertools.starmap(
+                self._compare_references, self._transform_comparison_tuples()
+            )
         )
         self.__columns = set(self.__comparison_data.columns)
         return self

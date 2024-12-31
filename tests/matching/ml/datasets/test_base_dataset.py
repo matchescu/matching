@@ -1,6 +1,7 @@
 from typing import Iterator, Hashable, Callable
 from unittest.mock import MagicMock, call
 
+import numpy as np
 import pytest
 from matchescu.matching.ml.datasets._base import BaseDataSet
 from matchescu.typing import EntityReference
@@ -147,3 +148,56 @@ def test_not_specifying_id_funcs_does_not_create_target_col(dataset, ground_trut
         _ = dataset.target_vector
 
     assert str(verr.value) == "target vector was not computed"
+
+
+@pytest.mark.parametrize("dataset", [[(("a",), ("b",))]], indirect=True)
+def test_single_transform(dataset):
+    expected = ("another", "tuple", "than", "the", "input")
+    transform = MagicMock(return_value=expected)
+    dataset.transforms.append(transform)
+
+    dataset.cross_sources()
+
+    assert np.all(
+        np.equal(
+            dataset.feature_matrix,
+            [
+                (
+                    "another",
+                    "tuple",
+                    "than",
+                    "the",
+                    "input",
+                    "another",
+                    "tuple",
+                    "than",
+                    "the",
+                    "input",
+                )
+            ],
+        )
+    )
+    assert transform.call_args_list == [call(("a",)), call(("b",))]
+
+
+@pytest.mark.parametrize("dataset", [[(("a",), ("b",))]], indirect=True)
+def test_multiple_transforms(dataset):
+    expected_t1 = ("t1_value1", "t1_value2")
+    expected = ("t2_value1", "t2_value2")
+    transform1 = MagicMock(return_value=expected_t1)
+    transform2 = MagicMock(return_value=expected)
+    dataset.transforms.append(transform1).append(transform2)
+
+    dataset.cross_sources()
+
+    assert np.all(
+        np.equal(
+            dataset.feature_matrix,
+            [("t2_value1", "t2_value2", "t2_value1", "t2_value2")],
+        )
+    )
+    assert transform1.call_args_list == [call(("a",)), call(("b",))]
+    assert transform2.call_args_list == [
+        call(("t1_value1", "t1_value2")),
+        call(("t1_value1", "t1_value2")),
+    ]
