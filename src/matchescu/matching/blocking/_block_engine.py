@@ -1,14 +1,17 @@
 import re
+from collections import defaultdict
 from dataclasses import dataclass
+from email.policy import default
 from functools import partial
-from typing import Iterator, Hashable, Callable
+from typing import Iterator, Hashable, Callable, Iterable
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from stopwords import clean as remove_stopwords
 
 from matchescu.data import EntityReferenceExtraction
 from matchescu.matching.blocking._block import Block
-from matchescu.typing import EntityReference, DataSource, Record
+from matchescu.matching.extraction import ListDataSource
+from matchescu.typing import EntityReference, DataSource, Record, Trait
 
 token_regexp = re.compile(r"[\d\W_]+")
 
@@ -231,6 +234,11 @@ class BlockEngine:
             for candidate in self._candidates
         )
 
+    def __iter__(self) -> Iterator[EntityReference]:
+        for left, right in self._candidates:
+            yield left.reference
+            yield right.reference
+
     def calculate_metrics(
         self, ground_truth: set[tuple[Hashable, Hashable]]
     ) -> BlockingMetrics:
@@ -255,3 +263,19 @@ class BlockEngine:
                 if source_name not in visited:
                     yield source_name
                     visited.add(source_name)
+
+    def candidate_data_sources(
+        self, **traits: Iterable[Trait]
+    ) -> tuple[DataSource[Record], ...]:
+        source_map: dict[str, dict] = {}
+        for item1, item2 in self._candidates:
+            src1 = source_map.get(item1.source, {})
+            src1[item1.ref_id(item1.reference)] = item1.reference
+            source_map[item1.source] = src1
+            src2 = source_map.get(item2.source, {})
+            src2[item2.ref_id(item2.reference)] = item2.reference
+            source_map[item2.source] = src2
+        return tuple(
+            ListDataSource(source_name, traits.get(source_name)).extend(refs.values())
+            for source_name, refs in source_map.items()
+        )

@@ -2,7 +2,7 @@ import math
 from abc import ABCMeta, abstractmethod
 from functools import partial
 from itertools import product
-from typing import Hashable, Callable, Generator, Iterable
+from typing import Callable, Generator, Iterable
 
 import torch
 
@@ -14,33 +14,25 @@ from matchescu.typing import EntityReference
 
 
 class ComparisonEngine(metaclass=ABCMeta):
-    def __init__(
-        self,
-        ground_truth: set[tuple[Hashable, Hashable]],
-        cmp_config: EntityReferenceComparisonConfig,
-        left_id: Callable[[EntityReference], Hashable],
-        right_id: Callable[[EntityReference], Hashable],
-        target_col_name: str,
-    ):
-        self._gt = ground_truth
+    def __init__(self, cmp_config: EntityReferenceComparisonConfig):
         self._config = cmp_config
-        self._left_id = left_id
-        self._right_id = right_id
-        self._target_col = target_col_name
+
+    @property
+    def config(self) -> EntityReferenceComparisonConfig:
+        return self._config
 
     @abstractmethod
     def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         pass
 
     def __call__(self, left_side: EntityReference, right_side: EntityReference) -> dict:
-        result = self._compare(left_side, right_side)
-        lid = self._left_id(left_side)
-        rid = self._right_id(right_side)
-        result[self._target_col] = int((lid, rid) in self._gt)
-        return result
+        return self._compare(left_side, right_side)
 
 
 class NoOp(ComparisonEngine):
+    def __init__(self):
+        super().__init__(EntityReferenceComparisonConfig())
+
     def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         result = {f"left_{idx}": value for idx, value in enumerate(left, 1)}
         result.update({f"right_{idx}": value for idx, value in enumerate(right, 1)})
@@ -68,25 +60,25 @@ class AttributeComparison(ComparisonEngine):
 class VectorComparison(ComparisonEngine):
     def __init__(
         self,
-        ground_truth: set[tuple[Hashable, Hashable]],
         cmp_config: EntityReferenceComparisonConfig,
-        left_id: Callable[[EntityReference], Hashable],
-        right_id: Callable[[EntityReference], Hashable],
-        target_col_name: str,
-        tensor_summarizer: Callable[[Iterable[torch.Tensor]], torch.Tensor] = None,
+        summarizer: Callable[[Iterable[torch.Tensor]], torch.Tensor] = None,
     ):
-        super().__init__(ground_truth, cmp_config, left_id, right_id, target_col_name)
-        self._tensor_summarizer = tensor_summarizer or partial(torch.cat, dim=-1)
+        super().__init__(
+            cmp_config,
+        )
+        self._summarizer = summarizer or partial(torch.cat, dim=-1)
 
     def _compare(self, left: EntityReference, right: EntityReference) -> dict:
         comparison_tensors = []
         for spec in self._config.specs:
-            lval = left[spec.left_ref_key]
-            rval = right[spec.right_ref_key]
-            if not isinstance(lval, torch.Tensor) or not isinstance(rval, torch.Tensor):
+            left_val = left[spec.left_ref_key]
+            right_val = right[spec.right_ref_key]
+            if not isinstance(left_val, torch.Tensor) or not isinstance(
+                right_val, torch.Tensor
+            ):
                 continue
-            comparison_tensors.append(spec.match_strategy(lval, rval))
-        summary = self._tensor_summarizer(comparison_tensors)
+            comparison_tensors.append(spec.match_strategy(left_val, right_val))
+        summary = self._summarizer(comparison_tensors)
         return {f"col_{idx}": val for idx, val in enumerate(summary, 1)}
 
 
@@ -95,14 +87,10 @@ class PatternEncodedComparison(ComparisonEngine):
 
     def __init__(
         self,
-        ground_truth: set[tuple[Hashable, Hashable]],
         cmp_config: EntityReferenceComparisonConfig,
-        left_id: Callable[[EntityReference], Hashable],
-        right_id: Callable[[EntityReference], Hashable],
-        target_col_name: str,
         possible_outcomes: int = 2,
     ):
-        super().__init__(ground_truth, cmp_config, left_id, right_id, target_col_name)
+        super().__init__(cmp_config)
         self._possible_outcomes = possible_outcomes
 
     def _generate_binary_patterns(self) -> Generator[tuple, None, None]:

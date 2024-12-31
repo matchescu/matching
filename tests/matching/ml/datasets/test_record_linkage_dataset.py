@@ -42,7 +42,7 @@ def pm_comparison_rl(
 def test_target_vector(attr_comparison_rl, left_source, right_source, true_matches):
     expected_size = len(left_source) * len(right_source)
 
-    result = attr_comparison_rl.target_vector.to_numpy()
+    result = attr_comparison_rl.target_vector
 
     assert len(result) == expected_size
     assert len(result[result == 1]) == len(true_matches)
