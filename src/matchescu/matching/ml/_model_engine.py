@@ -29,7 +29,7 @@ class TorchEngine:
         total_loss = 0.0
         for feats, labels in data_loader:
             feats = feats.to(self._device)
-            labels = labels.to(self._device).squeeze()
+            labels = labels.to(self._device).view(-1, 1)
 
             self._optimizer.zero_grad()
             out = self._model(feats)
@@ -43,7 +43,7 @@ class TorchEngine:
         return total_loss
 
     def _compute_stats(self, predictions: list, target: list) -> None:
-        predictions = list(map(lambda x: torch.argmax(x).item(), predictions))
+        predictions = list(map(lambda x: float(x > 0.5), predictions))
         target = list(map(lambda x: x.item(), target))
         self._stats = {
             "precision": precision_score(target, predictions),
@@ -60,7 +60,7 @@ class TorchEngine:
         with torch.no_grad():
             for feats, labels in data_loader:
                 feats = feats.to(self._device)
-                labels = labels.to(self._device).squeeze()
+                labels = labels.to(self._device).view(-1, 1)
 
                 out = self._model(feats)
                 loss_val = self._loss(out, labels)
