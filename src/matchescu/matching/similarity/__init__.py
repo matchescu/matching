@@ -13,6 +13,7 @@ from matchescu.matching.similarity._string import (
     LevenshteinDistance,
     LevenshteinSimilarity,
 )
+from matchescu.matching.similarity._tensor import TensorSimilarity
 
 
 __all__ = [
@@ -26,4 +27,5 @@ __all__ = [
     "LevenshteinSimilarity",
     "LevenshteinLearner",
     "Norm",
+    "TensorSimilarity",
 ]

@@ -58,6 +58,6 @@ def test_feature_matrix(cora, dataset):
 
 
 def test_target_vector(cora_ground_truth, dataset):
-    y = dataset.target_vector.to_numpy()
+    y = dataset.target_vector
 
     assert len(y[y == 1]) == len(cora_ground_truth)

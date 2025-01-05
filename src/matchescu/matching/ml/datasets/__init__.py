@@ -1,9 +1,10 @@
 from matchescu.matching.ml.datasets._deduplication import DeduplicationDataSet
 from matchescu.matching.ml.datasets._record_linkage import RecordLinkageDataSet
-from matchescu.matching.ml.datasets._sampling import (
+from matchescu.matching.ml.datasets._reference_comparison import (
     AttributeComparison,
     PatternEncodedComparison,
 )
+from matchescu.matching.ml.datasets._torch import PlTorchDataset
 
 
 __all__ = [
@@ -11,4 +12,5 @@ __all__ = [
     "RecordLinkageDataSet",
     "AttributeComparison",
     "PatternEncodedComparison",
+    "PlTorchDataset",
 ]

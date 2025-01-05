@@ -30,7 +30,7 @@ def comparison_config():
 
 def test_dataset_has_expected_size(block_engine, true_matches, comparison_config):
     ds = BlockDataSet(
-        block_engine, lambda x: x[0], lambda x: x[0], true_matches
+        block_engine, true_matches, lambda x: x[0], lambda x: x[0]
     ).attr_compare(comparison_config)
 
     ds.cross_sources()
