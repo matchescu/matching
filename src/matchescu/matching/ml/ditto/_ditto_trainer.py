@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, cast
 
 import torch
+from torch.nn import BCEWithLogitsLoss
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
@@ -62,6 +63,7 @@ class DittoTrainer:
         batch_no = 0
 
         try:
+            loss_fn = BCEWithLogitsLoss().to(device)
             model.to(device)
             model.train(True)
             for i, batch in enumerate(train_iter):
@@ -75,7 +77,7 @@ class DittoTrainer:
                     x1, x2, y = device_batch
                     prediction = model(x1.to(device), x2.to(device))
 
-                loss = model.loss(prediction, y.to(device).float())
+                loss = loss_fn(prediction, y.to(device).float())
 
                 loss.backward()
                 optimizer.step()

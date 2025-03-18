@@ -20,16 +20,11 @@ class DittoModel(nn.Module):
         hidden_size = self._bert.config.hidden_size
 
         self._classifier = torch.nn.Linear(hidden_size, 1)
-        self._loss_fn = nn.BCEWithLogitsLoss()
         self._device = device
 
     @property
     def device(self) -> torch.device:
         return self._device
-
-    @property
-    def loss(self):
-        return self._loss_fn
 
     def forward(self, x1, x2=None):
         enc = self._bert_encode(x1, x2)
@@ -71,7 +66,6 @@ class DittoModel(nn.Module):
     def to(self, device: str | torch.device) -> None:
         self._bert = self._bert.to(device)
         self._classifier = self._classifier.to(device)
-        self._loss_fn = self._loss_fn.to(device)
         self._device = device
 
     def train(self, mode: bool = True) -> "DittoModel":
