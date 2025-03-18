@@ -75,7 +75,7 @@ def run_training():
     )
     ditto = DittoModel(BERT_MODEL_NAME)
     train, xv, test = ds.split(3, 1, 1, 64)
-    trainer = DittoTrainer(BERT_MODEL_NAME, Path(DATADIR).parent / "models")
+    trainer = DittoTrainer(BERT_MODEL_NAME, Path(DATADIR).parent / "models", epochs=10)
     evaluator = DittoTrainingEvaluator(BERT_MODEL_NAME, xv, test)
     trainer.run_training(ditto, train, evaluator, True)
 

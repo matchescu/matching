@@ -10,8 +10,7 @@ from torch.utils.data import Dataset, DataLoader, Subset
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.blocking import BlockEngine
-from matchescu.matching.ml.datasets._blocking import BlockDataSet
-from matchescu.typing import DataSource, EntityReference
+from matchescu.typing import EntityReference
 
 
 def alphanumeric(token):

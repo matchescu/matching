@@ -66,6 +66,7 @@ class DittoTrainer:
             loss_fn = BCEWithLogitsLoss().to(device)
             model.to(device)
             model.train(True)
+            batch_loss = 0.0
             for i, batch in enumerate(train_iter):
                 device_batch = tuple(item.to(device) for item in batch)
                 optimizer.zero_grad()
@@ -85,18 +86,19 @@ class DittoTrainer:
 
                 step_loss = loss.item()
                 total_loss += step_loss
+                batch_loss += step_loss
                 batch_no = i + 1
                 if batch_no % 10 == 0:
-                    avg_loss = total_loss / batch_no
-                    fmt = f"{self._task}: batch {batch_no}: instant loss=%.4f, avg loss=%.4f"
-                    self._add_text_summary(summary_writer, batch_no, fmt, step_loss, avg_loss)
-                    self._log.info(fmt, step_loss, avg_loss)
+                    batch_loss = batch_loss / 10
+                    fmt = f"{self._task}: batch {batch_no}: avg loss over last 10 batches=%.4f"
+                    self._add_text_summary(summary_writer, batch_no, fmt, batch_loss)
+                    self._log.info(fmt, batch_loss)
                 del loss
         finally:
             model.train(False)
 
         avg_loss = total_loss / batch_no if batch_no > 0 else 0
-        summary_writer.add_scalar(self._task, avg_loss, epoch)
+        summary_writer.add_scalar(f"{self._task}_avg_loss", avg_loss, epoch)
         self._log.info("epoch %d: avg loss=%.4f", epoch, avg_loss)
 
     def run_training(
@@ -110,7 +112,8 @@ class DittoTrainer:
         model = model.with_frozen_bert_layers(self._frozen_layer_count)
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=self._learning_rate)
-        num_steps = (len(training_data.dataset) // training_data.batch_size) * self._epochs
+        total_batches = len(cast(DittoDataset, training_data.dataset)) // training_data.batch_size
+        num_steps = total_batches * self._epochs
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=0, num_training_steps=num_steps
         )
@@ -130,7 +133,7 @@ class DittoTrainer:
                 if evaluator is None or not save_model:
                     continue
 
-                xv_f1, test_f1 = evaluator(model)
+                xv_f1, test_f1, threshold = evaluator(model)
                 if xv_f1 > best_xv_f1:
                     self._log.info("found new best F1. saving checkpoint")
                     best_xv_f1 = xv_f1
@@ -144,6 +147,7 @@ class DittoTrainer:
                         "optimizer": optimizer.state_dict(),
                         "scheduler": scheduler.state_dict(),
                         "epoch": epoch,
+                        "threshold": threshold,
                     }
                     torch.save(ckpt, ckpt_path)
 

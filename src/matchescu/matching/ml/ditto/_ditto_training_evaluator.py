@@ -55,7 +55,7 @@ class DittoTrainingEvaluator:
             return f1, threshold
         return DittoTrainingEvaluator.__best_threshold(all_probs, all_y)
 
-    def __call__(self, model: DittoModel) -> tuple[float, float]:
+    def __call__(self, model: DittoModel) -> tuple[float, float, float]:
         self._log.info("%s: evaluating on cross-validation set", self._task)
         xv_f1, best_xv_threshold = self._evaluate_model(model, self._xv_data)
         self._log.info(
@@ -66,4 +66,4 @@ class DittoTrainingEvaluator:
         )
         test_f1, _ = self._evaluate_model(model, self._test_data, threshold=best_xv_threshold)
         self._log.info("%s: test F1=%.4f", self._task, test_f1)
-        return xv_f1, test_f1
+        return xv_f1, test_f1, best_xv_threshold
