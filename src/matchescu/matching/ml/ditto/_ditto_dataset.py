@@ -298,8 +298,8 @@ class DittoDataset(Dataset):
         max_len=256,
         size=None,
         augmentations=None,
-        left_cols: tuple|None = None,
-        right_cols: tuple|None = None,
+        left_cols: tuple | None = None,
+        right_cols: tuple | None = None,
     ):
         self.__tokenizer = tokenizer
         self.__pairs = []
@@ -309,7 +309,9 @@ class DittoDataset(Dataset):
 
         for pair in blocker.candidate_pairs():
             self.__pairs.append(pair)
-            self.__labels.append(1 if (left_id(pair[0]), right_id(pair[1])) in ground_truth else 0)
+            self.__labels.append(
+                1 if (left_id(pair[0]), right_id(pair[1])) in ground_truth else 0
+            )
 
         self.__pairs = self.__pairs[:size]
         self.__labels = self.__labels[:size]
@@ -331,7 +333,9 @@ class DittoDataset(Dataset):
         return col_name
 
     @staticmethod
-    def _ref_to_str(ref: EntityReference, col_names: tuple) -> Generator[tuple[str, str]]:
+    def _ref_to_str(
+        ref: EntityReference, col_names: tuple
+    ) -> Generator[tuple[str, str]]:
         for idx, value in enumerate(ref):
             col_name = DittoDataset.__col_name(idx, col_names)
             col_value = str(ref[idx])
@@ -348,8 +352,14 @@ class DittoDataset(Dataset):
             List of int: token ID's of the two entities augmented (if da is set)
             int: the label of the pair (0: unmatch, 1: match)
         """
-        left = " ".join(" ".join(t) for t in self._ref_to_str(self.__pairs[idx][0][1:], self.__left_cols))
-        right = " ".join(" ".join(t) for t in self._ref_to_str(self.__pairs[idx][1][1:], self.__right_cols))
+        left = " ".join(
+            " ".join(t)
+            for t in self._ref_to_str(self.__pairs[idx][0][1:], self.__left_cols)
+        )
+        right = " ".join(
+            " ".join(t)
+            for t in self._ref_to_str(self.__pairs[idx][1][1:], self.__right_cols)
+        )
 
         # left + right
         x = self.__tokenizer.encode(
@@ -373,8 +383,7 @@ class DittoDataset(Dataset):
             map(
                 lambda vec: list(
                     itertools.chain(
-                        vec,
-                        itertools.repeat(0, max(total_length - len(vec), 0))
+                        vec, itertools.repeat(0, max(total_length - len(vec), 0))
                     )
                 ),
                 x,

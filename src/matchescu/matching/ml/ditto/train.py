@@ -2,7 +2,9 @@ import logging
 import os
 import sys
 import time
+import warnings
 from contextlib import contextmanager
+from pathlib import Path
 
 import polars as pl
 from transformers import AutoTokenizer
@@ -11,6 +13,8 @@ from matchescu.matching.extraction import Traits, CsvDataSource
 from matchescu.matching.blocking import BlockEngine
 from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.ml.ditto._ditto_module import DittoModel
+from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
+from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
 
 DATADIR = os.path.abspath("data")
 BERT_MODEL_NAME = "roberta-base"
@@ -70,9 +74,13 @@ def run_training():
         right_cols=("name", "description", "manufacturer", "price"),
     )
     ditto = DittoModel(BERT_MODEL_NAME)
-    ditto.run_training(ds, BERT_MODEL_NAME, save_model=True, batch_size=128)
+    train, xv, test = ds.split(3, 1, 1, 64)
+    trainer = DittoTrainer(BERT_MODEL_NAME, Path(DATADIR).parent / "models")
+    evaluator = DittoTrainingEvaluator(BERT_MODEL_NAME, xv, test)
+    trainer.run_training(ditto, train, evaluator, True)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    run_training()
+    with warnings.catch_warnings(action="ignore"):
+        run_training()
