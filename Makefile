@@ -1,9 +1,38 @@
+VENV := .venv
+TIMESTAMP := $(VENV)/.poetry_installed
+PYTHON_VERSION := 3.12
+
 .PHONY: check-deps bump-patch bump-minor bump-major bump-release bump-prepatch bump-preminor bump-premajor bump-prerelease re-tag
 
 # Ensure dependencies are available
 check-deps:
 	@command -v git >/dev/null 2>&1 || { echo "Error: 'git' is not installed or not in PATH." >&2; exit 1; }
 	@command -v poetry >/dev/null 2>&1 || { echo "Error: 'poetry' is not installed or not in PATH." >&2; exit 1; }
+
+$(VENV):
+	poetry env use $(PYTHON_VERSION)
+
+$(TIMESTAMP): pyproject.toml poetry.lock | $(VENV)
+	poetry install
+	touch $(TIMESTAMP)
+
+bootstrap: $(TIMESTAMP)
+
+clean:
+	rm -rfv .venv dist
+
+format: bootstrap
+	poetry run black .
+
+check: bootstrap
+	poetry run black --check .
+	poetry run ruff check .
+
+test: check
+	poetry run pytest
+
+build: format test
+	poetry build
 
 re-tag: check-deps
 	git push --delete origin refs/tags/$(TAG) &&\

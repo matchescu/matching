@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from functools import partial
 from typing import Iterator, Hashable, Callable
 
-import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from stopwords import clean as remove_stopwords
 

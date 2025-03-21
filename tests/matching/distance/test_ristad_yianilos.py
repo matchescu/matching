@@ -1,7 +1,3 @@
-import itertools
-from typing import Iterable
-
-import numpy as np
 import polars as pl
 import pytest
 

@@ -64,6 +64,8 @@ class DittoTrainingEvaluator:
             xv_f1,
             best_xv_threshold,
         )
-        test_f1, _ = self._evaluate_model(model, self._test_data, threshold=best_xv_threshold)
+        test_f1, _ = self._evaluate_model(
+            model, self._test_data, threshold=best_xv_threshold
+        )
         self._log.info("%s: test F1=%.4f", self._task, test_f1)
         return xv_f1, test_f1, best_xv_threshold

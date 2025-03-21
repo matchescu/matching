@@ -112,7 +112,9 @@ class DittoTrainer:
         model = model.with_frozen_bert_layers(self._frozen_layer_count)
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=self._learning_rate)
-        total_batches = len(cast(DittoDataset, training_data.dataset)) // training_data.batch_size
+        total_batches = (
+            len(cast(DittoDataset, training_data.dataset)) // training_data.batch_size
+        )
         num_steps = total_batches * self._epochs
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=0, num_training_steps=num_steps
@@ -125,7 +127,13 @@ class DittoTrainer:
                 self._log.info("%s: epoch %d - train start", self._task, epoch)
                 try:
                     self._train_one_epoch(
-                        epoch, device, model, training_data, optimizer, scheduler, summary_writer
+                        epoch,
+                        device,
+                        model,
+                        training_data,
+                        optimizer,
+                        scheduler,
+                        summary_writer,
                     )
                 finally:
                     self._log.info("%s: epoch %d - train end", self._task, epoch)

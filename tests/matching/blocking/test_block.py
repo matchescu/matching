@@ -27,7 +27,7 @@ def block(request):
 @pytest.mark.parametrize("block_key", [None, "", "\r", "\n", "\t", " "])
 def test_block_init_raises_value_error(block_key):
     with pytest.raises(ValueError) as ve:
-        block = Block(block_key)
+        Block(block_key)
 
     assert str(ve.value) == "invalid blocking key"
 
