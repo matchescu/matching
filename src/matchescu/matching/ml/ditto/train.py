@@ -44,7 +44,7 @@ def _id(row):
 
 
 def create_comparison_space():
-    blocker = BlockEngine().add_source(abt, _id).add_source(buy, _id).tf_idf(0.25)
+    blocker = BlockEngine().add_entity_references(abt, _id).add_entity_references(buy, _id).tf_idf(0.25)
     blocker.filter_candidates_jaccard(0.6)
     blocker.update_candidate_pairs(False)
     metrics = blocker.calculate_metrics(gt)

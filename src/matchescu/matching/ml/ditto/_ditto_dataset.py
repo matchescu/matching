@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 from transformers import PreTrainedTokenizerFast
 
-from matchescu.matching.blocking import BlockEngine
+from matchescu.matching.blocking import Blocker
 from matchescu.typing import EntityReference
 
 
@@ -288,7 +288,7 @@ class DittoDataset(Dataset):
 
     def __init__(
         self,
-        blocker: BlockEngine,
+        blocker: Blocker,
         left_id: Callable[[EntityReference], Hashable],
         right_id: Callable[[EntityReference], Hashable],
         ground_truth: set[tuple[Hashable, Hashable]],

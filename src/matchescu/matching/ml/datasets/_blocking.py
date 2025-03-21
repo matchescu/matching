@@ -3,8 +3,9 @@ from typing import Hashable, Callable
 
 import polars as pl
 
-from matchescu.data import EntityReferenceExtraction
-from matchescu.matching.blocking import BlockEngine
+from matchescu.extraction import EntityReferenceExtraction
+from matchescu.matching.blocking import Blocker
+from matchescu.matching.blocking._filter import MultiSourceFilter
 from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
 )
@@ -12,7 +13,8 @@ from matchescu.matching.ml.datasets._sampling import (
     AttributeComparison,
     PatternEncodedComparison,
 )
-from matchescu.typing import EntityReference
+from matchescu.reference_store.id_table._in_memory import InMemoryIdTable
+from matchescu.typing import EntityReference, EntityReferenceIdentifier
 
 
 class BlockDataSet:
@@ -20,12 +22,14 @@ class BlockDataSet:
 
     def __init__(
         self,
-        block_engine: BlockEngine,
+        blocker: Blocker,
+        id_table: InMemoryIdTable,
         left_id: Callable[[EntityReference], Hashable],
         right_id: Callable[[EntityReference], Hashable],
         ground_truth: set[tuple[Hashable, Hashable]],
     ) -> None:
-        self.__engine = block_engine
+        self.__blocker = blocker
+        self.__id_table = id_table
         self.__lid = left_id
         self.__rid = right_id
         self.__true_matches = ground_truth
@@ -74,13 +78,24 @@ class BlockDataSet:
         )
         return self
 
+    def __concat_refs(self, *ref_ids: EntityReferenceIdentifier) -> tuple[tuple, int]:
+        refs = list(map(lambda x: self.__id_table.get(x.source, x.label), ref_ids))
+        return tuple(v for r in refs for v in r), len(refs[0])
+
     def cross_sources(self) -> "BlockDataSet":
+        only_multi_source = MultiSourceFilter()
         data = [
             x[0]
             for x in itertools.starmap(
                 self.__sample_factory,
                 itertools.starmap(
-                    lambda t1, t2: ((t1 + t2), len(t1)), self.__engine.candidate_pairs()
+                    self.__concat_refs,
+                    (
+                        cand_pairs
+                        for block in self.__blocker()
+                        for cand_pairs in block.candidate_pairs()
+                        if only_multi_source(*cand_pairs)
+                    )
                 ),
             )
         ]

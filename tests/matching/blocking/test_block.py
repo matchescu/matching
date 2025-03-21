@@ -1,26 +1,33 @@
+from collections.abc import Iterable
+
 import pytest
 
 from matchescu.matching.blocking import Block
+from matchescu.references import EntityReference
+from matchescu.typing import EntityReferenceIdentifier
 
-
-DEFAULT_SOURCE_NAME = "DEFAULT"
+DEFAULT_SOURCE_NAME = "test"
 DEFAULT_BLOCK_KEY = "test block"
 
 
+def _id(label, source=DEFAULT_SOURCE_NAME):
+    return EntityReferenceIdentifier(label, source)
+
+
+def _ref(label, source=DEFAULT_SOURCE_NAME):
+    return EntityReference(_id(label, source), [label])
+
+
 @pytest.fixture(scope="module")
-def default_entity_reference() -> tuple:
-    return 1, "reference name", "a short reference description"
+def default_entity_reference() -> EntityReference:
+    return EntityReference(
+        EntityReferenceIdentifier(1, "test"),
+        [1, "reference name", "a short reference description"]
+    )
 
 
 @pytest.fixture
-def entity_references(request, default_entity_reference):
-    if hasattr(request, "param") and request.param:
-        return request.param
-    return [default_entity_reference]
-
-
-@pytest.fixture
-def block(request):
+def block():
     return Block(DEFAULT_BLOCK_KEY)
 
 
@@ -32,71 +39,41 @@ def test_block_init_raises_value_error(block_key):
     assert str(ve.value) == "invalid blocking key"
 
 
-def test_block_add_ref(block):
-    block.append(1)
+def test_block_add_ref(block, default_entity_reference):
+    block.append(default_entity_reference)
 
-    assert block.references == {DEFAULT_SOURCE_NAME: [1]}
-
-
-@pytest.mark.parametrize(
-    "source,expected",
-    [
-        (None, DEFAULT_SOURCE_NAME),
-        ("", DEFAULT_SOURCE_NAME),
-        (" ", DEFAULT_SOURCE_NAME),
-        ("\t", DEFAULT_SOURCE_NAME),
-        ("\r", DEFAULT_SOURCE_NAME),
-        ("\n", DEFAULT_SOURCE_NAME),
-        ("a", "a"),
-    ],
-)
-def test_block_add_ref_from_source(block, source, expected):
-    block.append(1, source_name=source)
-
-    assert block.references == {expected: [1]}
+    assert list(block) == [default_entity_reference.id]
 
 
 def test_block_add_multiple_refs(block):
-    block.extend([1, 2])
+    block.extend(_ref(i) for i in range(10))
 
-    assert block.references == {DEFAULT_SOURCE_NAME: [1, 2]}
-
-
-@pytest.mark.parametrize(
-    "source,expected",
-    [
-        (None, DEFAULT_SOURCE_NAME),
-        ("", DEFAULT_SOURCE_NAME),
-        (" ", DEFAULT_SOURCE_NAME),
-        ("\t", DEFAULT_SOURCE_NAME),
-        ("\r", DEFAULT_SOURCE_NAME),
-        ("\n", DEFAULT_SOURCE_NAME),
-        ("a", "a"),
-    ],
-)
-def test_block_add_multiple_refs_from_source(block, source, expected):
-    block.extend([1, 2], source_name=source)
-
-    assert block.references == {expected: [1, 2]}
+    assert list(block) == [
+        EntityReferenceIdentifier(i, DEFAULT_SOURCE_NAME)
+        for i in range(10)
+    ]
 
 
 @pytest.mark.parametrize(
-    "ref_ids,expected",
+    "refs,expected",
     [
-        ([1], []),
-        ([1, 2], [(1, 2)]),
+        ([_ref(1)], []),
         (
-            [1, 2, 3],
+                [_ref(1), _ref(2)],
+                [(_id(1), _id(2))]
+        ),
+        (
+            [_ref(1), _ref(2), _ref(3)],
             [
-                (1, 2),
-                (1, 3),
-                (2, 3),
+                (_id(1), _id(2)),
+                (_id(1), _id(3)),
+                (_id(2), _id(3)),
             ],
         ),
     ],
 )
-def test_candidate_pairs_single_source(block, ref_ids, expected):
-    block.extend(ref_ids)
+def test_candidate_pairs_single_source(block, refs, expected):
+    block.extend(refs)
 
     actual = list(block.candidate_pairs())
 
@@ -104,16 +81,15 @@ def test_candidate_pairs_single_source(block, ref_ids, expected):
 
 
 @pytest.mark.parametrize(
-    "ref_ids,expected",
+    "refs,expected",
     [
-        ({"a": [1], "b": [1]}, [(1, 1)]),
-        ({"a": [1, 2], "b": [1]}, [(1, 1), (2, 1)]),
-        ({"a": [1, 2], "b": [1, 2]}, [(1, 1), (1, 2), (2, 1), (2, 2)]),
+        ([_ref(1, "a"), _ref(1, "b")], [(_id(1, "a"), _id(1, "b"))]),
+        ([_ref(1, "a"), _ref(2, "a"), _ref(1, "b")], [(_id(1, "a"), _id(1, "b")), (_id(2, "a"), _id(1, "b"))]),
+        ([_ref(1, "a"), _ref(2, "a"), _ref(1, "b"), _ref(2, "b")], [(_id(1, "a"), _id(1, "b")), (_id(1, "a"), _id(2, "b")), (_id(2, "a"), _id(1, "b")), (_id(2, "a"), _id(2, "b"))]),
     ],
 )
-def test_candidate_pairs_two_sources(block, ref_ids, expected):
-    for src, src_ids in ref_ids.items():
-        block.extend(src_ids, src)
+def test_candidate_pairs_two_sources(block, refs, expected):
+    block.extend(refs)
 
     actual = list(block.candidate_pairs())
 
@@ -121,45 +97,15 @@ def test_candidate_pairs_two_sources(block, ref_ids, expected):
 
 
 @pytest.mark.parametrize(
-    "ref_ids,expected",
+    "refs,expected",
     [
-        ({"a": [1], "b": [1], "c": [1]}, [(1, 1), (1, 1), (1, 1)]),
-        ({"a": [1, 2], "b": [1], "c": [1]}, [(1, 1), (2, 1), (1, 1), (2, 1), (1, 1)]),
-        (
-            {"a": [1, 2], "b": [1, 2], "c": [1]},
-            [(1, 1), (1, 2), (2, 1), (2, 2), (1, 1), (2, 1), (1, 1), (2, 1)],
-        ),
-        (
-            {"a": [1, 2], "b": [1, 2], "c": [1, 2]},
-            [
-                (1, 1),
-                (1, 2),
-                (2, 1),
-                (2, 2),
-                (1, 1),
-                (1, 2),
-                (2, 1),
-                (2, 2),
-                (1, 1),
-                (1, 2),
-                (2, 1),
-                (2, 2),
-            ],
-        ),
-        (
-            {"a": [1, 2], "b": [1], "c": [1, 2]},
-            [(1, 1), (2, 1), (1, 1), (1, 2), (2, 1), (2, 2), (1, 1), (1, 2)],
-        ),
-        (
-            {"a": [1], "b": [1, 2], "c": [1, 2]},
-            [(1, 1), (1, 2), (1, 1), (1, 2), (1, 1), (1, 2), (2, 1), (2, 2)],
-        ),
-    ],
+        ([], 0),
+        ([_ref(1, "a")], 1),
+        ([_ref(1, "a"), _ref(2, "a")], 1),
+        ([_ref(1, "a"), _ref(1, "b")], 2),
+    ]
 )
-def test_candidate_pairs_multiple_sources(block, ref_ids, expected):
-    for src, src_ids in ref_ids.items():
-        block.extend(src_ids, src)
+def test_block_len(block, refs, expected):
+    block.extend(refs)
 
-    actual = list(block.candidate_pairs())
-
-    assert actual == expected
+    assert block.count_sources() == expected
