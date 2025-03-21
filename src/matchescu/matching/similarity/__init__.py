@@ -26,4 +26,5 @@ __all__ = [
     "LevenshteinSimilarity",
     "LevenshteinLearner",
     "Norm",
+    "StringSimilarity",
 ]

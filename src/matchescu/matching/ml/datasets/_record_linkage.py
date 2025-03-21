@@ -3,7 +3,7 @@ from typing import Any
 
 import polars as pl
 
-from matchescu.data import EntityReferenceExtraction
+from matchescu.extraction import EntityReferenceExtraction
 from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
 )
@@ -23,7 +23,7 @@ class RecordLinkageDataSet:
         right: DataSource[Record],
         ground_truth: set[tuple[Any, Any]],
     ) -> None:
-        self.__extract_left = EntityReferenceExtraction(left, lambda ref: ref[0])
+        self.__extract_left = None
         self.__extract_right = EntityReferenceExtraction(right, lambda ref: ref[0])
         self.__true_matches = ground_truth
         self.__comparison_data = None

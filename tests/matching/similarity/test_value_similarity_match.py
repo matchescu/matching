@@ -1,6 +1,5 @@
 import pytest
 
-from matchescu.matching.similarity import Similarity
 from matchescu.matching.attribute import (
     TernaryResult,
     TernarySimilarityMatchOnThreshold,

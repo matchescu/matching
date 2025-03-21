@@ -1,21 +1,13 @@
 import pytest
 
-from matchescu.matching.blocking import BlockEngine
+from matchescu.matching.blocking import TfIdfBlocker
 from matchescu.matching.entity_reference import RawComparison
 from matchescu.matching.ml.datasets._blocking import BlockDataSet
 
 
 @pytest.fixture
-def block_engine(left_source, right_source):
-    engine = (
-        BlockEngine()
-        .add_source(left_source, lambda x: x[0])
-        .add_source(right_source, lambda x: x[0])
-        .tf_idf(0.3)
-    )
-    engine.update_candidate_pairs(False)
-    engine.filter_candidates_jaccard(0.15)
-    return engine
+def blocker(abt_buy_id_table):
+    return TfIdfBlocker(abt_buy_id_table)
 
 
 @pytest.fixture
@@ -28,15 +20,14 @@ def comparison_config():
     )
 
 
-def test_dataset_has_expected_size(block_engine, true_matches, comparison_config):
+def test_dataset_has_expected_size(
+    blocker, abt_buy_id_table, abt_buy_gt, comparison_config
+):
     ds = BlockDataSet(
-        block_engine, lambda x: x[0], lambda x: x[0], true_matches
+        blocker, abt_buy_id_table, lambda x: x[0], lambda x: x[0], abt_buy_gt
     ).attr_compare(comparison_config)
 
     ds.cross_sources()
 
-    assert ds.feature_matrix.shape == (
-        block_engine.candidate_count,
-        len(comparison_config),
-    )
-    assert ds.target_vector.shape == (block_engine.candidate_count,)
+    assert ds.feature_matrix.shape == (30544, len(comparison_config))
+    assert ds.target_vector.shape == (30544,)

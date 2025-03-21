@@ -3,7 +3,7 @@ from typing import Any
 
 import polars as pl
 
-from matchescu.data import EntityReferenceExtraction
+from matchescu.extraction import EntityReferenceExtraction
 from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
 )
@@ -11,7 +11,6 @@ from matchescu.matching.ml.datasets._sampling import (
     AttributeComparison,
     PatternEncodedComparison,
 )
-from matchescu.typing import DataSource, Record
 
 
 class DeduplicationDataSet:
@@ -19,10 +18,10 @@ class DeduplicationDataSet:
 
     def __init__(
         self,
-        source: DataSource[Record],
+        extractor: EntityReferenceExtraction,
         ground_truth: set[tuple[Any, Any]],
     ) -> None:
-        self.__extract = EntityReferenceExtraction(source, lambda ref: ref[0])
+        self.__extract = extractor
         self.__true_matches = ground_truth
         self.__comparison_data = None
         self.__sample_factory = None
