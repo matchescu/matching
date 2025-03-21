@@ -1,4 +1,4 @@
-VENV := .venv
+VENV := $(shell poetry env info --path 2>/dev/null || echo ".venv")
 TIMESTAMP := $(VENV)/.poetry_installed
 PYTHON_VERSION := 3.12
 
@@ -9,7 +9,7 @@ check-deps:
 	@command -v git >/dev/null 2>&1 || { echo "Error: 'git' is not installed or not in PATH." >&2; exit 1; }
 	@command -v poetry >/dev/null 2>&1 || { echo "Error: 'poetry' is not installed or not in PATH." >&2; exit 1; }
 
-$(VENV):
+$(VENV): check-deps
 	poetry env use $(PYTHON_VERSION)
 
 $(TIMESTAMP): pyproject.toml poetry.lock | $(VENV)
