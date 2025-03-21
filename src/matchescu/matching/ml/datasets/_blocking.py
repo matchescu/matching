@@ -95,7 +95,7 @@ class BlockDataSet:
                         for block in self.__blocker()
                         for cand_pairs in block.candidate_pairs()
                         if only_multi_source(*cand_pairs)
-                    )
+                    ),
                 ),
             )
         ]

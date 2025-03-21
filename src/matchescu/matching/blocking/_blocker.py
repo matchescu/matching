@@ -24,10 +24,7 @@ class TfIdfBlocker(Blocker):
 
     def __call__(self) -> Generator[Block, None, None]:
         refs = list(self._id_table)
-        corpus = [
-            " ".join(tokenize_reference(ref))
-            for ref in refs
-        ]
+        corpus = [" ".join(tokenize_reference(ref)) for ref in refs]
         vectorizer = TfidfVectorizer()
         tfidf_matrix = vectorizer.fit_transform(corpus)
         token_inverted_map = vectorizer.get_feature_names_out()

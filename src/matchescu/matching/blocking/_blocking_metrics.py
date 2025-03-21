@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
-from matchescu.reference_store.comparison_space._in_memory import InMemoryComparisonSpace
+from matchescu.reference_store.comparison_space._in_memory import (
+    InMemoryComparisonSpace,
+)
 from matchescu.typing import EntityReferenceIdentifier
 
 
@@ -22,4 +24,3 @@ def calculate_metrics(
     pq = len(true_positive_pairs) / len(candidate_ids) if candidate_ids else 0
     candidate_ratio = len(candidate_ids) / initial_size if initial_size != 0 else 0
     return BlockingMetrics(pc, pq, 1 - candidate_ratio)
-

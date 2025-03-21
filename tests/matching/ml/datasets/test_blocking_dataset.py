@@ -1,6 +1,6 @@
 import pytest
 
-from matchescu.matching.blocking import Blocker, TfIdfBlocker
+from matchescu.matching.blocking import TfIdfBlocker
 from matchescu.matching.entity_reference import RawComparison
 from matchescu.matching.ml.datasets._blocking import BlockDataSet
 
@@ -20,7 +20,9 @@ def comparison_config():
     )
 
 
-def test_dataset_has_expected_size(blocker, abt_buy_id_table, abt_buy_gt, comparison_config):
+def test_dataset_has_expected_size(
+    blocker, abt_buy_id_table, abt_buy_gt, comparison_config
+):
     ds = BlockDataSet(
         blocker, abt_buy_id_table, lambda x: x[0], lambda x: x[0], abt_buy_gt
     ).attr_compare(comparison_config)

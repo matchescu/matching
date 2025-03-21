@@ -27,7 +27,9 @@ def tokenize_text(text: str, language: str = "en", min_length: int = 3) -> list[
     )
 
 
-def tokenize_reference(ref: EntityReference, language: str = "en", min_length: int = 3) -> list[str]:
+def tokenize_reference(
+    ref: EntityReference, language: str = "en", min_length: int = 3
+) -> list[str]:
     if ref is None:
         return []
     return tokenize_text(" ".join(map(str, ref)), language, min_length)

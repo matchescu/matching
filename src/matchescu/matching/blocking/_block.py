@@ -1,5 +1,4 @@
 import itertools
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any, Iterator, Iterable
 
@@ -37,7 +36,9 @@ class Block:
     ) -> Iterator[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]]:
         by_source = {
             source: list(ids)
-            for source, ids in itertools.groupby(self.references, key=lambda ref_id: ref_id.source)
+            for source, ids in itertools.groupby(
+                self.references, key=lambda ref_id: ref_id.source
+            )
         }
         n_sources = len(by_source)
         if n_sources < 1:
