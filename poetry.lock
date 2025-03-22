@@ -1502,14 +1502,14 @@ files = [
 
 [[package]]
 name = "matchescu-comparison-space-generation"
-version = "0.2.1"
+version = "0.3.0"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "matchescu_comparison_space_generation-0.2.1-py3-none-any.whl", hash = "sha256:85a78bfd2fbc297feba07d1f94603866b8b9e5285ac33b733dc7db7da4247324"},
-    {file = "matchescu_comparison_space_generation-0.2.1.tar.gz", hash = "sha256:caf051aa264a0135d0eda647d6e161dbb6f4337f24f02613f0c850ca3c291a48"},
+    {file = "matchescu_comparison_space_generation-0.3.0-py3-none-any.whl", hash = "sha256:cc4ecd51368bf8892fbfcea9e021cc3fabb2126b7e0aa77f475c960fba733d64"},
+    {file = "matchescu_comparison_space_generation-0.3.0.tar.gz", hash = "sha256:1099015b5b0467d1313a616d20f4c05485059a124dcabc6fdd58c29b2d84ce3a"},
 ]
 
 [package.dependencies]
@@ -3679,4 +3679,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "8cbe4b6d3f7e04b950687a8f02c12f612f81f0bfafdd8bb7b41308477bc2826e"
+content-hash = "f9647e922e5bf896ea09a777dfd90e29eee7239afbe9193d1fde1639b5732e63"
