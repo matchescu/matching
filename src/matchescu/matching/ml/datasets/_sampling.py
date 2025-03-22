@@ -7,13 +7,13 @@ from matchescu.matching.entity_reference import (
     EntityReferenceComparisonConfig,
     AttrComparisonSpec,
 )
-from matchescu.typing import EntityReference
+from matchescu.typing import EntityReference, EntityReferenceIdentifier
 
 
 class Sampling(metaclass=ABCMeta):
     def __init__(
         self,
-        ground_truth: set[tuple[Hashable, Hashable]],
+        ground_truth: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
         cmp_config: EntityReferenceComparisonConfig,
         left_id: Callable[[EntityReference], Hashable],
         right_id: Callable[[EntityReference], Hashable],
@@ -35,9 +35,9 @@ class Sampling(metaclass=ABCMeta):
         left_side = cross_join_row[:divider]
         right_side = cross_join_row[divider:]
         result = self._process_cross_join_record(left_side, right_side)
-        result[self._target_col] = int(
-            (self._left_id(left_side), self._right_id(right_side)) in self._gt
-        )
+        lid = self._left_id(left_side)
+        rid = self._right_id(right_side)
+        result[self._target_col] = int((lid, rid) in self._gt)
         return (result,)  # need to return a tuple
 
 

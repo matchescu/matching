@@ -1,14 +1,24 @@
 import pytest
 
 from matchescu.blocking import TfIdfBlocker
-from matchescu.csg import Bin
+from matchescu.comparison_filtering import (
+    is_cross_source_comparison,
+    JaccardSimilarityFilter,
+)
+from matchescu.csg import BinaryComparisonSpaceGenerator
 from matchescu.matching.entity_reference import RawComparison
 from matchescu.matching.ml.datasets._blocking import BlockDataSet
+from matchescu.typing import EntityReferenceIdentifier
 
 
 @pytest.fixture
-def blocker(abt_buy_id_table):
-    return TfIdfBlocker(abt_buy_id_table)
+def csg(abt_buy_id_table):
+    return (
+        BinaryComparisonSpaceGenerator()
+        .add_blocker(TfIdfBlocker(abt_buy_id_table, 0.22))
+        .add_filter(is_cross_source_comparison)
+        .add_filter(JaccardSimilarityFilter(abt_buy_id_table, 0.25))
+    )
 
 
 @pytest.fixture
@@ -22,13 +32,17 @@ def comparison_config():
 
 
 def test_dataset_has_expected_size(
-    blocker, abt_buy_id_table, abt_buy_gt, comparison_config
+    csg, abt, buy, abt_buy_id_table, abt_buy_gt, comparison_config
 ):
     ds = BlockDataSet(
-        blocker, abt_buy_id_table, lambda x: x[0], lambda x: x[0], abt_buy_gt
+        csg,
+        abt_buy_id_table,
+        lambda x: EntityReferenceIdentifier(x[0], abt.name),
+        lambda x: EntityReferenceIdentifier(x[0], buy.name),
+        abt_buy_gt,
     ).attr_compare(comparison_config)
 
     ds.cross_sources()
 
-    assert ds.feature_matrix.shape == (30544, len(comparison_config))
-    assert ds.target_vector.shape == (30544,)
+    assert ds.feature_matrix.shape == (370, len(comparison_config))
+    assert ds.target_vector.shape == (370,)
