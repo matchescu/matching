@@ -1,6 +1,7 @@
 import pytest
 
-from matchescu.matching.blocking import TfIdfBlocker
+from matchescu.blocking import TfIdfBlocker
+from matchescu.csg import Bin
 from matchescu.matching.entity_reference import RawComparison
 from matchescu.matching.ml.datasets._blocking import BlockDataSet
 
