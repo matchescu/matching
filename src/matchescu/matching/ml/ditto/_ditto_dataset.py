@@ -2,15 +2,16 @@ import itertools
 import random
 import re
 from collections.abc import Sequence, Generator
-from typing import Callable, Hashable
+from typing import Callable
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 from transformers import PreTrainedTokenizerFast
 
-from matchescu.matching.blocking import Blocker
-from matchescu.typing import EntityReference
+from matchescu.reference_store.comparison_space import BinaryComparisonSpace
+from matchescu.reference_store.id_table import IdTable
+from matchescu.typing import EntityReference, EntityReferenceIdentifier
 
 
 def alphanumeric(token):
@@ -288,10 +289,9 @@ class DittoDataset(Dataset):
 
     def __init__(
         self,
-        blocker: Blocker,
-        left_id: Callable[[EntityReference], Hashable],
-        right_id: Callable[[EntityReference], Hashable],
-        ground_truth: set[tuple[Hashable, Hashable]],
+        comparison_space: BinaryComparisonSpace,
+        id_table: IdTable,
+        ground_truth: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
         tokenizer: PreTrainedTokenizerFast,
         max_len=256,
         size=None,
@@ -300,19 +300,11 @@ class DittoDataset(Dataset):
         right_cols: tuple | None = None,
     ):
         self.__tokenizer = tokenizer
-        self.__pairs = []
-        self.__labels = []
+        id_pairs = list(itertools.islice(comparison_space, size))
+        self.__pairs = list(tuple(tuple(ref) for ref in map(id_table.get, id_pair)) for id_pair in id_pairs)
+        self.__labels = list(map(lambda pair: int(pair in ground_truth), id_pairs))
         self.__max_len = max_len
         self.__size = size
-
-        for pair in blocker.candidate_pairs():
-            self.__pairs.append(pair)
-            self.__labels.append(
-                1 if (left_id(pair[0]), right_id(pair[1])) in ground_truth else 0
-            )
-
-        self.__pairs = self.__pairs[:size]
-        self.__labels = self.__labels[:size]
         self.__left_cols = left_cols
         self.__right_cols = right_cols
         self.da = augmentations
