@@ -25,8 +25,8 @@ class DittoMatcher(object):
         self.__model_dir = Path(model_dir)
         self.__model = None
         self.__threshold = 0.5
-        self.__left_cols = list(left_cols or [])
-        self.__right_cols = list(right_cols or [])
+        self.__left_cols = left_cols
+        self.__right_cols = right_cols
 
     def load_pretrained(self, model_name: str) -> None:
         model_path = self.__model_dir / model_name / "model.pt"
@@ -41,8 +41,8 @@ class DittoMatcher(object):
         with torch.no_grad():
             encoded_text = torch.LongTensor(
                 self.__tokenizer.encode(
-                    text=to_text(left),
-                    text_pair=to_text(right),
+                    text=to_text(left, self.__left_cols),
+                    text_pair=to_text(right, self.__right_cols),
                     max_length=self.__max_len,
                     truncation=True,
                 )

@@ -2,12 +2,12 @@ import logging
 import os
 import sys
 import time
+import warnings
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 
 import polars as pl
-from sklearn.metrics import precision_score, recall_score, f1_score
 from transformers import AutoTokenizer
 
 from matchescu.blocking import TfIdfBlocker
@@ -24,7 +24,6 @@ from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
 from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
-from matchescu.matching.ml.ditto._matcher import DittoMatcher
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.typing import EntityReferenceIdentifier
 
@@ -123,32 +122,5 @@ def run_training():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    # with warnings.catch_warnings(action="ignore"):
-    #     run_training()
-    matcher = DittoMatcher(
-        AutoTokenizer.from_pretrained(BERT_MODEL_NAME),
-        model_dir="/Users/cusi/Source/github.com/matchescu/models",
-        left_cols=("name", "description", "price"),
-        right_cols=("name", "description", "manufacturer", "price"),
-    )
-    matcher.load_pretrained(BERT_MODEL_NAME)
-    id_table = InMemoryIdTable()
-    load_data_source(id_table, abt)
-    load_data_source(id_table, buy)
-    original_comparison_space_size = len(abt) * len(buy)
-    comparison_space = list(
-        create_comparison_space(id_table, gt, original_comparison_space_size)
-    )
-    comparison_space_y = [int(pair in gt) for pair in comparison_space]
-    pred = []
-    for left, right in comparison_space:
-        pred.append(int(matcher(id_table.get(left), id_table.get(right))))
-
-    print(
-        "precision: %.2f, recall: %.2f, F1: %.2f"
-        % (
-            precision_score(comparison_space_y, pred),
-            recall_score(comparison_space_y, pred),
-            f1_score(comparison_space_y, pred),
-        )
-    )
+    with warnings.catch_warnings(action="ignore"):
+        run_training()

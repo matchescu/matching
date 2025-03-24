@@ -330,8 +330,8 @@ class DittoDataset(Dataset):
             int: the label of the pair (0: unmatch, 1: match)
         """
         left, right = self.__pairs[idx]
-        left_text = to_text(left)
-        right_text = to_text(right)
+        left_text = to_text(left, self.__left_cols)
+        right_text = to_text(right, self.__right_cols)
         x = self.__tokenizer.encode(
             text=left_text,
             text_pair=right_text,
@@ -435,14 +435,3 @@ class DittoDataset(Dataset):
                 collate_fn=DittoDataset.__zero_padded,
             ),
         )
-
-
-class ListDataset(torch.utils.data.Dataset):
-    def __init__(self, items: list) -> None:
-        self.__items = items
-
-    def __len__(self) -> int:
-        return len(self.__items)
-
-    def __getitem__(self, idx: int) -> tuple:
-        return self.__items[idx]
