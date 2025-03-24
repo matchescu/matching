@@ -28,6 +28,14 @@ class DittoMatcher(object):
         self.__left_cols = left_cols
         self.__right_cols = right_cols
 
+    @property
+    def non_match_threshold(self) -> float:
+        return 1 - self.__threshold
+
+    @property
+    def match_threshold(self) -> float:
+        return self.__threshold
+
     def load_pretrained(self, model_name: str) -> None:
         model_path = self.__model_dir / model_name / "model.pt"
         if not model_path.exists():
@@ -37,7 +45,7 @@ class DittoMatcher(object):
         self.__model = DittoModel(model_name)
         self.__model.load_state_dict(model_dict["model"])
 
-    def __call__(self, left: EntityReference, right: EntityReference) -> bool:
+    def __call__(self, left: EntityReference, right: EntityReference) -> float:
         with torch.no_grad():
             encoded_text = torch.LongTensor(
                 self.__tokenizer.encode(
@@ -47,5 +55,4 @@ class DittoMatcher(object):
                     truncation=True,
                 )
             ).unsqueeze(0)
-            logit = torch.sigmoid(self.__model(encoded_text)).detach().cpu()
-            return logit > self.__threshold
+            return torch.sigmoid(self.__model(encoded_text)).item()
