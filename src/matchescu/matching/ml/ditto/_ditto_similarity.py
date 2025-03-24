@@ -7,10 +7,11 @@ from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.ml.ditto._ref_adapter import to_text
+from matchescu.matching.similarity import Similarity
 from matchescu.typing import EntityReference
 
 
-class DittoMatcher(object):
+class DittoSimilarity(Similarity):
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerFast,
@@ -45,12 +46,12 @@ class DittoMatcher(object):
         self.__model = DittoModel(model_name)
         self.__model.load_state_dict(model_dict["model"])
 
-    def __call__(self, left: EntityReference, right: EntityReference) -> float:
+    def _compute_similarity(self, a: EntityReference, b: EntityReference) -> float:
         with torch.no_grad():
             encoded_text = torch.LongTensor(
                 self.__tokenizer.encode(
-                    text=to_text(left, self.__left_cols),
-                    text_pair=to_text(right, self.__right_cols),
+                    text=to_text(a, self.__left_cols),
+                    text_pair=to_text(b, self.__right_cols),
                     max_length=self.__max_len,
                     truncation=True,
                 )
