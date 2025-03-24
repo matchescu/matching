@@ -4,17 +4,28 @@ import sys
 import time
 import warnings
 from contextlib import contextmanager
+from functools import partial
 from pathlib import Path
 
 import polars as pl
 from transformers import AutoTokenizer
 
-from matchescu.matching.extraction import Traits, CsvDataSource
-from matchescu.matching.blocking import BlockEngine
+from matchescu.blocking import TfIdfBlocker
+from matchescu.comparison_filtering import is_cross_source_comparison
+from matchescu.data_sources import CsvDataSource
+from matchescu.extraction import (
+    Traits,
+    RecordExtraction,
+    RecordIdAdapter,
+    single_record,
+)
+from matchescu.csg import BinaryComparisonSpaceGenerator, BinaryComparisonSpaceEvaluator
 from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
 from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
+from matchescu.reference_store.id_table import InMemoryIdTable
+from matchescu.typing import EntityReferenceIdentifier
 
 DATADIR = os.path.abspath("data")
 BERT_MODEL_NAME = "roberta-base"
@@ -23,14 +34,25 @@ RIGHT_CSV_PATH = os.path.join(DATADIR, "abt-buy", "Buy.csv")
 GROUND_TRUTH_PATH = os.path.join(DATADIR, "abt-buy", "abt_buy_perfectMapping.csv")
 
 # set up abt extraction
-abt_traits = list(Traits().int([0]).string([1, 2]).currency([3]))
-abt = CsvDataSource(name="abt", traits=abt_traits).read_csv(LEFT_CSV_PATH)
+abt_traits = list(
+    Traits().int(["id"]).string(["name", "description"]).currency(["price"])
+)
+abt = CsvDataSource(LEFT_CSV_PATH, traits=abt_traits).read()
 # set up buy extraction
-buy_traits = list(Traits().int([0]).string([1, 2, 3]).currency([4]))
-buy = CsvDataSource(name="buy", traits=buy_traits).read_csv(RIGHT_CSV_PATH)
+buy_traits = list(
+    Traits()
+    .int(["id"])
+    .string(["name", "description", "manufacturer"])
+    .currency(["price"])
+)
+buy = CsvDataSource(RIGHT_CSV_PATH, traits=buy_traits).read()
 # set up ground truth
 gt = set(
-    pl.read_csv(
+    (
+        EntityReferenceIdentifier(x[0], abt.name),
+        EntityReferenceIdentifier(x[1], buy.name),
+    )
+    for x in pl.read_csv(
         os.path.join(DATADIR, "abt-buy", "abt_buy_perfectMapping.csv"),
         ignore_errors=True,
     ).iter_rows()
@@ -39,22 +61,28 @@ gt = set(
 log = logging.getLogger(__name__)
 
 
-def _id(row):
-    return row[0]
-
-
-def create_comparison_space():
-    blocker = (
-        BlockEngine()
-        .add_entity_references(abt, _id)
-        .add_entity_references(buy, _id)
-        .tf_idf(0.25)
+def create_comparison_space(id_table, ground_truth, initial_size):
+    csg = (
+        BinaryComparisonSpaceGenerator()
+        .add_blocker(TfIdfBlocker(id_table, 0.23))
+        .add_filter(is_cross_source_comparison)
     )
-    blocker.filter_candidates_jaccard(0.6)
-    blocker.update_candidate_pairs(False)
-    metrics = blocker.calculate_metrics(gt)
+    comparison_space = csg()
+    eval_cs = BinaryComparisonSpaceEvaluator(ground_truth, initial_size)
+    metrics = eval_cs(comparison_space)
     print(metrics)
-    return blocker
+    return comparison_space
+
+
+def _id(record, source):
+    return EntityReferenceIdentifier(record[0], source)
+
+
+def load_data_source(id_table: InMemoryIdTable, data_source: CsvDataSource) -> None:
+    record_adapter = RecordIdAdapter(partial(_id, source=data_source.name))
+    extract_references = RecordExtraction(data_source, record_adapter, single_record)
+    for ref in extract_references():
+        id_table.put(ref)
 
 
 @contextmanager
@@ -68,11 +96,18 @@ def timer(start_message: str):
 
 @timer(start_message="train ditto")
 def run_training():
+    id_table = InMemoryIdTable()
+    load_data_source(id_table, abt)
+    load_data_source(id_table, buy)
+    original_comparison_space_size = len(abt) * len(buy)
+    comparison_space = create_comparison_space(
+        id_table, gt, original_comparison_space_size
+    )
+
     tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
     ds = DittoDataset(
-        create_comparison_space(),
-        _id,
-        _id,
+        comparison_space,
+        id_table,
         gt,
         tokenizer,
         left_cols=("name", "description", "price"),

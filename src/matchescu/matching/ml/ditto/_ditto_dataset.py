@@ -2,15 +2,17 @@ import itertools
 import random
 import re
 from collections.abc import Sequence, Generator
-from typing import Callable, Hashable
+from typing import Callable
 
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, Subset
 from transformers import PreTrainedTokenizerFast
 
-from matchescu.matching.blocking import Blocker
-from matchescu.typing import EntityReference
+from matchescu.matching.ml.ditto._ref_adapter import to_text
+from matchescu.reference_store.comparison_space import BinaryComparisonSpace
+from matchescu.reference_store.id_table import IdTable
+from matchescu.typing import EntityReferenceIdentifier
 
 
 def alphanumeric(token):
@@ -288,10 +290,9 @@ class DittoDataset(Dataset):
 
     def __init__(
         self,
-        blocker: Blocker,
-        left_id: Callable[[EntityReference], Hashable],
-        right_id: Callable[[EntityReference], Hashable],
-        ground_truth: set[tuple[Hashable, Hashable]],
+        comparison_space: BinaryComparisonSpace,
+        id_table: IdTable,
+        ground_truth: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
         tokenizer: PreTrainedTokenizerFast,
         max_len=256,
         size=None,
@@ -300,19 +301,11 @@ class DittoDataset(Dataset):
         right_cols: tuple | None = None,
     ):
         self.__tokenizer = tokenizer
-        self.__pairs = []
-        self.__labels = []
+        id_pairs = list(itertools.islice(comparison_space, size))
+        self.__pairs = list(tuple(map(id_table.get_all, id_pairs)))
+        self.__labels = list(map(lambda pair: int(pair in ground_truth), id_pairs))
         self.__max_len = max_len
         self.__size = size
-
-        for pair in blocker.candidate_pairs():
-            self.__pairs.append(pair)
-            self.__labels.append(
-                1 if (left_id(pair[0]), right_id(pair[1])) in ground_truth else 0
-            )
-
-        self.__pairs = self.__pairs[:size]
-        self.__labels = self.__labels[:size]
         self.__left_cols = left_cols
         self.__right_cols = right_cols
         self.da = augmentations
@@ -325,20 +318,6 @@ class DittoDataset(Dataset):
         """Return the size of the dataset."""
         return len(self.__pairs)
 
-    @staticmethod
-    def __col_name(idx: int, cols: tuple) -> str:
-        col_name = cols[idx] if cols is not None and 0 <= idx < len(cols) else str(idx)
-        return col_name
-
-    @staticmethod
-    def _ref_to_str(
-        ref: EntityReference, col_names: tuple
-    ) -> Generator[tuple[str, str]]:
-        for idx, value in enumerate(ref):
-            col_name = DittoDataset.__col_name(idx, col_names)
-            col_value = str(ref[idx])
-            yield f"COL {col_name}", f"VAL {col_value}"
-
     def __getitem__(self, idx):
         """Return a tokenized item of the dataset.
 
@@ -350,26 +329,27 @@ class DittoDataset(Dataset):
             List of int: token ID's of the two entities augmented (if da is set)
             int: the label of the pair (0: unmatch, 1: match)
         """
-        left = " ".join(
-            " ".join(t)
-            for t in self._ref_to_str(self.__pairs[idx][0][1:], self.__left_cols)
-        )
-        right = " ".join(
-            " ".join(t)
-            for t in self._ref_to_str(self.__pairs[idx][1][1:], self.__right_cols)
-        )
-
-        # left + right
+        left, right = self.__pairs[idx]
+        left_text = to_text(left, self.__left_cols)
+        right_text = to_text(right, self.__right_cols)
         x = self.__tokenizer.encode(
-            text=left, text_pair=right, max_length=self.__max_len, truncation=True
+            text=left_text,
+            text_pair=right_text,
+            max_length=self.__max_len,
+            truncation=True,
         )
 
         # augment if da is set
         if self.da is not None:
-            combined = self.augmenter.augment_sent(left + " [SEP] " + right, self.da)
-            left, right = combined.split(" [SEP] ")
+            augmented = self.augmenter.augment_sent(
+                f"{left_text} [SEP] {right_text}", self.da
+            )
+            left_aug, right_aug = augmented.split(" [SEP] ")
             x_aug = self.__tokenizer.encode(
-                text=left, text_pair=right, max_length=self.__max_len, truncation=True
+                text=left_aug,
+                text_pair=right_aug,
+                max_length=self.__max_len,
+                truncation=True,
             )
             return x, x_aug, self.__labels[idx]
         else:
@@ -455,14 +435,3 @@ class DittoDataset(Dataset):
                 collate_fn=DittoDataset.__zero_padded,
             ),
         )
-
-
-class ListDataset(torch.utils.data.Dataset):
-    def __init__(self, items: list) -> None:
-        self.__items = items
-
-    def __len__(self) -> int:
-        return len(self.__items)
-
-    def __getitem__(self, idx: int) -> tuple:
-        return self.__items[idx]

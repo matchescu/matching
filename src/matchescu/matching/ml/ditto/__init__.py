@@ -1,3 +1,3 @@
-from matchescu.matching.ml.ditto._ditto_dataset import Augmenter
+from matchescu.matching.ml.ditto._matcher import DittoMatcher
 
-__all__ = ["Augmenter"]
+__all__ = ["DittoMatcher"]
