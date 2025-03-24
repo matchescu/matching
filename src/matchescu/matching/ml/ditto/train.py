@@ -2,23 +2,29 @@ import logging
 import os
 import sys
 import time
-import warnings
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
 
 import polars as pl
+from sklearn.metrics import precision_score, recall_score, f1_score
 from transformers import AutoTokenizer
 
 from matchescu.blocking import TfIdfBlocker
-from matchescu.comparison_filtering import JaccardSimilarityFilter, is_cross_source_comparison
+from matchescu.comparison_filtering import is_cross_source_comparison
 from matchescu.data_sources import CsvDataSource
-from matchescu.extraction import Traits, RecordExtraction, RecordIdAdapter, single_record
+from matchescu.extraction import (
+    Traits,
+    RecordExtraction,
+    RecordIdAdapter,
+    single_record,
+)
 from matchescu.csg import BinaryComparisonSpaceGenerator, BinaryComparisonSpaceEvaluator
 from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
 from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
+from matchescu.matching.ml.ditto._matcher import DittoMatcher
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.typing import EntityReferenceIdentifier
 
@@ -29,14 +35,24 @@ RIGHT_CSV_PATH = os.path.join(DATADIR, "abt-buy", "Buy.csv")
 GROUND_TRUTH_PATH = os.path.join(DATADIR, "abt-buy", "abt_buy_perfectMapping.csv")
 
 # set up abt extraction
-abt_traits = list(Traits().int([0]).string([1, 2]).currency([3]))
+abt_traits = list(
+    Traits().int(["id"]).string(["name", "description"]).currency(["price"])
+)
 abt = CsvDataSource(LEFT_CSV_PATH, traits=abt_traits).read()
 # set up buy extraction
-buy_traits = list(Traits().int([0]).string([1, 2, 3]).currency([4]))
+buy_traits = list(
+    Traits()
+    .int(["id"])
+    .string(["name", "description", "manufacturer"])
+    .currency(["price"])
+)
 buy = CsvDataSource(RIGHT_CSV_PATH, traits=buy_traits).read()
 # set up ground truth
 gt = set(
-    (EntityReferenceIdentifier(x[0], abt.name), EntityReferenceIdentifier(x[1], buy.name))
+    (
+        EntityReferenceIdentifier(x[0], abt.name),
+        EntityReferenceIdentifier(x[1], buy.name),
+    )
     for x in pl.read_csv(
         os.path.join(DATADIR, "abt-buy", "abt_buy_perfectMapping.csv"),
         ignore_errors=True,
@@ -53,7 +69,7 @@ def create_comparison_space(id_table, ground_truth, initial_size):
         .add_filter(is_cross_source_comparison)
     )
     comparison_space = csg()
-    eval_cs = BinaryComparisonSpaceEvaluator(ground_truth,initial_size)
+    eval_cs = BinaryComparisonSpaceEvaluator(ground_truth, initial_size)
     metrics = eval_cs(comparison_space)
     print(metrics)
     return comparison_space
@@ -85,7 +101,9 @@ def run_training():
     load_data_source(id_table, abt)
     load_data_source(id_table, buy)
     original_comparison_space_size = len(abt) * len(buy)
-    comparison_space = create_comparison_space(id_table, gt, original_comparison_space_size)
+    comparison_space = create_comparison_space(
+        id_table, gt, original_comparison_space_size
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
     ds = DittoDataset(
@@ -105,5 +123,32 @@ def run_training():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    with warnings.catch_warnings(action="ignore"):
-        run_training()
+    # with warnings.catch_warnings(action="ignore"):
+    #     run_training()
+    matcher = DittoMatcher(
+        AutoTokenizer.from_pretrained(BERT_MODEL_NAME),
+        model_dir="/Users/cusi/Source/github.com/matchescu/models",
+        left_cols=("name", "description", "price"),
+        right_cols=("name", "description", "manufacturer", "price"),
+    )
+    matcher.load_pretrained(BERT_MODEL_NAME)
+    id_table = InMemoryIdTable()
+    load_data_source(id_table, abt)
+    load_data_source(id_table, buy)
+    original_comparison_space_size = len(abt) * len(buy)
+    comparison_space = list(
+        create_comparison_space(id_table, gt, original_comparison_space_size)
+    )
+    comparison_space_y = [int(pair in gt) for pair in comparison_space]
+    pred = []
+    for left, right in comparison_space:
+        pred.append(int(matcher(id_table.get(left), id_table.get(right))))
+
+    print(
+        "precision: %.2f, recall: %.2f, F1: %.2f"
+        % (
+            precision_score(comparison_space_y, pred),
+            recall_score(comparison_space_y, pred),
+            f1_score(comparison_space_y, pred),
+        )
+    )

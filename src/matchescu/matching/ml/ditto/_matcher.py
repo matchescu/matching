@@ -1,0 +1,51 @@
+from collections.abc import Iterable
+from os import PathLike, curdir
+from pathlib import Path
+
+import torch
+from transformers import PreTrainedTokenizerFast
+
+from matchescu.matching.ml.ditto._ditto_module import DittoModel
+from matchescu.matching.ml.ditto._ref_adapter import to_text
+from matchescu.typing import EntityReference
+
+
+class DittoMatcher(object):
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerFast,
+        max_len: int = 256,
+        model_dir: str | PathLike | None = None,
+        left_cols: Iterable[str] | None = None,
+        right_cols: Iterable[str] | None = None,
+    ) -> None:
+        model_dir = model_dir or curdir
+        self.__tokenizer = tokenizer
+        self.__max_len = max_len
+        self.__model_dir = Path(model_dir)
+        self.__model = None
+        self.__threshold = 0.5
+        self.__left_cols = list(left_cols or [])
+        self.__right_cols = list(right_cols or [])
+
+    def load_pretrained(self, model_name: str) -> None:
+        model_path = self.__model_dir / model_name / "model.pt"
+        if not model_path.exists():
+            raise FileNotFoundError(model_path)
+        model_dict = torch.load(model_path)
+        self.__threshold = float(model_dict["threshold"])
+        self.__model = DittoModel(model_name)
+        self.__model.load_state_dict(model_dict["model"])
+
+    def __call__(self, left: EntityReference, right: EntityReference) -> bool:
+        with torch.no_grad():
+            encoded_text = torch.LongTensor(
+                self.__tokenizer.encode(
+                    text=to_text(left),
+                    text_pair=to_text(right),
+                    max_length=self.__max_len,
+                    truncation=True,
+                )
+            ).unsqueeze(0)
+            logit = torch.sigmoid(self.__model(encoded_text)).detach().cpu()
+            return logit > self.__threshold
