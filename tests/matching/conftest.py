@@ -1,5 +1,6 @@
 import csv
 from functools import partial
+from typing import Hashable, Callable
 
 import pytest
 
@@ -11,30 +12,35 @@ from matchescu.extraction import (
     single_record,
 )
 from matchescu.reference_store.id_table._in_memory import InMemoryIdTable
-from matchescu.typing import Record, DataSource, EntityReferenceIdentifier
+from matchescu.typing import (
+    Record,
+    DataSource,
+    EntityReferenceIdentifier,
+)
+from matchescu.references import EntityReference as RefImpl
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def abt_traits():
     return list(Traits().int([0]).string([1, 2]).currency([3]))
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def buy_traits():
     return list(Traits().int([0]).string([1, 2, 3]).currency([4]))
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def abt(data_dir, abt_traits) -> DataSource[Record]:
     return CsvDataSource(data_dir / "abt-buy" / "Abt.csv", abt_traits).read()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def buy(data_dir, buy_traits) -> DataSource[Record]:
     return CsvDataSource(data_dir / "abt-buy" / "Buy.csv", buy_traits).read()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def abt_buy_gt(
     data_dir, abt, buy
 ) -> set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]]:
@@ -51,7 +57,7 @@ def abt_buy_gt(
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def id_factory():
     def _(r: Record, source: str) -> EntityReferenceIdentifier:
         return EntityReferenceIdentifier(r[0], source)
@@ -59,7 +65,7 @@ def id_factory():
     return _
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def abt_buy_id_table(abt, buy, id_factory):
     result = InMemoryIdTable()
     for source in [abt, buy]:
@@ -68,3 +74,13 @@ def abt_buy_id_table(abt, buy, id_factory):
         for ref in refextract():
             result.put(ref)
     return result
+
+
+@pytest.fixture(scope="session")
+def ref_id() -> Callable[[Hashable, str], EntityReferenceIdentifier]:
+    return lambda lbl, src: EntityReferenceIdentifier(lbl, src)
+
+
+@pytest.fixture(scope="session")
+def ref(ref_id):
+    return lambda lbl, src: RefImpl(ref_id(lbl, src), {"id": lbl})
