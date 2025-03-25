@@ -7,7 +7,6 @@ import pytest
 from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import (
     Traits,
-    RecordIdAdapter,
     RecordExtraction,
     single_record,
 )
@@ -69,8 +68,9 @@ def id_factory():
 def abt_buy_id_table(abt, buy, id_factory):
     result = InMemoryIdTable()
     for source in [abt, buy]:
-        adapter = RecordIdAdapter(partial(id_factory, source=source.name))
-        refextract = RecordExtraction(source, adapter, single_record)
+        refextract = RecordExtraction(
+            source, partial(id_factory, source=source.name), single_record
+        )
         for ref in refextract():
             result.put(ref)
     return result

@@ -63,7 +63,7 @@ class DittoTrainer:
         batch_no = 0
 
         try:
-            loss_fn = BCEWithLogitsLoss().to(device)
+            loss_fn = BCEWithLogitsLoss().to(device)  # CrossEntropy
             model.to(device)
             model.train(True)
             batch_loss = 0.0
