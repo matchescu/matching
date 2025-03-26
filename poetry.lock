@@ -2385,6 +2385,21 @@ files = [
 windows-terminal = ["colorama (>=0.4.6)"]
 
 [[package]]
+name = "pyresolvemetrics"
+version = "0.3.2"
+description = "Entity resolution metrics library"
+optional = false
+python-versions = "<4.0,>=3.12"
+groups = ["dev"]
+files = [
+    {file = "pyresolvemetrics-0.3.2-py3-none-any.whl", hash = "sha256:288cc018b92e5a8d88fbf9b9a26cae2b82b0b2828807e5bc98a62c7f97117e4e"},
+    {file = "pyresolvemetrics-0.3.2.tar.gz", hash = "sha256:f693258dabfba3498c67962002164225c860160eb9bc77709dbb2382519a1308"},
+]
+
+[package.dependencies]
+numpy = ">=2.2.4,<3.0.0"
+
+[[package]]
 name = "pytest"
 version = "8.3.5"
 description = "pytest: simple powerful testing with Python"
@@ -3732,4 +3747,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "4e8903423c04a7654b7ae1bf8c0c66bc001d21767a5ba78ff251524882d66f6e"
+content-hash = "cc2abc679219fe7fe1de9657084dae78cfd161cb1623e3c2b09515146017dacc"
