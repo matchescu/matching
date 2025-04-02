@@ -134,35 +134,88 @@ def get_magellan_data_loaders(
 
 
 @timer(start_message="train ditto")
-def run_training(
+def train_on_magellan_data(
+    model_save_dir: Path,
     model_name: str,
-    train: DataLoader,
-    xv: DataLoader,
-    test: DataLoader,
-    model_dir: Path,
+    dataset_dir: Path,
+    dataset_name: str,
+    ltable_traits: Traits,
+    ltable_id_factory: EntityReferenceIdFactory,
+    rtable_traits: Traits | None = None,
+    rtable_id_factory: EntityReferenceIdFactory | None = None,
+    batch_size: int = 32,
 ):
+    rtable_traits = rtable_traits or ltable_traits
+    rtable_id_factory = rtable_id_factory or ltable_id_factory
+    magellan_ds = load_magellan_dataset(
+        dataset_dir / dataset_name,
+        ltable_traits,
+        ltable_id_factory,
+        rtable_traits,
+        rtable_id_factory,
+    )
+    train, xv, test = get_magellan_data_loaders(model_name, magellan_ds, batch_size)
     ditto = DittoModel(model_name)
-    trainer = DittoTrainer(model_name, model_dir, epochs=10)
+    trainer = DittoTrainer(model_name, model_save_dir, epochs=10)
     evaluator = DittoTrainingEvaluator(model_name, xv, test)
     trainer.run_training(ditto, train, evaluator, True)
 
 
+def table_a_id(rows: list[Record]) -> RefId:
+    return RefId(rows[0]["id"], "tableA")
+
+
+def table_b_id(rows: list[Record]) -> RefId:
+    return RefId(rows[0]["id"], "tableB")
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    dataset_names = [
-        "amazon_google_exp_data",
-    ]
+    common_kw_args = {
+        "ltable_id_factory": table_a_id,
+        "rtable_traits": None,  # same as ltable_traits
+        "rtable_id_factory": table_b_id,
+    }
+    trait_config = {
+        "abt-buy": Traits().string(["name", "description"]).currency(["price"]),
+        "amazon-google": Traits().string(["title", "manufacturer"]).currency(["price"]),
+        "beer": Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]),
+        "dblp-acm": Traits().string(["title", "authors", "venue"]).int(["year"]),
+        "dblp-scholar": Traits().string(["title", "authors", "venue"]).int(["year"]),
+        "fodors-zagat": Traits()
+        .string(["name", "addr", "city", "phone", "type"])
+        .int(["class"]),
+        "itunes-amazon": Traits()
+        .string(
+            [
+                "Song_Name",
+                "Artist_Name",
+                "Album_Name",
+                "Genre",
+                "CopyRight",
+                "Time",
+                "Released",
+            ]
+        )
+        .currency(["Price"]),
+        "walmart-amazon": Traits()
+        .string(["title", "category", "brand", "modelno"])
+        .currency(["price"]),
+    }
+    models_to_train = ["roberta-base"]
+
+    root_model_dir = Path(os.getcwd()) / "models"
+    root_data_dir = Path(os.getcwd()) / "data"
+
     with warnings.catch_warnings(action="ignore"):
-        for dataset_name in dataset_names:
-            magellan_ds = load_magellan_dataset(
-                Path(os.getcwd()) / "data" / "magellan" / dataset_name,
-                Traits().string(["title", "manufacturer"]).currency(["price"]),
-                lambda rows: RefId(rows[0]["id"], "tableA"),
-                right_id_factory=lambda rows: RefId(rows[0]["id"], "tableB"),
-            )
-            ds_model_dir = Path(os.getcwd()) / "models" / dataset_name
-            run_training(
-                "roberta-base",
-                *get_magellan_data_loaders("roberta-base", magellan_ds, 64),
-                model_dir=ds_model_dir
-            )
+        for dataset_name in trait_config:
+            ds_model_dir = root_model_dir / dataset_name
+            for model_name in models_to_train:
+                train_on_magellan_data(
+                    ds_model_dir,
+                    model_name,
+                    root_data_dir / "magellan",
+                    dataset_name,
+                    ltable_traits=trait_config[dataset_name],
+                    **common_kw_args,
+                )
