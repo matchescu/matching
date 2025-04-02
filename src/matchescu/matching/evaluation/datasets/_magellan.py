@@ -6,9 +6,15 @@ from pathlib import Path
 import polars as pl
 from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import Traits, RecordExtraction, single_record
-from matchescu.reference_store.comparison_space import BinaryComparisonSpace, InMemoryComparisonSpace
+from matchescu.reference_store.comparison_space import (
+    BinaryComparisonSpace,
+    InMemoryComparisonSpace,
+)
 from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
-from matchescu.typing import EntityReferenceIdFactory, EntityReferenceIdentifier as RefId
+from matchescu.typing import (
+    EntityReferenceIdFactory,
+    EntityReferenceIdentifier as RefId,
+)
 
 
 class MagellanDataset:
@@ -43,19 +49,29 @@ class MagellanDataset:
         self._xv: MagellanDataset.Split | None = None
         self._test: MagellanDataset.Split | None = None
 
-    def _load_csv_table(self, path: Path, traits: Traits, id_factory: EntityReferenceIdFactory) -> str:
+    def _load_csv_table(
+        self, path: Path, traits: Traits, id_factory: EntityReferenceIdFactory
+    ) -> str:
         ds = CsvDataSource(path, list(traits)).read()
         re = RecordExtraction(ds, id_factory, single_record)
         for ref in list(re()):
             self.__id_table.put(ref)
         return ds.name
 
-    def load_left(self, traits: Traits, id_factory: EntityReferenceIdFactory) -> "MagellanDataset":
-        self.__left_source = self._load_csv_table(self.__left_table_path, traits, id_factory)
+    def load_left(
+        self, traits: Traits, id_factory: EntityReferenceIdFactory
+    ) -> "MagellanDataset":
+        self.__left_source = self._load_csv_table(
+            self.__left_table_path, traits, id_factory
+        )
         return self
 
-    def load_right(self, traits: Traits, id_factory: EntityReferenceIdFactory) -> "MagellanDataset":
-        self.__right_source = self._load_csv_table(self.__right_table_path, traits, id_factory)
+    def load_right(
+        self, traits: Traits, id_factory: EntityReferenceIdFactory
+    ) -> "MagellanDataset":
+        self.__right_source = self._load_csv_table(
+            self.__right_table_path, traits, id_factory
+        )
         return self
 
     def __load_split(self, path: Path) -> "MagellanDataset.Split":
@@ -66,7 +82,7 @@ class MagellanDataset:
                     RefId(right, self.__right_source),
                     is_match,
                 ),
-                pl.read_csv(path, ignore_errors=True).iter_rows(named=False)
+                pl.read_csv(path, ignore_errors=True).iter_rows(named=False),
             )
         )
         gt = set((left, right) for left, right, is_match in rows if is_match == 1)
@@ -77,7 +93,9 @@ class MagellanDataset:
 
     def load_splits(self) -> "MagellanDataset":
         if not self.__left_source or not self.__right_source:
-            raise ValueError("left + right data sources must be loaded before loading splits")
+            raise ValueError(
+                "left + right data sources must be loaded before loading splits"
+            )
         self._train = self.__load_split(self.__train_path)
         self._xv = self.__load_split(self.__valid_path)
         self._test = self.__load_split(self.__test_path)

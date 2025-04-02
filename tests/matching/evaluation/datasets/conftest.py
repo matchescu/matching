@@ -18,4 +18,5 @@ def ag_traits():
 def ag_id_factory():
     def _(record, source):
         return RefId(label=record[0]["id"], source=source)
+
     return _

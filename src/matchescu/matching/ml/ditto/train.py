@@ -8,10 +8,12 @@ from functools import partial
 from pathlib import Path
 
 import polars as pl
+from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
 
 from matchescu.blocking import TfIdfBlocker
 from matchescu.comparison_filtering import is_cross_source_comparison
+from matchescu.csg import BinaryComparisonSpaceGenerator, BinaryComparisonSpaceEvaluator
 from matchescu.data import Record
 from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import (
@@ -19,14 +21,17 @@ from matchescu.extraction import (
     RecordExtraction,
     single_record,
 )
-from matchescu.csg import BinaryComparisonSpaceGenerator, BinaryComparisonSpaceEvaluator
+from matchescu.matching.evaluation.datasets import MagellanDataset
 from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
 from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
-from matchescu.typing import EntityReferenceIdentifier as RefId
+from matchescu.typing import (
+    EntityReferenceIdentifier as RefId,
+    EntityReferenceIdFactory,
+)
 
 log = logging.getLogger(__name__)
 
@@ -91,30 +96,73 @@ def _extract_dataset(dataset_path: Path) -> tuple[IdTable, BinaryComparisonSpace
     return id_table, comparison_space, gt
 
 
-@timer(start_message="train ditto")
-def run_training(dataset_path: Path, model_dir: Path):
-    BERT_MODEL_NAME = "roberta-base"
-    id_table, comparison_space, gt = _extract_dataset(dataset_path)
+@timer(start_message="load dataset")
+def load_magellan_dataset(
+    ds_path: Path,
+    left_traits: Traits,
+    left_id_factory: EntityReferenceIdFactory,
+    right_traits: Traits | None = None,
+    right_id_factory: EntityReferenceIdFactory | None = None,
+) -> MagellanDataset:
+    ds = MagellanDataset(ds_path)
+    ds.load_left(left_traits, left_id_factory)
+    ds.load_right(right_traits or left_traits, right_id_factory or left_id_factory)
+    ds.load_splits()
+    return ds
 
-    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL_NAME)
-    ds = DittoDataset(
-        comparison_space,
-        id_table,
-        gt,
-        tokenizer,
-        left_cols=("name", "description", "price"),
-        right_cols=("name", "description", "manufacturer", "price"),
+
+@timer(start_message="serialize+tokenize")
+def get_magellan_data_loaders(
+    model_name: str, magellan_ds: MagellanDataset, batch_size: int = 32
+) -> tuple[DataLoader, DataLoader, DataLoader]:
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    train_ds, xv_ds, test_ds = [
+        DittoDataset(
+            magellan_ds.id_table, split.comparison_space, split.ground_truth, tokenizer
+        )
+        for split in [
+            magellan_ds.train_split,
+            magellan_ds.valid_split,
+            magellan_ds.test_split,
+        ]
+    ]
+    return (
+        train_ds.get_data_loader(batch_size, shuffle=True),
+        train_ds.get_data_loader(batch_size * 16),
+        train_ds.get_data_loader(batch_size * 16),
     )
-    ditto = DittoModel(BERT_MODEL_NAME)
-    train, xv, test = ds.split(3, 1, 1, 64)
-    trainer = DittoTrainer(BERT_MODEL_NAME, model_dir, epochs=10)
-    evaluator = DittoTrainingEvaluator(BERT_MODEL_NAME, xv, test)
+
+
+@timer(start_message="train ditto")
+def run_training(
+    model_name: str,
+    train: DataLoader,
+    xv: DataLoader,
+    test: DataLoader,
+    model_dir: Path,
+):
+    ditto = DittoModel(model_name)
+    trainer = DittoTrainer(model_name, model_dir, epochs=10)
+    evaluator = DittoTrainingEvaluator(model_name, xv, test)
     trainer.run_training(ditto, train, evaluator, True)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, stream=sys.stdout)
-    dataset_dir = Path(os.getcwd()) / "data"
-    model_dir = Path(os.getcwd()) / "models"
+    dataset_names = [
+        "amazon_google_exp_data",
+    ]
     with warnings.catch_warnings(action="ignore"):
-        run_training(dataset_dir / "abt-buy", model_dir)
+        for dataset_name in dataset_names:
+            magellan_ds = load_magellan_dataset(
+                Path(os.getcwd()) / "data" / "magellan" / dataset_name,
+                Traits().string(["title", "manufacturer"]).currency(["price"]),
+                lambda rows: RefId(rows[0]["id"], "tableA"),
+                right_id_factory=lambda rows: RefId(rows[0]["id"], "tableB"),
+            )
+            ds_model_dir = Path(os.getcwd()) / "models" / dataset_name
+            run_training(
+                "roberta-base",
+                *get_magellan_data_loaders("roberta-base", magellan_ds, 64),
+                model_dir=ds_model_dir
+            )

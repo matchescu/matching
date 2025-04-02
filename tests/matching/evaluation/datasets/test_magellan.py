@@ -30,7 +30,10 @@ def test_load_splits_needs_right(sut, ag_traits, ag_id_factory):
     with pytest.raises(ValueError) as err_proxy:
         sut.load_splits()
 
-    assert str(err_proxy.value) == "left + right data sources must be loaded before loading splits"
+    assert (
+        str(err_proxy.value)
+        == "left + right data sources must be loaded before loading splits"
+    )
 
 
 def test_load_splits_needs_left(sut, ag_traits, ag_id_factory):
@@ -39,7 +42,10 @@ def test_load_splits_needs_left(sut, ag_traits, ag_id_factory):
     with pytest.raises(ValueError) as err_proxy:
         sut.load_splits()
 
-    assert str(err_proxy.value) == "left + right data sources must be loaded before loading splits"
+    assert (
+        str(err_proxy.value)
+        == "left + right data sources must be loaded before loading splits"
+    )
 
 
 def test_load_splits(sut, ag_traits, ag_id_factory):
