@@ -66,9 +66,7 @@ def timer(start_message: str):
 
 
 def _extract_dataset(dataset_path: Path) -> tuple[IdTable, BinaryComparisonSpace, set]:
-    abt_traits = list(
-        Traits().string(["name", "description"]).currency(["price"])
-    )
+    abt_traits = list(Traits().string(["name", "description"]).currency(["price"]))
     abt = CsvDataSource(dataset_path / "Abt.csv", traits=abt_traits).read()
     buy_traits = list(
         Traits().string(["name", "description", "manufacturer"]).currency(["price"])
