@@ -16,7 +16,6 @@ from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import (
     Traits,
     RecordExtraction,
-    RecordIdAdapter,
     single_record,
 )
 from matchescu.csg import BinaryComparisonSpaceGenerator, BinaryComparisonSpaceEvaluator
@@ -79,8 +78,9 @@ def _id(record, source):
 
 
 def load_data_source(id_table: InMemoryIdTable, data_source: CsvDataSource) -> None:
-    record_adapter = RecordIdAdapter(partial(_id, source=data_source.name))
-    extract_references = RecordExtraction(data_source, record_adapter, single_record)
+    extract_references = RecordExtraction(
+        data_source, partial(_id, source=data_source.name), single_record
+    )
     for ref in extract_references():
         id_table.put(ref)
 
