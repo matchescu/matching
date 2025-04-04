@@ -25,7 +25,7 @@ class DittoTrainer:
         self._tb_log_dir = self._model_dir / self._task / "tensorboard"
         self._log = cast(
             Logger, kwargs.get("logger", getLogger(self.__class__.__name__))
-        )
+        ).getChild(self._task)
         self._epochs = int(kwargs.get("epochs", 20))
         self._learning_rate = float(kwargs.get("learning_rate", 3e-5))
         self._frozen_layer_count = int(kwargs.get("frozen_layer_count", 0))
@@ -168,6 +168,12 @@ class DittoTrainer:
                     test_f1,
                     best_test_f1,
                 )
+                if best_test_f1 == 1.0:
+                    self._log.info(
+                        "I'm the best I could ever be. Quitting training at epoch %d",
+                        epoch,
+                    )
+                    break
         finally:
             summary_writer.flush()
             summary_writer.close()

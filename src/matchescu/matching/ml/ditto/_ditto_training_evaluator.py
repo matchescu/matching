@@ -16,11 +16,14 @@ class DittoTrainingEvaluator:
         task_name: str,
         xv_data: DataLoader[DittoDataset],
         test_data: DataLoader[DittoDataset],
+        logger: logging.Logger | None = None,
     ) -> None:
         self._task = task_name
         self._xv_data = xv_data
         self._test_data = test_data
-        self._log = logging.getLogger(self.__class__.__name__)
+        self._log = (logger or logging.getLogger(self.__class__.__name__)).getChild(
+            self._task
+        )
 
     @staticmethod
     def __best_threshold(

@@ -33,7 +33,7 @@ from matchescu.typing import (
     EntityReferenceIdFactory,
 )
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("ditto-training")
 
 
 def create_comparison_space(id_table, ground_truth, initial_size):
@@ -144,6 +144,7 @@ def train_on_magellan_data(
     rtable_traits: Traits | None = None,
     rtable_id_factory: EntityReferenceIdFactory | None = None,
     batch_size: int = 32,
+    epochs: int = 10,
 ):
     rtable_traits = rtable_traits or ltable_traits
     rtable_id_factory = rtable_id_factory or ltable_id_factory
@@ -156,8 +157,11 @@ def train_on_magellan_data(
     )
     train, xv, test = get_magellan_data_loaders(model_name, magellan_ds, batch_size)
     ditto = DittoModel(model_name)
-    trainer = DittoTrainer(model_name, model_save_dir, epochs=10)
-    evaluator = DittoTrainingEvaluator(model_name, xv, test)
+    dataset_logger = log.getChild(dataset_name)
+    trainer = DittoTrainer(
+        model_name, model_save_dir, epochs=epochs, logger=dataset_logger
+    )
+    evaluator = DittoTrainingEvaluator(model_name, xv, test, dataset_logger)
     trainer.run_training(ditto, train, evaluator, True)
 
 
@@ -177,30 +181,54 @@ if __name__ == "__main__":
         "rtable_id_factory": table_b_id,
     }
     trait_config = {
-        "abt-buy": Traits().string(["name", "description"]).currency(["price"]),
-        "amazon-google": Traits().string(["title", "manufacturer"]).currency(["price"]),
-        "beer": Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]),
-        "dblp-acm": Traits().string(["title", "authors", "venue"]).int(["year"]),
-        "dblp-scholar": Traits().string(["title", "authors", "venue"]).int(["year"]),
-        "fodors-zagat": Traits()
-        .string(["name", "addr", "city", "phone", "type"])
-        .int(["class"]),
-        "itunes-amazon": Traits()
-        .string(
-            [
-                "Song_Name",
-                "Artist_Name",
-                "Album_Name",
-                "Genre",
-                "CopyRight",
-                "Time",
-                "Released",
-            ]
-        )
-        .currency(["Price"]),
-        "walmart-amazon": Traits()
-        .string(["title", "category", "brand", "modelno"])
-        .currency(["price"]),
+        "abt-buy": (
+            Traits().string(["name", "description"]).currency(["price"]),
+            64,
+            10,
+        ),
+        "amazon-google": (
+            Traits().string(["title", "manufacturer"]).currency(["price"]),
+            64,
+            10,
+        ),
+        "beer": (Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]), 64, 40),
+        "dblp-acm": (
+            Traits().string(["title", "authors", "venue"]).int(["year"]),
+            64,
+            10,
+        ),
+        "dblp-scholar": (
+            Traits().string(["title", "authors", "venue"]).int(["year"]),
+            64,
+            10,
+        ),
+        "fodors-zagat": (
+            Traits().string(["name", "addr", "city", "phone", "type"]).int(["class"]),
+            64,
+            15,
+        ),
+        "itunes-amazon": (
+            Traits().string(
+                [
+                    "Song_Name",
+                    "Artist_Name",
+                    "Album_Name",
+                    "Genre",
+                    "CopyRight",
+                    "Time",
+                    "Released",
+                ]
+            ),
+            64,
+            40,
+        ),
+        "walmart-amazon": (
+            Traits()
+            .string(["title", "category", "brand", "modelno"])
+            .currency(["price"]),
+            64,
+            10,
+        ),
     }
     models_to_train = ["roberta-base"]
 
@@ -210,12 +238,15 @@ if __name__ == "__main__":
     with warnings.catch_warnings(action="ignore"):
         for dataset_name in trait_config:
             ds_model_dir = root_model_dir / dataset_name
+            traits, batch_size, epochs = trait_config[dataset_name]
             for model_name in models_to_train:
                 train_on_magellan_data(
                     ds_model_dir,
                     model_name,
                     root_data_dir / "magellan",
                     dataset_name,
-                    ltable_traits=trait_config[dataset_name],
+                    ltable_traits=traits,
+                    batch_size=batch_size,
+                    epochs=epochs,
                     **common_kw_args,
                 )
