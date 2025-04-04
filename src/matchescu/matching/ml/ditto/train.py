@@ -181,54 +181,54 @@ if __name__ == "__main__":
         "rtable_id_factory": table_b_id,
     }
     trait_config = {
-        "abt-buy": (
-            Traits().string(["name", "description"]).currency(["price"]),
-            64,
-            10,
-        ),
-        "amazon-google": (
-            Traits().string(["title", "manufacturer"]).currency(["price"]),
-            64,
-            10,
-        ),
+        # "abt-buy": (
+        #     Traits().string(["name", "description"]).currency(["price"]),
+        #     64,
+        #     10,
+        # ),
+        # "amazon-google": (
+        #     Traits().string(["title", "manufacturer"]).currency(["price"]),
+        #     64,
+        #     10,
+        # ),
         "beer": (Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]), 64, 40),
-        "dblp-acm": (
-            Traits().string(["title", "authors", "venue"]).int(["year"]),
-            64,
-            10,
-        ),
-        "dblp-scholar": (
-            Traits().string(["title", "authors", "venue"]).int(["year"]),
-            64,
-            10,
-        ),
-        "fodors-zagat": (
-            Traits().string(["name", "addr", "city", "phone", "type"]).int(["class"]),
-            64,
-            15,
-        ),
-        "itunes-amazon": (
-            Traits().string(
-                [
-                    "Song_Name",
-                    "Artist_Name",
-                    "Album_Name",
-                    "Genre",
-                    "CopyRight",
-                    "Time",
-                    "Released",
-                ]
-            ),
-            64,
-            40,
-        ),
-        "walmart-amazon": (
-            Traits()
-            .string(["title", "category", "brand", "modelno"])
-            .currency(["price"]),
-            64,
-            10,
-        ),
+        # "dblp-acm": (
+        #     Traits().string(["title", "authors", "venue"]).int(["year"]),
+        #     64,
+        #     10,
+        # ),
+        # "dblp-scholar": (
+        #     Traits().string(["title", "authors", "venue"]).int(["year"]),
+        #     64,
+        #     10,
+        # ),
+        # "fodors-zagat": (
+        #     Traits().string(["name", "addr", "city", "phone", "type"]).int(["class"]),
+        #     64,
+        #     15,
+        # ),
+        # "itunes-amazon": (
+        #     Traits().string(
+        #         [
+        #             "Song_Name",
+        #             "Artist_Name",
+        #             "Album_Name",
+        #             "Genre",
+        #             "CopyRight",
+        #             "Time",
+        #             "Released",
+        #         ]
+        #     ),
+        #     64,
+        #     40,
+        # ),
+        # "walmart-amazon": (
+        #     Traits()
+        #     .string(["title", "category", "brand", "modelno"])
+        #     .currency(["price"]),
+        #     64,
+        #     10,
+        # ),
     }
     models_to_train = ["roberta-base"]
 
