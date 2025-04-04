@@ -180,55 +180,55 @@ if __name__ == "__main__":
         "rtable_traits": None,  # same as ltable_traits
         "rtable_id_factory": table_b_id,
     }
-    trait_config = {
-        # "abt-buy": (
-        #     Traits().string(["name", "description"]).currency(["price"]),
-        #     64,
-        #     10,
-        # ),
-        # "amazon-google": (
-        #     Traits().string(["title", "manufacturer"]).currency(["price"]),
-        #     64,
-        #     10,
-        # ),
+    dataset_config = {
+        "abt-buy": (
+            Traits().string(["name", "description"]).currency(["price"]),
+            64,
+            10,
+        ),
+        "amazon-google": (
+            Traits().string(["title", "manufacturer"]).currency(["price"]),
+            64,
+            10,
+        ),
         "beer": (Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]), 64, 40),
-        # "dblp-acm": (
-        #     Traits().string(["title", "authors", "venue"]).int(["year"]),
-        #     64,
-        #     10,
-        # ),
-        # "dblp-scholar": (
-        #     Traits().string(["title", "authors", "venue"]).int(["year"]),
-        #     64,
-        #     10,
-        # ),
-        # "fodors-zagat": (
-        #     Traits().string(["name", "addr", "city", "phone", "type"]).int(["class"]),
-        #     64,
-        #     15,
-        # ),
-        # "itunes-amazon": (
-        #     Traits().string(
-        #         [
-        #             "Song_Name",
-        #             "Artist_Name",
-        #             "Album_Name",
-        #             "Genre",
-        #             "CopyRight",
-        #             "Time",
-        #             "Released",
-        #         ]
-        #     ),
-        #     64,
-        #     40,
-        # ),
-        # "walmart-amazon": (
-        #     Traits()
-        #     .string(["title", "category", "brand", "modelno"])
-        #     .currency(["price"]),
-        #     64,
-        #     10,
-        # ),
+        "dblp-acm": (
+            Traits().string(["title", "authors", "venue"]).int(["year"]),
+            64,
+            10,
+        ),
+        "dblp-scholar": (
+            Traits().string(["title", "authors", "venue"]).int(["year"]),
+            64,
+            10,
+        ),
+        "fodors-zagat": (
+            Traits().string(["name", "addr", "city", "phone", "type"]).int(["class"]),
+            64,
+            15,
+        ),
+        "itunes-amazon": (
+            Traits().string(
+                [
+                    "Song_Name",
+                    "Artist_Name",
+                    "Album_Name",
+                    "Genre",
+                    "CopyRight",
+                    "Time",
+                    "Released",
+                ]
+            ),
+            64,
+            40,
+        ),
+        "walmart-amazon": (
+            Traits()
+            .string(["title", "category", "brand", "modelno"])
+            .currency(["price"]),
+            64,
+            10,
+        ),
     }
     models_to_train = ["roberta-base"]
 
@@ -236,9 +236,9 @@ if __name__ == "__main__":
     root_data_dir = Path(os.getcwd()) / "data"
 
     with warnings.catch_warnings(action="ignore"):
-        for dataset_name in trait_config:
+        for dataset_name in dataset_config:
             ds_model_dir = root_model_dir / dataset_name
-            traits, batch_size, epochs = trait_config[dataset_name]
+            traits, batch_size, epochs = dataset_config[dataset_name]
             for model_name in models_to_train:
                 train_on_magellan_data(
                     ds_model_dir,
