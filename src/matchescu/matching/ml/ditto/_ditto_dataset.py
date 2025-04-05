@@ -4,9 +4,8 @@ import re
 from collections.abc import Sequence, Generator
 from typing import Callable
 
-import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader, Subset
+from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.ml.ditto._ref_adapter import to_text
@@ -290,8 +289,8 @@ class DittoDataset(Dataset):
 
     def __init__(
         self,
-        comparison_space: BinaryComparisonSpace,
         id_table: IdTable,
+        comparison_space: BinaryComparisonSpace,
         ground_truth: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
         tokenizer: PreTrainedTokenizerFast,
         max_len=256,
@@ -300,10 +299,16 @@ class DittoDataset(Dataset):
         left_cols: tuple | None = None,
         right_cols: tuple | None = None,
     ):
+        self.__id_table = id_table
+        self.__pairs = list(
+            map(lambda pair: tuple(self.__id_table.get_all(pair)), comparison_space)
+        )
+        self.__labels = list(
+            map(lambda pair: int(pair in ground_truth), comparison_space)
+        )
+        self.__comparison_space = comparison_space
+        self.__ground_truth = ground_truth
         self.__tokenizer = tokenizer
-        id_pairs = list(itertools.islice(comparison_space, size))
-        self.__pairs = list(tuple(map(id_table.get_all, id_pairs)))
-        self.__labels = list(map(lambda pair: int(pair in ground_truth), id_pairs))
         self.__max_len = max_len
         self.__size = size
         self.__left_cols = left_cols
@@ -384,54 +389,13 @@ class DittoDataset(Dataset):
             x = DittoDataset.__pad(x, n)
             return x, torch.LongTensor(y)
 
-    def split(
-        self,
-        train_proportion: float,
-        xv_proportion: float,
-        test_proportion: float,
-        batch_size: int = 32,
-    ) -> tuple[DataLoader, DataLoader, DataLoader]:
-        proportion_total = train_proportion + xv_proportion + test_proportion
-        train_proportion /= proportion_total
-        xv_proportion /= proportion_total
-        test_proportion = 1 - train_proportion - xv_proportion
-        assert train_proportion + xv_proportion + test_proportion == 1
-        total_size = len(self.__pairs)
-
-        indices = np.arange(len(self.__pairs))
-        np.random.shuffle(indices)
-
-        train_size = int(train_proportion * total_size)
-        xv_size = int(xv_proportion * total_size)
-
-        # Step 5: Split the dataset using the shuffled indices
-        train_indices = indices[:train_size]
-        xv_indices = indices[train_size : train_size + xv_size]
-        test_indices = indices[train_size + xv_size :]
-
-        train_dataset = Subset(self, train_indices)
-        xv_dataset = Subset(self, xv_indices)
-        test_dataset = Subset(self, test_indices)
-        return (
-            DataLoader(
-                train_dataset,
-                batch_size=batch_size,
-                shuffle=True,
-                num_workers=0,
-                collate_fn=DittoDataset.__zero_padded,
-            ),
-            DataLoader(
-                xv_dataset,
-                batch_size=batch_size * 16,
-                shuffle=False,
-                num_workers=0,
-                collate_fn=DittoDataset.__zero_padded,
-            ),
-            DataLoader(
-                test_dataset,
-                batch_size=batch_size * 16,
-                shuffle=False,
-                num_workers=0,
-                collate_fn=DittoDataset.__zero_padded,
-            ),
+    def get_data_loader(
+        self, batch_size: int = 32, shuffle: bool = False
+    ) -> DataLoader:
+        return DataLoader(
+            self,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=0,
+            collate_fn=DittoDataset.__zero_padded,
         )

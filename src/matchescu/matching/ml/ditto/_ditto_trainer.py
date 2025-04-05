@@ -25,7 +25,7 @@ class DittoTrainer:
         self._tb_log_dir = self._model_dir / self._task / "tensorboard"
         self._log = cast(
             Logger, kwargs.get("logger", getLogger(self.__class__.__name__))
-        )
+        ).getChild(self._task)
         self._epochs = int(kwargs.get("epochs", 20))
         self._learning_rate = float(kwargs.get("learning_rate", 3e-5))
         self._frozen_layer_count = int(kwargs.get("frozen_layer_count", 0))
@@ -90,7 +90,7 @@ class DittoTrainer:
                 batch_no = i + 1
                 if batch_no % 10 == 0:
                     batch_loss = batch_loss / 10
-                    fmt = f"{self._task}: batch {batch_no}: avg loss over last 10 batches=%.4f"
+                    fmt = f"batch {batch_no}: avg loss over last 10 batches=%.4f"
                     self._add_text_summary(summary_writer, batch_no, fmt, batch_loss)
                     self._log.info(fmt, batch_loss)
                 del loss
@@ -124,7 +124,7 @@ class DittoTrainer:
         best_xv_f1 = best_test_f1 = 0.0
         try:
             for epoch in range(1, self._epochs + 1):
-                self._log.info("%s: epoch %d - train start", self._task, epoch)
+                self._log.info("epoch %d - train start", epoch)
                 try:
                     self._train_one_epoch(
                         epoch,
@@ -136,7 +136,7 @@ class DittoTrainer:
                         summary_writer,
                     )
                 finally:
-                    self._log.info("%s: epoch %d - train end", self._task, epoch)
+                    self._log.info("epoch %d - train end", epoch)
 
                 if evaluator is None or not save_model:
                     continue

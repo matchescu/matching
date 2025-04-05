@@ -16,11 +16,14 @@ class DittoTrainingEvaluator:
         task_name: str,
         xv_data: DataLoader[DittoDataset],
         test_data: DataLoader[DittoDataset],
+        logger: logging.Logger | None = None,
     ) -> None:
         self._task = task_name
         self._xv_data = xv_data
         self._test_data = test_data
-        self._log = logging.getLogger(self.__class__.__name__)
+        self._log = (logger or logging.getLogger(self.__class__.__name__)).getChild(
+            self._task
+        )
 
     @staticmethod
     def __best_threshold(
@@ -56,16 +59,15 @@ class DittoTrainingEvaluator:
         return DittoTrainingEvaluator.__best_threshold(all_probs, all_y)
 
     def __call__(self, model: DittoModel) -> tuple[float, float, float]:
-        self._log.info("%s: evaluating on cross-validation set", self._task)
+        self._log.info("evaluating on cross-validation set")
         xv_f1, best_xv_threshold = self._evaluate_model(model, self._xv_data)
         self._log.info(
-            "%s: X validation F1=%.4f, best threshold=%.2f",
-            self._task,
+            "X validation F1=%.4f, best threshold=%.2f",
             xv_f1,
             best_xv_threshold,
         )
         test_f1, _ = self._evaluate_model(
             model, self._test_data, threshold=best_xv_threshold
         )
-        self._log.info("%s: test F1=%.4f", self._task, test_f1)
+        self._log.info("test F1=%.4f", test_f1)
         return xv_f1, test_f1, best_xv_threshold
