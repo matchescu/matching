@@ -168,12 +168,6 @@ class DittoTrainer:
                     test_f1,
                     best_test_f1,
                 )
-                if best_test_f1 == 1.0:
-                    self._log.info(
-                        "I'm the best I could ever be. Quitting training at epoch %d",
-                        epoch,
-                    )
-                    break
         finally:
             summary_writer.flush()
             summary_writer.close()

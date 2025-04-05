@@ -1,12 +1,12 @@
-import logging
 import os
-import sys
 import time
 import warnings
 from contextlib import contextmanager
+from datetime import timedelta
 from functools import partial
 from pathlib import Path
 
+import humanize
 import polars as pl
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer
@@ -26,14 +26,14 @@ from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
 from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
+from matchescu.matching.ml.ditto.training._logging import log
+from matchescu.matching.ml.ditto.training._magellan_config import MAGELLAN_CONFIG
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
 from matchescu.typing import (
     EntityReferenceIdentifier as RefId,
     EntityReferenceIdFactory,
 )
-
-log = logging.getLogger("ditto-training")
 
 
 def create_comparison_space(id_table, ground_truth, initial_size):
@@ -63,11 +63,12 @@ def load_data_source(id_table: InMemoryIdTable, data_source: CsvDataSource) -> N
 
 @contextmanager
 def timer(start_message: str):
-    logging.info(start_message)
+    log.info(start_message)
     time_start = time.time()
     yield
     time_end = time.time()
-    log.info("%s time elapsed: %.2f seconds", start_message, time_end - time_start)
+    duration = humanize.naturaldelta(timedelta(seconds=(time_end - time_start)))
+    log.info("%s time elapsed: %s seconds", start_message, duration)
 
 
 def _extract_dataset(dataset_path: Path) -> tuple[IdTable, BinaryComparisonSpace, set]:
@@ -139,27 +140,32 @@ def train_on_magellan_data(
     model_name: str,
     dataset_dir: Path,
     dataset_name: str,
-    ltable_traits: Traits,
-    ltable_id_factory: EntityReferenceIdFactory,
-    rtable_traits: Traits | None = None,
-    rtable_id_factory: EntityReferenceIdFactory | None = None,
+    traits: Traits,
+    id_factory: EntityReferenceIdFactory,
+    pair_traits: Traits | None = None,
+    pair_id_factory: EntityReferenceIdFactory | None = None,
     batch_size: int = 32,
     epochs: int = 10,
+    learning_rate: float = 3e-5,
 ):
-    rtable_traits = rtable_traits or ltable_traits
-    rtable_id_factory = rtable_id_factory or ltable_id_factory
+    pair_traits = pair_traits or traits
+    pair_id_factory = pair_id_factory or id_factory
     magellan_ds = load_magellan_dataset(
         dataset_dir / dataset_name,
-        ltable_traits,
-        ltable_id_factory,
-        rtable_traits,
-        rtable_id_factory,
+        traits,
+        id_factory,
+        pair_traits,
+        pair_id_factory,
     )
     train, xv, test = get_magellan_data_loaders(model_name, magellan_ds, batch_size)
     ditto = DittoModel(model_name)
     dataset_logger = log.getChild(dataset_name)
     trainer = DittoTrainer(
-        model_name, model_save_dir, epochs=epochs, logger=dataset_logger
+        model_name,
+        model_save_dir,
+        learning_rate=learning_rate,
+        epochs=epochs,
+        logger=dataset_logger,
     )
     evaluator = DittoTrainingEvaluator(model_name, xv, test, dataset_logger)
     trainer.run_training(ditto, train, evaluator, True)
@@ -174,79 +180,26 @@ def table_b_id(rows: list[Record]) -> RefId:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, stream=sys.stdout)
     common_kw_args = {
-        "ltable_id_factory": table_a_id,
-        "rtable_traits": None,  # same as ltable_traits
-        "rtable_id_factory": table_b_id,
-    }
-    dataset_config = {
-        "abt-buy": (
-            Traits().string(["name", "description"]).currency(["price"]),
-            64,
-            10,
-        ),
-        "amazon-google": (
-            Traits().string(["title", "manufacturer"]).currency(["price"]),
-            64,
-            10,
-        ),
-        "beer": (Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]), 64, 40),
-        "dblp-acm": (
-            Traits().string(["title", "authors", "venue"]).int(["year"]),
-            64,
-            10,
-        ),
-        "dblp-scholar": (
-            Traits().string(["title", "authors", "venue"]).int(["year"]),
-            64,
-            10,
-        ),
-        "fodors-zagat": (
-            Traits().string(["name", "addr", "city", "phone", "type"]).int(["class"]),
-            64,
-            15,
-        ),
-        "itunes-amazon": (
-            Traits().string(
-                [
-                    "Song_Name",
-                    "Artist_Name",
-                    "Album_Name",
-                    "Genre",
-                    "CopyRight",
-                    "Time",
-                    "Released",
-                ]
-            ),
-            64,
-            40,
-        ),
-        "walmart-amazon": (
-            Traits()
-            .string(["title", "category", "brand", "modelno"])
-            .currency(["price"]),
-            64,
-            10,
-        ),
+        "id_factory": table_a_id,
+        "pair_traits": None,  # same as traits
+        "pair_id_factory": table_b_id,
     }
     models_to_train = ["roberta-base"]
+    datasets = ["itunes-amazon"]
 
     root_model_dir = Path(os.getcwd()) / "models"
     root_data_dir = Path(os.getcwd()) / "data"
 
     with warnings.catch_warnings(action="ignore"):
-        for dataset_name in dataset_config:
+        for dataset_name in datasets:
             ds_model_dir = root_model_dir / dataset_name
-            traits, batch_size, epochs = dataset_config[dataset_name]
             for model_name in models_to_train:
                 train_on_magellan_data(
                     ds_model_dir,
                     model_name,
                     root_data_dir / "magellan",
                     dataset_name,
-                    ltable_traits=traits,
-                    batch_size=batch_size,
-                    epochs=epochs,
+                    **MAGELLAN_CONFIG[dataset_name],
                     **common_kw_args,
                 )
