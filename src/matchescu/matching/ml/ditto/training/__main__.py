@@ -179,7 +179,7 @@ def table_b_id(rows: list[Record]) -> RefId:
     return RefId(rows[0]["id"], "tableB")
 
 
-if __name__ == "__main__":
+def run_training():
     common_kw_args = {
         "id_factory": table_a_id,
         "pair_traits": None,  # same as traits
@@ -203,3 +203,7 @@ if __name__ == "__main__":
                     **MAGELLAN_CONFIG[dataset_name],
                     **common_kw_args,
                 )
+
+
+if __name__ == "__main__":
+    run_training()
