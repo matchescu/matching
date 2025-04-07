@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{include = "matchescu", from="src"}]
 
 [tool.poetry.scripts]
-train-ditto = "matchescu.matcing.ml.ditto.training.__main__:run_training"
+train-ditto = "matchescu.matching.ml.ditto.training.__main__:run_training"
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -36,6 +36,7 @@ ruff = "^0.11.2"
 mypy = "^1.15.0"
 pyresolvemetrics = "^0.3.2"
 humanize = "^4.12.2"
+click = "^8.1.8"
 
 [build-system]
 requires = ["poetry-core"]

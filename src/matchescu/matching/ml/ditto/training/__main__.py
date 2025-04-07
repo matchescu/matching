@@ -6,6 +6,7 @@ from datetime import timedelta
 from functools import partial
 from pathlib import Path
 
+import click
 import humanize
 import polars as pl
 from torch.utils.data import DataLoader
@@ -179,18 +180,52 @@ def table_b_id(rows: list[Record]) -> RefId:
     return RefId(rows[0]["id"], "tableB")
 
 
-def run_training():
+@click.command
+@click.option(
+    "-M",
+    "--model-dir",
+    "root_model_dir",
+    required=True,
+    type=click.Path(exists=True, dir_okay=True, file_okay=False),
+    default=Path(os.getcwd()) / "models",
+)
+@click.option(
+    "-D",
+    "--dataset-dir",
+    "root_data_dir",
+    required=True,
+    type=click.Path(exists=True, dir_okay=True, file_okay=False),
+    default=Path(os.getcwd()) / "data",
+)
+@click.option(
+    "-d",
+    "--datasets",
+    "datasets",
+    multiple=True,
+    type=click.Path(),
+    default=list(MAGELLAN_CONFIG),
+)
+@click.option(
+    "-m",
+    "--models",
+    "models_to_train",
+    multiple=True,
+    type=str,
+    default=["roberta-base"],
+)
+def run_training(
+    root_model_dir: Path,
+    root_data_dir: Path,
+    datasets: list[str],
+    models_to_train: list[str],
+) -> None:
+    root_model_dir = Path(root_model_dir)
+    root_data_dir = Path(root_data_dir)
     common_kw_args = {
         "id_factory": table_a_id,
         "pair_traits": None,  # same as traits
         "pair_id_factory": table_b_id,
     }
-    models_to_train = ["roberta-base"]
-    datasets = ["itunes-amazon"]
-
-    root_model_dir = Path(os.getcwd()) / "models"
-    root_data_dir = Path(os.getcwd()) / "data"
-
     with warnings.catch_warnings(action="ignore"):
         for dataset_name in datasets:
             ds_model_dir = root_model_dir / dataset_name
