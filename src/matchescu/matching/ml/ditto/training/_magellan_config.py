@@ -23,7 +23,7 @@ MAGELLAN_CONFIG = {
         "epochs": 15,
     },
     "dblp-scholar": {
-        "traits": Traits().string(["title", "authors", "venue"]).int(["year"]),
+        "traits": Traits().string(["title", "authors", "venue", "year"]),
         "batch_size": 64,
         "epochs": 15,
     },
