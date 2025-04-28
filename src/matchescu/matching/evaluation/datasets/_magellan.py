@@ -46,7 +46,7 @@ class MagellanDataset:
         self.__left_source: str | None = None
         self.__right_source: str | None = None
         self._train: MagellanDataset.Split | None = None
-        self._xv: MagellanDataset.Split | None = None
+        self._valid: MagellanDataset.Split | None = None
         self._test: MagellanDataset.Split | None = None
 
     def _load_csv_table(
@@ -97,7 +97,7 @@ class MagellanDataset:
                 "left + right data sources must be loaded before loading splits"
             )
         self._train = self.__load_split(self.__train_path)
-        self._xv = self.__load_split(self.__valid_path)
+        self._valid = self.__load_split(self.__valid_path)
         self._test = self.__load_split(self.__test_path)
         return self
 
@@ -119,8 +119,18 @@ class MagellanDataset:
 
     @property
     def valid_split(self) -> "MagellanDataset.Split":
-        return self._xv
+        return self._valid
 
     @property
     def test_split(self) -> "MagellanDataset.Split":
         return self._test
+
+    def all_data(self) -> "MagellanDataset.Split":
+        gt = self._train.ground_truth.union(self._valid.ground_truth).union(self._test.ground_truth)
+        cs = InMemoryComparisonSpace()
+        for split in (self._train, self._valid, self._test):
+            for left, right in split.comparison_space:
+                cs.put(left, right)
+        for left, right in gt:
+            cs.put(left, right)
+        return MagellanDataset.Split(cs, gt)
