@@ -126,7 +126,9 @@ class MagellanDataset:
         return self._test
 
     def all_data(self) -> "MagellanDataset.Split":
-        gt = self._train.ground_truth.union(self._valid.ground_truth).union(self._test.ground_truth)
+        gt = self._train.ground_truth.union(self._valid.ground_truth).union(
+            self._test.ground_truth
+        )
         cs = InMemoryComparisonSpace()
         for split in (self._train, self._valid, self._test):
             for left, right in split.comparison_space:
