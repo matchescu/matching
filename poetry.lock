@@ -1505,14 +1505,14 @@ files = [
 
 [[package]]
 name = "matchescu-base"
-version = "0.20.0"
+version = "0.21.0"
 description = "Base abstract data types for Entity Resolution"
 optional = false
 python-versions = "<4.0,>=3.11"
 groups = ["main"]
 files = [
-    {file = "matchescu_base-0.20.0-py3-none-any.whl", hash = "sha256:4b9b4b942510a577f09344d59e8f1bf3f4bffc263b417c50c8d552e59ff8c2d8"},
-    {file = "matchescu_base-0.20.0.tar.gz", hash = "sha256:db5f3cfd43d262313cdf619babe28a34f989c56c3620379b24727ec6d102908d"},
+    {file = "matchescu_base-0.21.0-py3-none-any.whl", hash = "sha256:508410e2e5c4ff490674c6327d3f73fb834db192cd5874e52b3fbc929a61f843"},
+    {file = "matchescu_base-0.21.0.tar.gz", hash = "sha256:2240b7459cde8821fd4ff4ad223022ed36a58050fe7738296721e663abf53770"},
 ]
 
 [package.dependencies]
@@ -1520,54 +1520,54 @@ networkx = ">=3.4.2,<4.0.0"
 
 [[package]]
 name = "matchescu-comparison-space-generation"
-version = "0.7.0"
+version = "0.7.1"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "matchescu_comparison_space_generation-0.7.0-py3-none-any.whl", hash = "sha256:ef90e08f442505c918f411dc7f0a1a68864ec928d9058158fec1ca80886cfbfc"},
-    {file = "matchescu_comparison_space_generation-0.7.0.tar.gz", hash = "sha256:923e2290438d2bdd4623d0a246f5c5ae00b319fdbc66755cf0be18e60728394f"},
+    {file = "matchescu_comparison_space_generation-0.7.1-py3-none-any.whl", hash = "sha256:9602c5ff86bc6df41903b055a6b972225cfe7455e96536c8d528c55db7c72464"},
+    {file = "matchescu_comparison_space_generation-0.7.1.tar.gz", hash = "sha256:169d2e0c0c559de5a7fbfdd72a976f3745964d9cd8c237445d1b4eff7af32a5f"},
 ]
 
 [package.dependencies]
 datasketch = ">=1.6.5,<2.0.0"
-matchescu-base = ">=0.20.0,<0.21.0"
-matchescu-reference-store = ">=0.8.0,<0.9.0"
+matchescu-base = ">=0.21.0,<0.22.0"
+matchescu-reference-store = ">=0.8.1,<0.9.0"
 numpy = ">=2.2.4,<3.0.0"
 scikit-learn = ">=1.6.1,<2.0.0"
 stopwords = ">=1.0.1,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-extraction"
-version = "0.7.0"
+version = "0.7.2"
 description = "Extract references from a multitude of data sources"
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_extraction-0.7.0-py3-none-any.whl", hash = "sha256:817e886eb4aa91973c609e33689d7698cae931ff012247247577e0e5bc3be7ba"},
-    {file = "matchescu_reference_extraction-0.7.0.tar.gz", hash = "sha256:9c3959254df2e6d221f238f94fe35dc2ba95f43bb158f91c8caddd0878b85391"},
+    {file = "matchescu_reference_extraction-0.7.2-py3-none-any.whl", hash = "sha256:8cd62eb896d94bf9d85a7213ce164af87e4b7f5b6d688ab67c4fd848bafc29a3"},
+    {file = "matchescu_reference_extraction-0.7.2.tar.gz", hash = "sha256:4546ef827bc8520dd65e48e8868d53f4df99ca4d8a9462fb4d656527b2755758"},
 ]
 
 [package.dependencies]
-matchescu-base = ">=0.20.0,<0.21.0"
+matchescu-base = ">=0.21.0,<0.22.0"
 polars = ">=1.25.2,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-store"
-version = "0.8.0"
+version = "0.8.2"
 description = "Entity reference storage data types and APIs"
 optional = false
 python-versions = "<4.0,>=3.12"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_store-0.8.0-py3-none-any.whl", hash = "sha256:8128c181c7ec4b71371262b97a75c2a704082923b8cc3cc7c354e9ea9511096c"},
-    {file = "matchescu_reference_store-0.8.0.tar.gz", hash = "sha256:d9b8413e0e8139e04c19506ec1305a8c9fc9ef1dd15b655154a0a6af44399b88"},
+    {file = "matchescu_reference_store-0.8.2-py3-none-any.whl", hash = "sha256:71a2e3cd3c62ea153191f1b9bcc17d74a7172666189fb2f422a0becf84693046"},
+    {file = "matchescu_reference_store-0.8.2.tar.gz", hash = "sha256:015eee7f78180b271313c91a34dc16684905614a33802d1da6f94c0828c69e6a"},
 ]
 
 [package.dependencies]
-matchescu-base = ">=0.20.0,<0.21.0"
+matchescu-base = ">=0.21.0,<0.22.0"
 
 [[package]]
 name = "matplotlib-inline"
@@ -3765,4 +3765,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "89016b01e821a0bff8aeee18dc00e381e3055d726bb90fcee775d99ebfdcc170"
+content-hash = "cf8d17a02d26211b2e76b1ff55bc6e7fe7c330145940e00f2736039fb8181406"
