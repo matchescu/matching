@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "matchescu-matching"
-version = "0.10.1"
+version = "0.10.2"
 description = "Common types and algorithms used for matching two information"
 authors = ["Andrei Olar <andrei.olar@ubbcluj.ro>"]
 license = "MIT"
@@ -15,15 +15,15 @@ python = "^3.12"
 polars = "^1.15.0"
 scikit-learn = "^1.6.1"
 numpy = "^2.2.4"
-matchescu-base = "^0.21.0"
+matchescu-base = "^0.22.1"
 jellyfish = "^1.1.0"
 stopwords = "^1.0.1"
 transformers = "^4.49.0"
 datasketch = "^1.6.5"
-matchescu-reference-extraction = "^0.7.2"
+matchescu-reference-extraction = "^0.7.3"
 torch = "^2.6.0"
-matchescu-reference-store = "^0.8.2"
-matchescu-comparison-space-generation = "^0.7.1"
+matchescu-reference-store = "^0.8.3"
+matchescu-comparison-space-generation = "^0.7.2"
 
 
 [tool.poetry.group.dev.dependencies]
