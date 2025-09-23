@@ -20,8 +20,9 @@ candidate generation with proper blocking/join and vectorize comparisons in batc
 """
 
 from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Dict, Iterable, Sequence, Any
+from typing import Dict, Iterable, Sequence, Any, Optional
 
 import numpy as np
 import pyarrow as pa
@@ -60,18 +61,131 @@ class FellegiSunter:
 
     __L_PREFIX = "l_"
     __R_PREFIX = "r_"
-    __MIN_POSSIBLE_PROB = 1e-12
-    __MAX_POSSIBLE_PROB = 1 - 1e-12
+    __NEAR_ZERO = 1e-12
+    __NEAR_ONE = 1 - 1e-12
 
     def __init__(
-        self, config: RecordLinkageConfig, mu: float = 0.01, lambda_: float = 0.01
+        self,
+        config: RecordLinkageConfig,
+        mu: float = 0.01,
+        lambda_: float = 0.01,
+        parameters: Optional[FSParameters] = None,
+        thresholds: Optional[FSThresholds] = None,
     ):
         self._config = config
         self._cmp_config = self._config.col_comparison_config
-        self._params: FSParameters | None = None
-        self._thresholds: FSThresholds | None = None
+        self._params = parameters
+        self._thresholds = thresholds
         self._mu: float = mu
         self._lambda: float = lambda_
+
+    def fit(
+        self,
+        table_a: pa.Table,
+        table_b: pa.Table,
+        ground_truth: pa.Table,
+        smooth: float = 1e-6,
+    ) -> "FellegiSunter":
+        """Compute the parameters and thresholds defined in the F-S model.
+
+        :param table_a: table containing the records that describe population A
+        :param table_b: table containing the records that describe population B
+        :param ground_truth: a table that contains 3 columns: record identifies
+        from table A, record identifiers from table B and labels specifying
+        either a match (``1``) or a mismatch (``0``) between the records
+        identified using the first two columns.
+        :param smooth: smoothing factor (helps with division by zero)
+
+        :return: the current instance of the matcher with 'trained' parameters
+        and thresholds. Enables the user to write fluent code such as
+        ``FellegiSunter(config).fit(train_a, train_b, truth).predict(comparisons, test_a, test_b)``.
+        """
+        self.__check_config(table_a, table_b, ground_truth)
+        if len(self._cmp_config) == 0:
+            self._cmp_config = self.__init_cmp_config(table_a, table_b)
+
+        table_a = self.__standardize_strings(table_a)
+        table_b = self.__standardize_strings(table_b)
+        id_pair_list = list(
+            zip(
+                ground_truth[self._config.left_id].to_pylist(),
+                ground_truth[self._config.right_id].to_pylist(),
+            )
+        )
+        cmp_table = self.__get_comparison_table(id_pair_list, table_a, table_b)
+        cmp_result_cols = list(
+            map(self.__cmp_idx_col_name, range(len(self._cmp_config)))
+        )
+
+        labels = np.asarray(
+            ground_truth[self._config.ground_truth_label_col].to_pylist()
+        )
+        real_matches = labels == 1
+        real_mismatches = labels == 0
+
+        matches = np.asarray(real_matches, dtype=int)
+        real_match_count_adj = matches.sum() + 2 * smooth
+        real_mismatch_count_adj = (
+            np.asarray(real_mismatches, dtype=int).sum() + 2 * smooth
+        )
+
+        cmp_stats: dict[str, FSComparisonStats] = {}
+        for col_name in cmp_result_cols:
+            cmp_results = np.asarray(cmp_table[col_name].to_numpy())
+            col_agreement_count = cmp_results[real_matches].sum() + smooth
+            col_disagreement_count = cmp_results[real_mismatches].sum() + smooth
+            m = col_agreement_count / real_match_count_adj
+            u = col_disagreement_count / real_mismatch_count_adj
+
+            # make sure m and u are different from 0
+            m = float(np.clip(m, self.__NEAR_ZERO, self.__NEAR_ONE))
+            u = float(np.clip(u, self.__NEAR_ZERO, self.__NEAR_ONE))
+
+            # how much more likely something is to match than not match
+            agreement_factor = m / u
+            # how much more likely is to not match than to match
+            disagreement_factor = (1 - m) / (1 - u)
+
+            # weights are easier to work with (sums, no overflows)
+            agreement_weight = np.log2(agreement_factor)
+            disagreement_weight = np.log2(disagreement_factor)
+
+            cmp_stats[col_name] = FSComparisonStats(
+                m, u, agreement_weight, disagreement_weight
+            )
+
+        self._params = FSParameters(cmp_stats, float(matches.mean()))
+        scored_cmp_table = self.__compute_scores(cmp_table)
+        self._thresholds = self.__compute_thresholds(scored_cmp_table, labels)
+        return self
+
+    def predict(
+        self, id_pairs: Iterable[tuple[Any, Any]], table_a: pa.Table, table_b: pa.Table
+    ) -> pa.Table:
+        """
+        Link records using learned parameters and thresholds.
+
+        Candidate generation:
+          - if block_on is provided: exact-equality blocking on those columns (simple Python join)
+          - else: Cartesian product (O(n*m), for small cases)
+
+        Returns Arrow table with per-field agreements, score, and decision.
+        """
+        assert (
+            self._params is not None and self._thresholds is not None
+        ), "model not fit. run fit() first."
+        table_a = self.__standardize_strings(table_a)
+        table_b = self.__standardize_strings(table_b)
+        cmp_table = self.__get_comparison_table(id_pairs, table_a, table_b)
+        scored = self.__compute_scores(cmp_table)
+        decisions = [
+            self.__decide(s, self._thresholds) for s in scored["score"].to_pylist()
+        ]
+        out = scored.append_column("decision", pa.array(decisions, type=pa.string()))
+        # sort by score desc
+        order = np.argsort(-np.asarray(out["score"].to_numpy()))
+        # take rows in desired order
+        return out.take(pa.array(order, type=pa.int64()))
 
     def __check_config(
         self, table_a: pa.Table, table_b: pa.Table, ground_truth: pa.Table | None = None
@@ -105,7 +219,7 @@ class FellegiSunter:
                         f"expected column '{right_col}' to be present in the right table"
                     )
 
-    def __extract_cmp_config(
+    def __init_cmp_config(
         self, table_a: pa.Table, table_b: pa.Table
     ) -> Sequence[tuple[str, str]]:
         if self._cmp_config is not None and len(self._cmp_config) > 0:
@@ -162,10 +276,16 @@ class FellegiSunter:
     def __cmp_idx_col_name(idx: int) -> str:
         return f"cmp_{idx}"
 
-    def __cmp_config_member_cols(self) -> Iterable[str]:
+    def __cmp_config_fields(
+        self, table_a: pa.Table, table_b: pa.Table
+    ) -> Iterable[pa.Field]:
         for left_col, right_col in self._cmp_config:
-            yield f"{self.__L_PREFIX}{left_col}"
-            yield f"{self.__R_PREFIX}{right_col}"
+            yield table_a.schema.field(left_col).with_name(
+                f"{self.__L_PREFIX}{left_col}"
+            )
+            yield table_b.schema.field(right_col).with_name(
+                f"{self.__R_PREFIX}{right_col}"
+            )
 
     def __get_comparison_table(
         self, id_pairs: Iterable[tuple[Any, Any]], table_a: pa.Table, table_b: pa.Table
@@ -180,6 +300,18 @@ class FellegiSunter:
             )
             for left_id, right_id in id_pairs
         ]
+        cmp_result_fields = [
+            pa.field(self.__cmp_idx_col_name(idx), type=pa.int8())
+            for idx in range(len(self._cmp_config))
+        ]
+        cmp_schema = pa.schema(
+            [
+                table_a.schema.field(self._config.left_id).with_name(lid_col),
+                table_b.schema.field(self._config.right_id).with_name(rid_col),
+                *self.__cmp_config_fields(table_a, table_b),
+                *cmp_result_fields,
+            ]
+        )
 
         # Build comparison rows in Python (simple & clear).
         rows = []
@@ -197,105 +329,13 @@ class FellegiSunter:
                 )
             comparison_result.update(
                 {
-                    self.__cmp_idx_col_name(cmp_idx): self.__is_match(
-                        left_row, right_row, cmp_idx
-                    )
-                    for cmp_idx in range(len(self._cmp_config))
+                    field.name: self.__is_match(left_row, right_row, cmp_idx)
+                    for cmp_idx, field in enumerate(cmp_result_fields)
                 }
             )
             rows.append(comparison_result)
 
-        cmp_cols = list(map(self.__cmp_idx_col_name, range(len(self._cmp_config))))
-        cmp_member_cols = list(self.__cmp_config_member_cols())
-        names = [lid_col, rid_col, *cmp_member_cols, *cmp_cols]
-
-        if not rows:
-            return pa.table({n: pa.array([], pa.null()) for n in names})
-
-        # Arrow-ify
-        cols = {k: [r[k] for r in rows] for k in names}
-        # Field cols are ints; id cols inherit inferred types
-        for cmp_col_name in cmp_cols:
-            cols[cmp_col_name] = pa.array(cols[cmp_col_name], type=pa.int8())
-        return pa.table(cols)
-
-    # ---------- Fit (m/u and weights) ----------
-
-    def fit(
-        self,
-        table_a: pa.Table,
-        table_b: pa.Table,
-        ground_truth: pa.Table,
-        *,
-        smooth: float = 1e-6,
-    ) -> "FellegiSunter":
-        """
-        Estimate m_i = P(agree on field i | M), u_i = P(agree on field i | U)
-        and compute per-field log-weights.
-        """
-        self.__check_config(table_a, table_b, ground_truth)
-
-        table_a = self.__standardize_strings(table_a)
-        table_b = self.__standardize_strings(table_b)
-        id_pair_list = list(
-            zip(
-                ground_truth[self._config.left_id].to_pylist(),
-                ground_truth[self._config.right_id].to_pylist(),
-            )
-        )
-        cmp_table = self.__get_comparison_table(id_pair_list, table_a, table_b)
-        cmp_result_cols = list(
-            map(self.__cmp_idx_col_name, range(len(self._cmp_config)))
-        )
-
-        labels = np.asarray(
-            ground_truth[self._config.ground_truth_label_col].to_pylist()
-        )
-        real_matches = labels == 1
-        real_mismatches = labels == 0
-
-        matches = np.asarray(real_matches, dtype=int)
-        real_match_count_adj = matches.sum() + 2 * smooth
-        real_mismatch_count_adj = (
-            np.asarray(real_mismatches, dtype=int).sum() + 2 * smooth
-        )
-
-        cmp_stats: dict[str, FSComparisonStats] = {}
-        for col_name in cmp_result_cols:
-            cmp_results = np.asarray(cmp_table[col_name].to_numpy())  # 0/1 ints
-            col_matches_in_real_matches = cmp_results[real_matches].sum() + smooth
-            col_matches_in_real_mismatches = cmp_results[real_mismatches].sum() + smooth
-            m_prob = col_matches_in_real_matches / real_match_count_adj  # agree
-            u_prob = (
-                col_matches_in_real_mismatches / real_mismatch_count_adj
-            )  # P(scenario| real
-
-            # make sure m_prob and u_prob are different from 0
-            m_prob = float(
-                np.clip(m_prob, self.__MIN_POSSIBLE_PROB, self.__MAX_POSSIBLE_PROB)
-            )
-            u_prob = float(
-                np.clip(u_prob, self.__MIN_POSSIBLE_PROB, self.__MAX_POSSIBLE_PROB)
-            )
-
-            agreement_factor = (
-                m_prob / u_prob
-            )  # how much more likely something is to match than not match
-            disagreement_factor = (1 - m_prob) / (
-                1 - u_prob
-            )  # how much more likely is to not match than to match
-
-            cmp_stats[col_name] = FSComparisonStats(
-                m_prob,
-                u_prob,
-                np.log2(agreement_factor),  # match agreement weight
-                np.log2(disagreement_factor),  # match disagreement weight
-            )
-
-        self._params = FSParameters(cmp_stats, float(matches.mean()))
-        scored_cmp_table = self.__compute_scores(cmp_table)
-        self._thresholds = self.__compute_thresholds(scored_cmp_table, labels)
-        return self
+        return pa.Table.from_pylist(rows, schema=cmp_schema)
 
     def __compute_row_score(self, agree_vec: Dict[str, int]) -> float:
         s = 0.0
@@ -345,31 +385,3 @@ class FellegiSunter:
             return "non-link"
         else:
             return "clerical"
-
-    def predict(
-        self, id_pairs: Iterable[tuple[Any, Any]], table_a: pa.Table, table_b: pa.Table
-    ) -> pa.Table:
-        """
-        Link records using learned parameters and thresholds.
-
-        Candidate generation:
-          - if block_on is provided: exact-equality blocking on those columns (simple Python join)
-          - else: Cartesian product (O(n*m), for small cases)
-
-        Returns Arrow table with per-field agreements, score, and decision.
-        """
-        assert (
-            self._params is not None and self._thresholds is not None
-        ), "model not fit. run fit() first."
-        table_a = self.__standardize_strings(table_a)
-        table_b = self.__standardize_strings(table_b)
-        cmp_table = self.__get_comparison_table(id_pairs, table_a, table_b)
-        scored = self.__compute_scores(cmp_table)
-        decisions = [
-            self.__decide(s, self._thresholds) for s in scored["score"].to_pylist()
-        ]
-        out = scored.append_column("decision", pa.array(decisions, type=pa.string()))
-        # sort by score desc
-        order = np.argsort(-np.asarray(out["score"].to_numpy()))
-        # take rows in desired order
-        return out.take(pa.array(order, type=pa.int64()))
