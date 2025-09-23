@@ -21,7 +21,9 @@ candidate generation with proper blocking/join and vectorize comparisons in batc
 
 from __future__ import annotations
 
+import pickle
 from dataclasses import dataclass
+from functools import partial
 from typing import Dict, Iterable, Sequence, Any, Optional
 
 import numpy as np
@@ -33,8 +35,8 @@ from matchescu.matching.config import RecordLinkageConfig
 
 @dataclass
 class FSComparisonStats:
-    match_probability: float
-    mismatch_probability: float
+    match_agree_probability: float
+    nonmatch_agree_probability: float
     agreement_weight: float
     disagreement_weight: float
 
@@ -79,6 +81,26 @@ class FellegiSunter:
         self._mu: float = mu
         self._lambda: float = lambda_
 
+    @property
+    def config(self) -> RecordLinkageConfig:
+        return self._config
+
+    @property
+    def mu(self) -> float:
+        return self._mu
+
+    @property
+    def lambda_(self) -> float:
+        return self._lambda
+
+    @property
+    def thresholds(self) -> FSThresholds:
+        return self._thresholds
+
+    @property
+    def parameters(self) -> FSParameters:
+        return self._params
+
     def fit(
         self,
         table_a: pa.Table,
@@ -120,26 +142,22 @@ class FellegiSunter:
         labels = np.asarray(
             ground_truth[self._config.ground_truth_label_col].to_pylist()
         )
-        real_matches = labels == 1
-        real_mismatches = labels == 0
+        M = labels == 1
+        U = labels == 0
 
-        matches = np.asarray(real_matches, dtype=int)
+        matches = np.asarray(M, dtype=int)
         real_match_count_adj = matches.sum() + 2 * smooth
-        real_mismatch_count_adj = (
-            np.asarray(real_mismatches, dtype=int).sum() + 2 * smooth
-        )
+        real_mismatch_count_adj = np.asarray(U, dtype=int).sum() + 2 * smooth
 
         cmp_stats: dict[str, FSComparisonStats] = {}
         for col_name in cmp_result_cols:
             cmp_results = np.asarray(cmp_table[col_name].to_numpy())
-            col_agreement_count = cmp_results[real_matches].sum() + smooth
-            col_disagreement_count = cmp_results[real_mismatches].sum() + smooth
-            m = col_agreement_count / real_match_count_adj
-            u = col_disagreement_count / real_mismatch_count_adj
-
+            col_matches_in_M = cmp_results[M].sum() + smooth
+            col_matches_in_U = cmp_results[U].sum() + smooth
             # make sure m and u are different from 0
-            m = float(np.clip(m, self.__NEAR_ZERO, self.__NEAR_ONE))
-            u = float(np.clip(u, self.__NEAR_ZERO, self.__NEAR_ONE))
+            clip = partial(np.clip, a_min=self.__NEAR_ZERO, a_max=self.__NEAR_ONE)
+            m = float(clip(col_matches_in_M / real_match_count_adj))
+            u = float(clip(col_matches_in_U / real_mismatch_count_adj))
 
             # how much more likely something is to match than not match
             agreement_factor = m / u
@@ -162,14 +180,20 @@ class FellegiSunter:
     def predict(
         self, id_pairs: Iterable[tuple[Any, Any]], table_a: pa.Table, table_b: pa.Table
     ) -> pa.Table:
-        """
-        Link records using learned parameters and thresholds.
+        """Link records from two tables using learned parameters.
 
-        Candidate generation:
-          - if block_on is provided: exact-equality blocking on those columns (simple Python join)
-          - else: Cartesian product (O(n*m), for small cases)
+        The records being linked are identified using the supplied ``id_pairs``.
+        The pairs of IDs are typically obtained through candidate generation
+        techniques (blocking, filtering, etc.). If an ID does not exist in
+        either table, a ``KeyError`` is raised and the process fails completely.
 
-        Returns Arrow table with per-field agreements, score, and decision.
+        :param id_pairs: an iterable sequence of pairs of record identifiers.
+        The first pair member identifies a record in ``table_a`` whereas the
+        second identifies a record in ``table_b``.
+        :param table_a: table containing the records that describe population A
+        :param table_b: table containing the records that describe population B
+
+        :return: an Arrow table with per-field agreements, score, and decision.
         """
         assert (
             self._params is not None and self._thresholds is not None
@@ -186,6 +210,21 @@ class FellegiSunter:
         order = np.argsort(-np.asarray(out["score"].to_numpy()))
         # take rows in desired order
         return out.take(pa.array(order, type=pa.int64()))
+
+    def save(self, filename: str) -> None:
+        assert (
+            self._params is not None and self._thresholds is not None
+        ), "model not trained. run fit() before saving."
+
+        with open(filename, "wb") as f:
+            saved_data = (
+                self._params,
+                self._thresholds,
+                self._mu,
+                self._lambda,
+                self._config,
+            )
+            pickle.dump(saved_data, f)
 
     def __check_config(
         self, table_a: pa.Table, table_b: pa.Table, ground_truth: pa.Table | None = None
@@ -224,21 +263,17 @@ class FellegiSunter:
     ) -> Sequence[tuple[str, str]]:
         if self._cmp_config is not None and len(self._cmp_config) > 0:
             return self._cmp_config
-
-        cmp_config = []
-        for left_col, right_col in zip(table_a.column_names, table_b.column_names):
-            if left_col == self._config.left_id or right_col == self._config.right_id:
-                continue
-            if left_col == right_col:
-                cmp_config.append((left_col, right_col))
-        if len(cmp_config) == 0:
+        left_cols = [c for c in table_a.column_names if c != self._config.left_id]
+        right_set = set(c for c in table_b.column_names if c != self._config.right_id)
+        common_cols = [c for c in left_cols if c in right_set]
+        if len(common_cols) == 0:
             raise ValueError(
                 "when mappings aren't configured, at least one column must be present in both tables"
             )
-        return cmp_config
+        return [(c, c) for c in common_cols]
 
     @staticmethod
-    def __id_to_index_mapping(t: pa.Table, id_col_name: str) -> dict[str, int]:
+    def __id_to_index_mapping(t: pa.Table, id_col_name: str) -> dict[Any, int]:
         return {id_: idx for idx, id_ in enumerate(t[id_col_name].to_pylist())}
 
     @staticmethod
@@ -265,6 +300,8 @@ class FellegiSunter:
     ) -> int:
         left_col, right_col = self._cmp_config[comparison_idx]
         left_value, right_value = left_row[left_col], right_row[right_col]
+        if left_value is None or right_value is None:
+            return 0
 
         # use only exact matches to simplify
         return int(left_value == right_value)
