@@ -1,4 +1,4 @@
-from matchescu.matching.config._record_linkage import RecordLinkageConfig
+from matchescu.matching.config._record_linkage import AttrCmpConfig, RecordLinkageConfig
 
 
-__all__ = ["RecordLinkageConfig"]
+__all__ = ["AttrCmpConfig", "RecordLinkageConfig"]

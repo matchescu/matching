@@ -10,8 +10,9 @@ from jellyfish import (
 from matchescu.matching.similarity._common import Similarity
 
 
-class StringSimilarity(Similarity, metaclass=ABCMeta):
-    def __init__(self, ignore_case: bool = False):
+class StringSimilarity(Similarity[float], metaclass=ABCMeta):
+    def __init__(self, ignore_case: bool = False, missing_both: float = 0.0, missing_one: float = 0.0):
+        super().__init__(missing_both, missing_one)
         self.__ignore_case = ignore_case
 
     @abstractmethod

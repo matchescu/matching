@@ -1,5 +1,15 @@
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Sequence, Generic
+
+from matchescu.matching.similarity import T, Similarity
+
+
+@dataclass
+class AttrCmpConfig(Generic[T]):
+    left: str | int
+    right: str | int
+    agreement_levels: list[T]
+    sim: Similarity[T]
 
 
 @dataclass(frozen=True)
