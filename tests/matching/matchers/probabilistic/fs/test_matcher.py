@@ -71,12 +71,11 @@ def test_amazon_google(amazon_google, amazon_google_config):
         amazon_google.train_split.ground_truth,
     )
 
-    result, clerical = fs.predict(
+    result = fs.predict(
         amazon_google.test_split.comparison_space, amazon_google.id_table
     )
-
     assert result
-    assert clerical
+    assert fs.clerical_review
 
     def _get_ref_ids(
         id_pair: tuple,
@@ -89,7 +88,7 @@ def test_amazon_google(amazon_google, amazon_google_config):
         )
 
     matching_ref_ids = set(map(_get_ref_ids, result))
-    clerical_ref_ids = set(map(_get_ref_ids, clerical))
+    clerical_ref_ids = set(map(_get_ref_ids, fs.clerical_review))
 
     from pyresolvemetrics import precision, recall, f1
 

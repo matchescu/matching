@@ -1,22 +1,10 @@
-"""
-Fellegi–Sunter record linkage implementation.
+"""Fellegi–Sunter record linkage implementation.
 
-Public API (Arrow-first):
-  - FellegiSunter.fit(A: pa.Table, B: pa.Table, truth: pa.Table, truth_label_col: str) -> FSParameters
-  - FellegiSunter.estimate_thresholds(A, B, truth, truth_label_col, alpha=0.01, beta=0.01) -> FSThresholds
-  - FellegiSunter.score_pairs(A, B, pairs: pa.Table[idA,idB]) -> pa.Table (adds per-field 0/1 and 'score')
-  - FellegiSunter.link(A, B, thresholds, block_on: List[str]|None, max_pairs: int|None) -> pa.Table
-  - FellegiSunter.parameters_report() -> pa.Table
-
-Notes:
-  - Inputs/outputs are Arrow tables. Use `pyarrow.interchange.from_dataframe(obj.__dataframe__())`
-    if you want to pass pandas/Polars without converting yourself.
-  - Agreement is binary per field: 1 if equal AND both non-null; else 0.
-  - Scoring: sum of log-likelihood field weights under independence.
-  - Thresholds: empirical quantiles to meet target FMR (alpha) and FNR (beta).
-
-This code favors clarity over ultimate performance. For large-scale linkage, replace
-candidate generation with proper blocking/join and vectorize comparisons in batches.
+The code relies on other core constructs in the ``matchescu`` framework such as
+comparison spaces, ID tables and similarity functions. The model requires
+discrete similarity values (i.e. approximating continuous real numbers to a
+limited number of choices). See the ``matchescu.matching.similarity.BucketedSimilarity``
+class for details on how this is accomplished.
 """
 
 from __future__ import annotations
@@ -24,7 +12,7 @@ from __future__ import annotations
 import pickle
 from dataclasses import dataclass
 from functools import partial
-from typing import Dict, Iterable, Sequence, Any, Optional, Literal
+from typing import Dict, Iterable, Sequence, Any, Optional
 
 import numpy as np
 import pyarrow as pa
@@ -57,21 +45,20 @@ class FSThresholds:
     lower: float
 
 
-# ------------------------------
-# Core implementation
-# ------------------------------
-
-
-def eq_casefold(a: str, b: str) -> Literal[0, 1]:
-    if a is None or b is None:
-        return 0
-    a = str(a).casefold().strip()
-    b = str(b).casefold().strip()
-    return 1 if a == b else 0
-
-
 class FellegiSunter:
-    """Canonical Fellegi-Sunter record linkage using exact matches."""
+    """Canonical Fellegi-Sunter record linkage implementation.
+
+    This implementation of the model supports basic similarity functions that
+    conform to the ``matchescu.matching.similarity`` API, including all
+    ``Bucketed*`` similarity functions available in that package.
+
+    Initialise an instance of this class, then call ``fit`` to compute the
+    optimal linkage rule for a dataset. Then, use the ``predict`` method on new
+    data to apply the previously computed optimal linkage rule.
+    After each call to predict, the ``clerical_review`` property contains an
+    updated set of ``EntityReferenceIdentifier`` pairs representing the pairs of
+    entity references that should be reviewed by a human clerk.
+    """
 
     __L_PREFIX = "l_"
     __R_PREFIX = "r_"
@@ -92,6 +79,7 @@ class FellegiSunter:
         self._thresholds = thresholds
         self._mu: float = mu
         self._lambda: float = lambda_
+        self.__clerical_review: set[tuple[Any, Any]] | None = None
 
     @property
     def config(self) -> RecordLinkageConfig:
@@ -171,15 +159,22 @@ class FellegiSunter:
             )
 
         self._params = FSParameters(
-            cmp_stats, float((labels == 1).astype(dtype=np.int8).mean())
+            cmp_stats, float(np.asarray(labels == 1, dtype=np.int8).mean())
         )
         scored_cmp_table = self.__compute_scores(cmp_table)
         self._thresholds = self.__compute_thresholds(scored_cmp_table, labels)
         return self
 
+    @property
+    def clerical_review(self) -> set[tuple[Any, Any]]:
+        assert (
+            self.__clerical_review is not None
+        ), "run predict() before requesting clerical_review pairs"
+        return self.__clerical_review
+
     def predict(
         self, id_pairs: BinaryComparisonSpace, id_table: IdTable
-    ) -> tuple[set[tuple[Any, Any]], set[tuple[Any, Any]]]:
+    ) -> set[tuple[Any, Any]]:
         """Link records and return a set of linked (left_id_label, right_id_label) using learned parameters.
 
         The records being linked are identified using the supplied ``id_pairs``.
@@ -192,27 +187,28 @@ class FellegiSunter:
         second identifies a record in ``table_b``.
         :param id_table: mapping from ID to entity reference
 
-        :return: a set of linked (left_id_label, right_id_label) pairs.
+        :return: set of linked (left_id, right_id) pairs.
         """
         assert (
             self._params is not None and self._thresholds is not None
         ), "model not fit. run fit() first."
+        self.__clerical_review = None
         cmp_table = self.__get_comparison_table(id_pairs, id_table)
         scored = self.__compute_scores(cmp_table)
         decisions = [
             self.__decide(s, self._thresholds) for s in scored["score"].to_pylist()
         ]
 
-        matches, clerical = set(), set()
+        matches, self.__clerical_review = set(), set()
         for i, decision in enumerate(decisions):
             if decision == "non-link":
                 continue
             id_pair = (cmp_table["l_id"][i].as_py(), cmp_table["r_id"][i].as_py())
             if decision == "clerical":
-                clerical.add(id_pair)
+                self.__clerical_review.add(id_pair)
             else:
                 matches.add(id_pair)
-        return matches, clerical
+        return matches
 
     def save(self, filename: str) -> None:
         assert (
