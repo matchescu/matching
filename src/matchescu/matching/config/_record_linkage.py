@@ -1,5 +1,5 @@
-from dataclasses import dataclass, field
-from typing import Sequence, Generic
+from dataclasses import dataclass
+from typing import Generic
 
 from matchescu.matching.similarity import T, Similarity
 
@@ -17,4 +17,4 @@ class RecordLinkageConfig:
     left_id: str
     right_id: str
     ground_truth_label_col: str
-    col_comparison_config: Sequence[tuple[str, str]] = field(default_factory=list)
+    col_comparison_config: list[AttrCmpConfig[float]]

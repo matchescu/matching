@@ -122,18 +122,17 @@ class FellegiSunter:
     ) -> "FellegiSunter":
         """Compute the parameters and thresholds defined in the F-S model.
 
-        :param table_a: table containing the records that describe population A
-        :param table_b: table containing the records that describe population B
-        :param ground_truth: a table that contains 3 columns: record identifies
-        from table A, record identifiers from table B and labels specifying
-        either a match (``1``) or a mismatch (``0``) between the records
-        identified using the first two columns.
+        :param comparison_space: a list of pairs of IDs to compare
+        :param id_table: a lookup table which maps IDs to entity references
+        :param ground_truth: a set of ID pairs that constitute observed good
+            matches
         :param smooth: smoothing factor (helps with division by zero)
 
         :return: the current instance of the matcher with 'trained' parameters
         and thresholds. Enables the user to write fluent code such as
         ``FellegiSunter(config).fit(train_a, train_b, truth).predict(comparisons, test_a, test_b)``.
         """
+
         assert len(self._cmp_config) > 0
         id_pairs = list(comparison_space)
         cmp_table = self.__get_comparison_table(comparison_space, id_table)
@@ -145,12 +144,11 @@ class FellegiSunter:
         for i, config in enumerate(self._cmp_config):
             col_name = self.__cmp_idx_col_name(i)
             cmp_results = np.asarray(cmp_table[col_name].to_numpy())
-            # observed outcomes for this comparison
-            levels = np.unique(cmp_results)
-            K = len(levels)
+
+            K = len(config.agreement_levels)
             # count the occurrence of each level within real links and real non-links
-            counts_m = np.array([np.sum(cmp_results[M] == v) for v in levels])
-            counts_u = np.array([np.sum(cmp_results[U] == v) for v in levels])
+            counts_m = np.array([np.sum(cmp_results[M] == v) for v in config.agreement_levels])
+            counts_u = np.array([np.sum(cmp_results[U] == v) for v in config.agreement_levels])
             # compute likelihoods of each level within real links and real non-links
             clip = partial(np.clip, a_min=self.__NEAR_ZERO, a_max=self.__NEAR_ONE)
             m_probs = clip((counts_m + smooth) / (counts_m.sum() + K * smooth))
@@ -159,9 +157,9 @@ class FellegiSunter:
             bayesian_factors = m_probs / u_probs
             # weights are easier to work with (sums, no overflows)
             weights = np.log2(bayesian_factors)
-            level_to_index = {v: i for i, v in enumerate(levels.tolist())}
+            level_to_index = {v: i for i, v in enumerate(config.agreement_levels)}
             cmp_stats[col_name] = FSComparisonStats(
-                levels, m_probs, u_probs, weights, level_to_index
+                np.array(config.agreement_levels), m_probs, u_probs, weights, level_to_index
             )
 
         self._params = FSParameters(
@@ -278,13 +276,13 @@ class FellegiSunter:
                 schema.append((name, col.type))
         return pa.table(arrays, names=[n for n, _ in schema])
 
-    def __is_match(
+    def __compute_similarity(
         self, left_row: EntityReference, right_row: EntityReference, comparison_idx: int
-    ) -> int:
-        left_col, right_col = self._cmp_config[comparison_idx]
-        left_value, right_value = left_row[left_col], right_row[right_col]
+    ) -> float:
+        attr_cmp = self._cmp_config[comparison_idx]
+        left_value, right_value = left_row[attr_cmp.left], right_row[attr_cmp.right]
 
-        return eq_casefold(left_value, right_value)
+        return attr_cmp.sim(left_value, right_value)
 
     def __cmp_id_col_names(self) -> tuple[str, str]:
         return f"{self.__L_PREFIX}id", f"{self.__R_PREFIX}id"
@@ -296,12 +294,12 @@ class FellegiSunter:
     def __cmp_config_fields(
         self, table_a: pa.Table, table_b: pa.Table
     ) -> Iterable[pa.Field]:
-        for left_col, right_col in self._cmp_config:
-            yield table_a.schema.field(left_col).with_name(
-                f"{self.__L_PREFIX}{left_col}"
+        for attr_cmp in self._cmp_config:
+            yield table_a.schema.field(attr_cmp.left).with_name(
+                f"{self.__L_PREFIX}{attr_cmp.left}"
             )
-            yield table_b.schema.field(right_col).with_name(
-                f"{self.__R_PREFIX}{right_col}"
+            yield table_b.schema.field(attr_cmp.right).with_name(
+                f"{self.__R_PREFIX}{attr_cmp.right}"
             )
 
     def __get_comparison_table(
@@ -317,16 +315,16 @@ class FellegiSunter:
                 lid_col: left_row.id.label,
                 rid_col: right_row.id.label,
             }
-            for left_col, right_col in self._cmp_config:
+            for attr_cmp in self._cmp_config:
                 comparison_result.update(
                     {
-                        f"{self.__L_PREFIX}{left_col}": left_row[left_col],
-                        f"{self.__R_PREFIX}{right_col}": right_row[right_col],
+                        f"{self.__L_PREFIX}{attr_cmp.left}": left_row[attr_cmp.left],
+                        f"{self.__R_PREFIX}{attr_cmp.right}": right_row[attr_cmp.right],
                     }
                 )
             comparison_result.update(
                 {
-                    self.__cmp_idx_col_name(cmp_idx): self.__is_match(
+                    self.__cmp_idx_col_name(cmp_idx): self.__compute_similarity(
                         left_row, right_row, cmp_idx
                     )
                     for cmp_idx in range(len(self._cmp_config))

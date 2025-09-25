@@ -1,9 +1,11 @@
+import numpy as np
 import pytest
 
 from matchescu.extraction import Traits
-from matchescu.matching.config import RecordLinkageConfig
+from matchescu.matching.config import RecordLinkageConfig, AttrCmpConfig
 from matchescu.matching.evaluation.datasets import MagellanDataset
 import matchescu.matching.matchers as m
+from matchescu.matching.similarity._string import BucketedLevenshteinDistance, BucketedLevenshteinSimilarity
 from matchescu.typing import EntityReferenceIdentifier
 
 
@@ -17,8 +19,13 @@ def rl_config(request) -> RecordLinkageConfig:
 
 @pytest.fixture
 def amazon_google_config():
-    col_config = [("title", "title"), ("manufacturer", "manufacturer")]
-    return RecordLinkageConfig("id", "id", "label", col_config)
+    possible_values = np.linspace(0.0, 1.0, 11).tolist()
+    sim = BucketedLevenshteinSimilarity(True)
+    attr_comparisons = [
+        AttrCmpConfig("title", "title", possible_values, sim),
+        AttrCmpConfig("manufacturer", "manufacturer", possible_values, sim),
+    ]
+    return RecordLinkageConfig("id", "id", "label", attr_comparisons)
 
 
 @pytest.fixture
