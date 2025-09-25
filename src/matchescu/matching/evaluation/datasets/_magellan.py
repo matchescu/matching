@@ -43,8 +43,8 @@ class MagellanDataset:
                 raise FileNotFoundError(path)
 
         self.__id_table: IdTable = InMemoryIdTable()
-        self.__left_source: str | None = None
-        self.__right_source: str | None = None
+        self.__left_source = self.__left_table_path.stem
+        self.__right_source = self.__right_table_path.stem
         self._train: MagellanDataset.Split | None = None
         self._valid: MagellanDataset.Split | None = None
         self._test: MagellanDataset.Split | None = None

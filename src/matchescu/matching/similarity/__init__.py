@@ -1,4 +1,4 @@
-from matchescu.matching.similarity._common import Similarity
+from matchescu.matching.similarity._common import Similarity, T
 from matchescu.matching.similarity._exact_match import ExactMatch
 from matchescu.matching.similarity._learned_levenshtein import LevenshteinLearner
 from matchescu.matching.similarity._numeric import (
@@ -16,6 +16,7 @@ from matchescu.matching.similarity._string import (
 
 
 __all__ = [
+    "T",
     "BoundedNumericDifferenceSimilarity",
     "Similarity",
     "ExactMatch",

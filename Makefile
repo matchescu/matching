@@ -22,6 +22,7 @@ clean:
 	rm -rfv .venv dist
 
 format: bootstrap
+	poetry run ruff check --fix .
 	poetry run black .
 
 check: bootstrap

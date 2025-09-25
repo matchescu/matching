@@ -24,30 +24,6 @@ def test_load_right(sut, ag_traits, ag_id_factory):
     assert len(ds.id_table) == 3226
 
 
-def test_load_splits_needs_right(sut, ag_traits, ag_id_factory):
-    sut.load_left(ag_traits, partial(ag_id_factory, source="tableA"))
-
-    with pytest.raises(ValueError) as err_proxy:
-        sut.load_splits()
-
-    assert (
-        str(err_proxy.value)
-        == "left + right data sources must be loaded before loading splits"
-    )
-
-
-def test_load_splits_needs_left(sut, ag_traits, ag_id_factory):
-    sut.load_right(ag_traits, partial(ag_id_factory, source="tableB"))
-
-    with pytest.raises(ValueError) as err_proxy:
-        sut.load_splits()
-
-    assert (
-        str(err_proxy.value)
-        == "left + right data sources must be loaded before loading splits"
-    )
-
-
 def test_load_splits(sut, ag_traits, ag_id_factory):
     sut.load_left(ag_traits, partial(ag_id_factory, source="tableA"))
     sut.load_right(ag_traits, partial(ag_id_factory, source="tableB"))
