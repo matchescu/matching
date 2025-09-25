@@ -1,11 +1,11 @@
-import numpy as np
 import pytest
 
 from matchescu.extraction import Traits
 from matchescu.matching.config import RecordLinkageConfig, AttrCmpConfig
 from matchescu.matching.evaluation.datasets import MagellanDataset
 import matchescu.matching.matchers as m
-from matchescu.matching.similarity._string import BucketedLevenshteinSimilarity
+from matchescu.matching.similarity._numeric import BucketedNorm
+from matchescu.matching.similarity._string import BucketedJaccard
 from matchescu.typing import EntityReferenceIdentifier
 
 
@@ -19,11 +19,25 @@ def rl_config(request) -> RecordLinkageConfig:
 
 @pytest.fixture
 def amazon_google_config():
-    possible_values = np.linspace(0.0, 1.0, 11).tolist()
-    sim = BucketedLevenshteinSimilarity(True)
+    strsim = BucketedJaccard(False, 5)
+    price_sim = BucketedNorm(
+        {
+            0.0: 1.0,
+            0.1: 0.9,
+            0.11: 0.8,
+            0.12: 0.7,
+            0.13: 0.6,
+            0.14: 0.5,
+            0.15: 0.4,
+            0.151: 0.3,
+            0.152: 0.2,
+            0.153: 0.1,
+        }
+    )
     attr_comparisons = [
-        AttrCmpConfig("title", "title", possible_values, sim),
-        AttrCmpConfig("manufacturer", "manufacturer", possible_values, sim),
+        AttrCmpConfig("title", "title", strsim.agreement_levels, strsim),
+        AttrCmpConfig("manufacturer", "manufacturer", strsim.agreement_levels, strsim),
+        AttrCmpConfig("price", "price", price_sim.agreement_levels, price_sim),
     ]
     return RecordLinkageConfig("id", "id", "label", attr_comparisons)
 
@@ -57,22 +71,32 @@ def test_amazon_google(amazon_google, amazon_google_config):
         amazon_google.train_split.ground_truth,
     )
 
-    result = fs.predict(
+    result, clerical = fs.predict(
         amazon_google.test_split.comparison_space, amazon_google.id_table
     )
 
-    assert result is not None
+    assert result
+    assert clerical
 
-    matches = set(
-        (
-            EntityReferenceIdentifier(left_id, amazon_google.left_source),
-            EntityReferenceIdentifier(right_id, amazon_google.right_source),
+    def _get_ref_ids(
+        id_pair: tuple,
+    ) -> tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]:
+        return tuple(
+            EntityReferenceIdentifier(*arg)
+            for arg in zip(
+                id_pair, [amazon_google.left_source, amazon_google.right_source]
+            )
         )
-        for left_id, right_id in result
-    )
+
+    matching_ref_ids = set(map(_get_ref_ids, result))
+    clerical_ref_ids = set(map(_get_ref_ids, clerical))
 
     from pyresolvemetrics import precision, recall, f1
 
-    assert precision(amazon_google.test_split.ground_truth, matches) > 0
-    assert recall(amazon_google.test_split.ground_truth, matches) > 0
-    assert f1(amazon_google.test_split.ground_truth, matches) > 0
+    gt = amazon_google.test_split.ground_truth - clerical_ref_ids
+    results = {
+        "p": precision(gt, matching_ref_ids),
+        "r": recall(gt, matching_ref_ids),
+        "f1": f1(gt, matching_ref_ids),
+    }
+    assert results

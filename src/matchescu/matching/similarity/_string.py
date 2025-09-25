@@ -60,10 +60,6 @@ class BucketedStringSimilarity(BucketedSimilarity):
             missing_either if missing_either is not None else self._MISSING_EITHER,
         )
 
-    @property
-    def agreement_levels(self) -> list[float]:
-        return self._values
-
 
 class LevenshteinDistance(StringSimilarity):
     def _compute_string_similarity(self, x: str, y: str) -> float:
@@ -130,21 +126,15 @@ class Jaccard(StringSimilarity):
     def __init__(
         self,
         ignore_case: bool = False,
-        threshold: int | None = None,
-        missing_both: float = -1.0,
-        missing_either: float = -0.5,
+        ngram_size: int | None = None,
+        missing_both: float = 0.0,
+        missing_either: float = 0.0,
     ):
-        super().__init__(ignore_case)
-        self.__threshold = threshold
+        super().__init__(ignore_case, missing_both, missing_either)
+        self.__ngram_size = ngram_size
 
     def _compute_string_similarity(self, x: str, y: str) -> float:
-        y_len = len(y)
-        x_len = len(x)
-        threshold = self.__threshold or min(x_len, y_len)
-        if threshold == 0:
-            return 0 if x_len > 0 or y_len > 0 else 1
-
-        return jaccard_similarity(x, y, threshold)
+        return jaccard_similarity(x, y, self.__ngram_size)
 
 
 class BucketedJaccard(BucketedStringSimilarity):

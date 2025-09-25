@@ -179,7 +179,7 @@ class FellegiSunter:
 
     def predict(
         self, id_pairs: BinaryComparisonSpace, id_table: IdTable
-    ) -> set[tuple[Any, Any]]:
+    ) -> tuple[set[tuple[Any, Any]], set[tuple[Any, Any]]]:
         """Link records and return a set of linked (left_id_label, right_id_label) using learned parameters.
 
         The records being linked are identified using the supplied ``id_pairs``.
@@ -203,12 +203,16 @@ class FellegiSunter:
             self.__decide(s, self._thresholds) for s in scored["score"].to_pylist()
         ]
 
-        result = set()
+        matches, clerical = set(), set()
         for i, decision in enumerate(decisions):
-            if decision != "link":
+            if decision == "non-link":
                 continue
-            result.add((cmp_table["l_id"][i].as_py(), cmp_table["r_id"][i].as_py()))
-        return result
+            id_pair = (cmp_table["l_id"][i].as_py(), cmp_table["r_id"][i].as_py())
+            if decision == "clerical":
+                clerical.add(id_pair)
+            else:
+                matches.add(id_pair)
+        return matches, clerical
 
     def save(self, filename: str) -> None:
         assert (
