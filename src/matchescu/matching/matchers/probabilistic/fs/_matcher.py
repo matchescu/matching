@@ -147,8 +147,12 @@ class FellegiSunter:
 
             K = len(config.agreement_levels)
             # count the occurrence of each level within real links and real non-links
-            counts_m = np.array([np.sum(cmp_results[M] == v) for v in config.agreement_levels])
-            counts_u = np.array([np.sum(cmp_results[U] == v) for v in config.agreement_levels])
+            counts_m = np.array(
+                [np.sum(cmp_results[M] == v) for v in config.agreement_levels]
+            )
+            counts_u = np.array(
+                [np.sum(cmp_results[U] == v) for v in config.agreement_levels]
+            )
             # compute likelihoods of each level within real links and real non-links
             clip = partial(np.clip, a_min=self.__NEAR_ZERO, a_max=self.__NEAR_ONE)
             m_probs = clip((counts_m + smooth) / (counts_m.sum() + K * smooth))
@@ -159,7 +163,11 @@ class FellegiSunter:
             weights = np.log2(bayesian_factors)
             level_to_index = {v: i for i, v in enumerate(config.agreement_levels)}
             cmp_stats[col_name] = FSComparisonStats(
-                np.array(config.agreement_levels), m_probs, u_probs, weights, level_to_index
+                np.array(config.agreement_levels),
+                m_probs,
+                u_probs,
+                weights,
+                level_to_index,
             )
 
         self._params = FSParameters(

@@ -37,26 +37,49 @@ class StringSimilarity(Similarity[float], metaclass=ABCMeta):
         return self._compute_string_similarity(x, y)
 
 
+class BucketedStringSimilarity(BucketedSimilarity):
+    # the wrapped similarity is in [0, 1]
+    _BUCKETS = [round(float(x), 1) for x in np.linspace(0.0, 1.0, 11)]
+    _CATCH_ALL = 0.0
+    _MISSING_BOTH = -1.0
+    _MISSING_EITHER = -0.5
+
+    def __init__(
+        self,
+        sim: StringSimilarity,
+        buckets: Union[Mapping[float, float], Iterable[float]] | None = None,
+        catch_all: float | None = None,
+        missing_both: float | None = None,
+        missing_either: float | None = None,
+    ) -> None:
+        super().__init__(
+            sim,
+            buckets or self._BUCKETS,
+            catch_all if catch_all is not None else self._CATCH_ALL,
+            missing_both if missing_both is not None else self._MISSING_BOTH,
+            missing_either if missing_either is not None else self._MISSING_EITHER,
+        )
+
+    @property
+    def agreement_levels(self) -> list[float]:
+        return self._values
+
+
 class LevenshteinDistance(StringSimilarity):
     def _compute_string_similarity(self, x: str, y: str) -> float:
         return levenshtein_distance(x, y)
 
 
-class BucketedLevenshteinDistance(BucketedSimilarity):
+class BucketedLevenshteinDistance(BucketedStringSimilarity):
     def __init__(
         self,
         buckets: Union[Mapping[float, float], Iterable[float]],
-        catch_all: float = 0.0,
-        missing_both: float = -1.0,
-        missing_either: float = -0.5,
         ignore_case: bool = False,
     ) -> None:
         super().__init__(
-            LevenshteinDistance(ignore_case, missing_both, missing_either),
+            LevenshteinDistance(ignore_case, self._MISSING_BOTH, self._MISSING_EITHER),
             buckets,
-            catch_all,
-            missing_both,
-            missing_either,
+            -1.0,
         )
 
 
@@ -74,24 +97,10 @@ class LevenshteinSimilarity(StringSimilarity):
         return round(1 - relative_distance, ndigits=2)
 
 
-class BucketedLevenshteinSimilarity(BucketedSimilarity):
-    # the wrapped similarity is in [0, 1]
-    __BUCKETS = np.linspace(0.0, 1.0, 11).tolist()
-    __CATCH_ALL = __MISSING_BOTH = -1.0
-    __MISSING_EITHER = -0.5
-
-    def __init__(
-        self,
-        ignore_case: bool = False,
-    ) -> None:
+class BucketedLevenshteinSimilarity(BucketedStringSimilarity):
+    def __init__(self, ignore_case: bool = False) -> None:
         super().__init__(
-            LevenshteinSimilarity(
-                ignore_case, self.__MISSING_BOTH, self.__MISSING_EITHER
-            ),
-            self.__BUCKETS,
-            self.__CATCH_ALL,
-            self.__MISSING_BOTH,
-            self.__MISSING_EITHER,
+            LevenshteinSimilarity(ignore_case, self._MISSING_BOTH, self._MISSING_EITHER)
         )
 
 
@@ -100,13 +109,31 @@ class Jaro(StringSimilarity):
         return jaro_similarity(x, y)
 
 
+class BucketedJaro(BucketedStringSimilarity):
+    def __init__(self, ignore_case: bool = False) -> None:
+        super().__init__(Jaro(ignore_case, self._MISSING_BOTH, self._MISSING_EITHER))
+
+
 class JaroWinkler(StringSimilarity):
     def _compute_string_similarity(self, x: str, y: str) -> float:
         return jaro_winkler_similarity(x, y)
 
 
+class BucketedJaroWinkler(BucketedStringSimilarity):
+    def __init__(self, ignore_case: bool = False) -> None:
+        super().__init__(
+            JaroWinkler(ignore_case, self._MISSING_BOTH, self._MISSING_EITHER)
+        )
+
+
 class Jaccard(StringSimilarity):
-    def __init__(self, ignore_case: bool = False, threshold: int | None = None):
+    def __init__(
+        self,
+        ignore_case: bool = False,
+        threshold: int | None = None,
+        missing_both: float = -1.0,
+        missing_either: float = -0.5,
+    ):
         super().__init__(ignore_case)
         self.__threshold = threshold
 
@@ -118,3 +145,10 @@ class Jaccard(StringSimilarity):
             return 0 if x_len > 0 or y_len > 0 else 1
 
         return jaccard_similarity(x, y, threshold)
+
+
+class BucketedJaccard(BucketedStringSimilarity):
+    def __init__(self, ignore_case: bool = False, threshold: int | None = None) -> None:
+        super().__init__(
+            Jaccard(ignore_case, threshold, self._MISSING_BOTH, self._MISSING_EITHER)
+        )

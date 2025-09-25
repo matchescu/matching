@@ -5,7 +5,7 @@ from matchescu.extraction import Traits
 from matchescu.matching.config import RecordLinkageConfig, AttrCmpConfig
 from matchescu.matching.evaluation.datasets import MagellanDataset
 import matchescu.matching.matchers as m
-from matchescu.matching.similarity._string import BucketedLevenshteinDistance, BucketedLevenshteinSimilarity
+from matchescu.matching.similarity._string import BucketedLevenshteinSimilarity
 from matchescu.typing import EntityReferenceIdentifier
 
 

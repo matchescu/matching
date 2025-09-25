@@ -66,7 +66,7 @@ class BucketedSimilarity(Similarity[float]):
         )
         # Sort edges ascending; if duplicates exist, the last value wins via dict semantics
         self.__edges = sorted(rules.keys())
-        self.__values = [rules[e] for e in self.__edges]
+        self._values = [rules[e] for e in self.__edges]
         self.__catch_all = float(catch_all)
         self.__wrapped = wrapped
 
