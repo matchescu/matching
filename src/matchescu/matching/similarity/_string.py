@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any
+from typing import Any, Union, Mapping, Iterable
 
+import numpy as np
 from jellyfish import (
     jaccard_similarity,
     jaro_similarity,
@@ -8,10 +9,16 @@ from jellyfish import (
     levenshtein_distance,
 )
 from matchescu.matching.similarity._common import Similarity
+from matchescu.matching.similarity._bucketed import BucketedSimilarity
 
 
 class StringSimilarity(Similarity[float], metaclass=ABCMeta):
-    def __init__(self, ignore_case: bool = False, missing_both: float = 0.0, missing_one: float = 0.0):
+    def __init__(
+        self,
+        ignore_case: bool = False,
+        missing_both: float = 0.0,
+        missing_one: float = 0.0,
+    ):
         super().__init__(missing_both, missing_one)
         self.__ignore_case = ignore_case
 
@@ -35,6 +42,24 @@ class LevenshteinDistance(StringSimilarity):
         return levenshtein_distance(x, y)
 
 
+class BucketedLevenshteinDistance(BucketedSimilarity):
+    def __init__(
+        self,
+        buckets: Union[Mapping[float, float], Iterable[float]],
+        catch_all: float = 0.0,
+        missing_both: float = -1.0,
+        missing_either: float = -0.5,
+        ignore_case: bool = False,
+    ) -> None:
+        super().__init__(
+            LevenshteinDistance(ignore_case, missing_both, missing_either),
+            buckets,
+            catch_all,
+            missing_both,
+            missing_either,
+        )
+
+
 class LevenshteinSimilarity(StringSimilarity):
     def _compute_string_similarity(self, x: str, y: str) -> float:
         m = len(x)
@@ -47,6 +72,27 @@ class LevenshteinSimilarity(StringSimilarity):
 
         relative_distance = levenshtein_distance(x, y) / max(m, n)
         return round(1 - relative_distance, ndigits=2)
+
+
+class BucketedLevenshteinSimilarity(BucketedSimilarity):
+    # the wrapped similarity is in [0, 1]
+    __BUCKETS = np.linspace(0.0, 1.0, 11).tolist()
+    __CATCH_ALL = __MISSING_BOTH = -1.0
+    __MISSING_EITHER = -0.5
+
+    def __init__(
+        self,
+        ignore_case: bool = False,
+    ) -> None:
+        super().__init__(
+            LevenshteinSimilarity(
+                ignore_case, self.__MISSING_BOTH, self.__MISSING_EITHER
+            ),
+            self.__BUCKETS,
+            self.__CATCH_ALL,
+            self.__MISSING_BOTH,
+            self.__MISSING_EITHER,
+        )
 
 
 class Jaro(StringSimilarity):

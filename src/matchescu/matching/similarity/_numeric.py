@@ -1,12 +1,11 @@
 from abc import ABCMeta, abstractmethod
-from collections.abc import Collection
 from decimal import Decimal
 from typing import Any, Iterable, Mapping, Union
-from bisect import bisect_left
 
 import numpy as np
 
-from matchescu.matching.similarity import Similarity
+from matchescu.matching.similarity._common import Similarity
+from matchescu.matching.similarity._bucketed import BucketedSimilarity
 
 
 class NumericSimilarity(Similarity[float], metaclass=ABCMeta):
@@ -51,17 +50,8 @@ class BoundedNumericDifferenceSimilarity(NumericSimilarity):
         return self.__steps[idx]
 
 
-class BucketedNorm(NumericSimilarity):
-    """Absolute-difference similarity with user-defined edges.
-
-    This similarity computes the absolute difference between two numbers. Then
-    the resulting value is placed in a bucket. This calls for comparing the
-    value with the edges of the buckets passed as input by the user. The largest
-    edge smaller than the norm is selected. The similarity function returns
-    either that edge, ``catch_all`` (if the norm is larger than the max
-    configured bucket). This is the same as setting the largest bucket edge to
-    ``float("inf")`` and mapping it to the ``catch_all`` value.
-    """
+class BucketedNorm(BucketedSimilarity):
+    """Bucketed similarity applied to norms."""
 
     def __init__(
         self,
@@ -86,26 +76,10 @@ class BucketedNorm(NumericSimilarity):
         :raises: ``AssertionError`` if ``buckets`` is not of a supported type or is
             empty.
         """
-        super().__init__(missing_both, missing_either)
-        assert isinstance(buckets, Mapping) or (
-            isinstance(buckets, Collection)
-            and not isinstance(buckets, (str, bytes, bytearray, memoryview))
-        ), f"unsupported 'buckets' type: '{type(buckets).__name__}'"
-        assert len(buckets) > 0, "'buckets' is empty"
-
-        rules = (
-            {float(k): float(v) for k, v in buckets.items()}
-            if isinstance(buckets, Mapping)
-            else {float(x): float(x) for x in buckets}
+        super().__init__(
+            Norm(missing_both, missing_either),
+            buckets,
+            catch_all,
+            missing_both,
+            missing_either,
         )
-        # Sort edges ascending; if duplicates exist, the last value wins via dict semantics
-        self.__edges = sorted(rules.keys())
-        self.__values = [rules[e] for e in self.__edges]
-        self.__catch_all = float(catch_all)
-
-    def _compute_float_similarity(self, a: float, b: float) -> float:
-        d = abs(float(a) - float(b))
-        idx = bisect_left(self.__edges, d)
-
-        # If d > max edge, idx == len(edges),  use catch_all
-        return self.__values[idx] if 0 <= idx < len(self.__edges) else self.__catch_all
