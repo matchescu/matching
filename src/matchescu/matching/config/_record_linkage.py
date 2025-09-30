@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import Generic
 
+from matchescu.extraction import Traits
 from matchescu.matching.similarity import T, Similarity
 
 
@@ -14,7 +15,6 @@ class AttrCmpConfig(Generic[T]):
 
 @dataclass(frozen=True)
 class RecordLinkageConfig:
-    left_id: str
-    right_id: str
-    ground_truth_label_col: str
+    left_traits: Traits
+    right_traits: Traits
     col_comparison_config: list[AttrCmpConfig[float]]

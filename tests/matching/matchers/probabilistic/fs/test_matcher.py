@@ -1,3 +1,5 @@
+from functools import partial
+
 import pytest
 
 from matchescu.extraction import Traits
@@ -39,24 +41,29 @@ def amazon_google_config():
         AttrCmpConfig("manufacturer", "manufacturer", strsim.agreement_levels, strsim),
         AttrCmpConfig("price", "price", price_sim.agreement_levels, price_sim),
     ]
-    return RecordLinkageConfig("id", "id", "label", attr_comparisons)
+    extraction_traits = (
+        Traits().int(["id"]).string(["title", "manufacturer"]).currency(["price"])
+    )
+    return RecordLinkageConfig(extraction_traits, extraction_traits, attr_comparisons)
 
 
 @pytest.fixture
-def amazon_google(data_dir, amazon_google_config):
+def id_col():
+    return "id"
+
+
+@pytest.fixture
+def amazon_google(data_dir, amazon_google_config, id_col):
     ret = MagellanDataset(data_dir / "amazon_google_exp_data")
 
+    def ref_id(records, source):
+        return EntityReferenceIdentifier(records[0][id_col], source)
+
     ret.load_left(
-        Traits().int(["id"]).string(["title", "manufacturer"]).currency(["price"]),
-        lambda records: EntityReferenceIdentifier(
-            records[0][amazon_google_config.left_id], ret.left_source
-        ),
+        amazon_google_config.left_traits, partial(ref_id, source=ret.left_source)
     )
     ret.load_right(
-        Traits().int(["id"]).string(["title", "manufacturer"]).currency(["price"]),
-        lambda records: EntityReferenceIdentifier(
-            records[0][amazon_google_config.right_id], ret.right_source
-        ),
+        amazon_google_config.right_traits, partial(ref_id, source=ret.right_source)
     )
     ret.load_splits()
 
