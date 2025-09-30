@@ -12,7 +12,7 @@ from __future__ import annotations
 import pickle
 from dataclasses import dataclass
 from functools import partial
-from typing import Dict, Iterable, Sequence, Any, Optional
+from typing import Dict, Iterable, Any, Optional
 
 import numpy as np
 import pyarrow as pa
@@ -224,42 +224,6 @@ class FellegiSunter:
                 self._config,
             )
             pickle.dump(saved_data, f)
-
-    def __check_config(
-        self, table_a: pa.Table, table_b: pa.Table, ground_truth: pa.Table | None = None
-    ) -> None:
-        if self._config.left_id not in table_a.column_names:
-            raise KeyError(
-                f"expected ID column '{self._config.left_id}' to be present in the left table"
-            )
-        if self._config.right_id not in table_b.column_names:
-            raise KeyError(
-                f"expected ID column '{self._config.right_id}' to be present in the right table"
-            )
-        if self._cmp_config is not None and len(self._cmp_config) > 0:
-            for left_col, right_col in self._cmp_config:
-                if left_col not in table_a.column_names:
-                    raise KeyError(
-                        f"expected column '{left_col}' to be present in the left table"
-                    )
-                if right_col not in table_b.column_names:
-                    raise KeyError(
-                        f"expected column '{right_col}' to be present in the right table"
-                    )
-
-    def __init_cmp_config(
-        self, table_a: pa.Table, table_b: pa.Table
-    ) -> Sequence[tuple[str, str]]:
-        if self._cmp_config is not None and len(self._cmp_config) > 0:
-            return self._cmp_config
-        left_cols = [c for c in table_a.column_names if c != self._config.left_id]
-        right_set = set(c for c in table_b.column_names if c != self._config.right_id)
-        common_cols = [c for c in left_cols if c in right_set]
-        if len(common_cols) == 0:
-            raise ValueError(
-                "when mappings aren't configured, at least one column must be present in both tables"
-            )
-        return [(c, c) for c in common_cols]
 
     @staticmethod
     def __id_to_index_mapping(t: pa.Table, id_col_name: str) -> dict[Any, int]:
