@@ -116,7 +116,11 @@ class JaroWinkler(StringSimilarity):
 
 
 class BucketedJaroWinkler(BucketedStringSimilarity):
-    def __init__(self, buckets: Mapping[float, float] | Iterable[float] | None, ignore_case: bool = False) -> None:
+    def __init__(
+        self,
+        buckets: Mapping[float, float] | Iterable[float] | None,
+        ignore_case: bool = False,
+    ) -> None:
         super().__init__(
             JaroWinkler(ignore_case, self._MISSING_BOTH, self._MISSING_EITHER),
             buckets or self._BUCKETS,
