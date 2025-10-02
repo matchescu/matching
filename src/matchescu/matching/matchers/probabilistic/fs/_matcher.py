@@ -26,7 +26,6 @@ from matchescu.typing import EntityReferenceIdentifier as RefId, EntityReference
 
 @dataclass(frozen=True)
 class FSComparisonStats:
-    level_values: np.ndarray  # shape (K,), e.g. np.array([0,1]) or np.array([-1,0,1])
     m_probs: np.ndarray  # shape (K,)
     u_probs: np.ndarray  # shape (K,)
     weights: np.ndarray  # shape (K,)
@@ -151,7 +150,6 @@ class FellegiSunter:
             weights = np.log2(bayesian_factors)
             level_to_index = {v: i for i, v in enumerate(config.agreement_levels)}
             cmp_stats[col_name] = FSComparisonStats(
-                np.array(config.agreement_levels),
                 m_probs,
                 u_probs,
                 weights,
@@ -318,7 +316,6 @@ class FellegiSunter:
             except KeyError:
                 raise KeyError(
                     f"Unseen level {raw_level!r} for comparison {col_name!r}. "
-                    f"Known levels: {stats.level_values.tolist()}"
                 ) from None
             s += float(stats.weights[idx])
         return float(s)
