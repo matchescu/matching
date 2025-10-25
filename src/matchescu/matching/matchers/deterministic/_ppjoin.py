@@ -1,6 +1,18 @@
 from typing import Callable, Optional
 
-from ppjoin import ppjoin
+try:
+    from ppjoin import ppjoin
+except ImportError:
+
+    class ppjoin(object):
+        @staticmethod
+        def whitespace_tokenizer(_):
+            return []
+
+        @staticmethod
+        def join(_, __):
+            return []
+
 
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable
