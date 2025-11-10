@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizerFast
 
-from matchescu.matching.ml.ditto._ref_adapter import to_text
+from matchescu.matching.matchers.ml.ditto._ref_adapter import to_text
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable
 from matchescu.typing import EntityReferenceIdentifier

@@ -23,12 +23,14 @@ from matchescu.extraction import (
     single_record,
 )
 from matchescu.matching.evaluation.datasets import MagellanDataset
-from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
-from matchescu.matching.ml.ditto._ditto_module import DittoModel
-from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
-from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
-from matchescu.matching.ml.ditto.training._logging import log
-from matchescu.matching.ml.ditto.training._magellan_config import MAGELLAN_CONFIG
+from matchescu.matching.matchers.ml.ditto._ditto_dataset import DittoDataset
+from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
+from ._trainer import DittoTrainer
+from ._training_evaluator import DittoTrainingEvaluator
+from ._logging import log
+from matchescu.matching.matchers.ml.ditto.training._magellan_config import (
+    MAGELLAN_CONFIG,
+)
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
 from matchescu.typing import (
@@ -69,7 +71,7 @@ def timer(start_message: str):
     yield
     time_end = time.time()
     duration = humanize.naturaldelta(timedelta(seconds=(time_end - time_start)))
-    log.info("%s time elapsed: %s seconds", start_message, duration)
+    log.info("%s time elapsed: %s", start_message, duration)
 
 
 def _extract_dataset(dataset_path: Path) -> tuple[IdTable, BinaryComparisonSpace, set]:

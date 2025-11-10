@@ -1,0 +1,19 @@
+{
+  "learningRate": 0.001,
+  "batchSize": 31,
+  "datasets": {
+    "abt-buy": {
+      "batchSize": 67,
+      "models": {
+        "roberta-base": {
+          "epochs": 1
+        }
+      }
+    }
+  },
+  "models": {
+    "distilbert-base-uncased": {
+      "epochs": 2
+    }
+  }
+}
