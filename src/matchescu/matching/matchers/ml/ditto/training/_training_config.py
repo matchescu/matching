@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass, field
 from os import PathLike
-from typing import Type
+from typing import Type, Any, Optional
 
 
 @dataclass
@@ -58,3 +58,14 @@ class DittoTrainingConfig(DatasetTrainingParams):
                 for key, config_node in config["datasets"].items()
             }
         return result
+
+    def get(
+        self,
+        property_name: str,
+        model: Optional[str] = None,
+        dataset: Optional[str] = None,
+    ) -> Any:
+        cfg = self.dataset_configs.get(dataset, self)
+        if model is not None:
+            cfg = cfg.model_configs.get(model, self.model_configs.get(model, self))
+        return cfg.__getattribute__(property_name)
