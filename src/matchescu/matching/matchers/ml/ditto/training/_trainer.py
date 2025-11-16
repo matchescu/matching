@@ -12,8 +12,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from transformers import get_linear_schedule_with_warmup
 
-from matchescu.matching.matchers.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
+from matchescu.matching.matchers.ml.ditto.training._datasets import DittoDataset
 from matchescu.matching.matchers.ml.ditto.training._training_evaluator import (
     DittoTrainingEvaluator,
 )

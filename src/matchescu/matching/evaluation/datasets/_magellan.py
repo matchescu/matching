@@ -136,3 +136,40 @@ class MagellanDataset:
         for left, right in gt:
             cs.put(left, right)
         return MagellanDataset.Split(cs, gt)
+
+
+class MagellanTraits:
+    __TRAIT_DICT = {
+        "ABT-BUY": Traits().string(["name", "description"]).currency(["price"]),
+        "AMAZON_GOOGLE": Traits().string(["title", "manufacturer"]).currency(["price"]),
+        "BEER": Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]),
+        "DBLP-ACM": Traits().string(["title", "authors", "venue"]).int(["year"]),
+        "DBLP-SCHOLAR": Traits().string(["title", "authors", "venue", "year"]),
+        "FODORS-ZAGAT": Traits()
+        .string(["name", "addr", "city", "phone", "type"])
+        .int(["class"]),
+        "ITUNES-AMAZON": Traits().string(
+            [
+                "Song_Name",
+                "Artist_Name",
+                "Album_Name",
+                "Genre",
+                "Price",
+                "CopyRight",
+                "Time",
+                "Released",
+            ]
+        ),
+        "WALMART-AMAZON": Traits()
+        .string(["title", "category", "brand", "modelno"])
+        .currency(["price"]),
+    }
+
+    def __getattr__(self, item: str) -> Traits:
+        return self[item]
+
+    def __getitem__(self, item: str) -> Traits:
+        assert isinstance(item, str)
+        key = item.upper()
+        assert key in self.__TRAIT_DICT
+        return self.__TRAIT_DICT[key]
