@@ -1,7 +1,12 @@
 import json
 from dataclasses import dataclass, field
 from os import PathLike
-from typing import Type, Any, Optional
+from pathlib import Path
+from typing import Type, Optional
+
+
+DEFAULT_MODEL_DIR = Path.cwd() / "models"
+DEFAULT_DATA_DIR = Path.cwd() / "data"
 
 
 @dataclass
@@ -18,7 +23,9 @@ class DatasetTrainingParams(ModelTrainingParams):
 
 
 @dataclass
-class DittoTrainingConfig(DatasetTrainingParams):
+class TrainingConfig(DatasetTrainingParams):
+    model_names: list[str] = field(default_factory=list)
+    dataset_names: list[str] = field(default_factory=list)
     dataset_configs: dict[str, DatasetTrainingParams] = field(default_factory=dict)
 
     @classmethod
@@ -37,35 +44,36 @@ class DittoTrainingConfig(DatasetTrainingParams):
         cls, config: dict, clazz: Type[T]
     ) -> T:
         result = cls.__read_model_training_params(config, clazz)
-        if "models" in config:
+        if "modelConfig" in config:
             result.model_configs = {
                 key: cls.__read_model_training_params(config_node, ModelTrainingParams)
-                for key, config_node in config["models"].items()
+                for key, config_node in config["modelConfig"].items()
             }
         return result
 
     @classmethod
-    def load_json(cls, f: str | PathLike) -> "DittoTrainingConfig":
+    def load_json(cls, f: str | PathLike) -> "TrainingConfig":
         with open(f, "r") as fp:
             config = json.load(fp)
 
-        result = cls.__read_dataset_training_params(config, DittoTrainingConfig)
-        if "datasets" in config:
+        result = cls.__read_dataset_training_params(config, TrainingConfig)
+        result.dataset_names = list(map(str, config.get("datasets", [])))
+        result.model_names = list(map(str, config.get("models", [])))
+        if "datasetConfig" in config:
             result.dataset_configs = {
                 key: cls.__read_dataset_training_params(
                     config_node, DatasetTrainingParams
                 )
-                for key, config_node in config["datasets"].items()
+                for key, config_node in config["datasetConfig"].items()
             }
         return result
 
     def get(
         self,
-        property_name: str,
         model: Optional[str] = None,
         dataset: Optional[str] = None,
-    ) -> Any:
+    ) -> ModelTrainingParams:
         cfg = self.dataset_configs.get(dataset, self)
         if model is not None:
             cfg = cfg.model_configs.get(model, self.model_configs.get(model, self))
-        return cfg.__getattribute__(property_name)
+        return cfg

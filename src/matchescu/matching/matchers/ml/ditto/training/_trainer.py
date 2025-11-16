@@ -25,7 +25,7 @@ class DittoTrainer:
         task_name: str,
         model_dir: str | PathLike | None = None,
         loss_fn: _Loss | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
         self._task = task_name
         self._model_dir = Path(model_dir) if model_dir else Path(__file__).parent

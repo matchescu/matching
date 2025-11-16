@@ -1,8 +1,6 @@
 import pytest
 
-from matchescu.matching.matchers.ml.ditto.training._training_config import (
-    DittoTrainingConfig,
-)
+from matchescu.matching.matchers.ml.ditto.training._config import TrainingConfig
 
 
 @pytest.fixture
@@ -11,11 +9,13 @@ def config_file(data_dir) -> str:
 
 
 @pytest.fixture
-def config(config_file) -> DittoTrainingConfig:
-    return DittoTrainingConfig.load_json(config_file)
+def config(config_file) -> TrainingConfig:
+    return TrainingConfig.load_json(config_file)
 
 
 def test_load_from_json(config):
+    assert config.model_names == ["roberta-base", "distilbert-base-uncased"]
+    assert config.dataset_names == ["abt-buy"]
     assert config.learning_rate == 0.001
     assert config.batch_size == 31
     assert len(config.dataset_configs) == 1
@@ -30,12 +30,12 @@ def test_load_from_json(config):
     "model,expected", [("distilbert-base-uncased", 2), ("roberta-base", 10)]
 )
 def test_load_model_setting_cascade(config, model, expected):
-    assert config.get("epochs", model=model) == expected
+    assert config.get(model=model).epochs == expected
 
 
 @pytest.mark.parametrize("dataset,expected", [("abt-buy", 67), ("anything", 31)])
 def test_load_dataset_setting_cascade(config, dataset, expected):
-    assert config.get("batch_size", dataset=dataset) == expected
+    assert config.get(dataset=dataset).batch_size == expected
 
 
 @pytest.mark.parametrize(
@@ -47,4 +47,4 @@ def test_load_dataset_setting_cascade(config, dataset, expected):
     ],
 )
 def test_load_model_per_dataset_setting_cascade(config, model, dataset, expected):
-    assert config.get("epochs", model, dataset) == expected
+    assert config.get(model, dataset).epochs == expected
