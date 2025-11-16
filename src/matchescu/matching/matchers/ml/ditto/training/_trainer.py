@@ -5,6 +5,7 @@ from typing import Any, cast
 
 import torch
 from torch.nn import BCEWithLogitsLoss
+from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
@@ -13,14 +14,18 @@ from transformers import get_linear_schedule_with_warmup
 
 from matchescu.matching.matchers.ml.ditto._ditto_dataset import DittoDataset
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
-from matchescu.matching.matchers.ml.ditto._ditto_training_evaluator import (
+from matchescu.matching.matchers.ml.ditto.training._training_evaluator import (
     DittoTrainingEvaluator,
 )
 
 
 class DittoTrainer:
     def __init__(
-        self, task_name: str, model_dir: str | PathLike | None = None, **kwargs: Any
+        self,
+        task_name: str,
+        model_dir: str | PathLike | None = None,
+        loss_fn: _Loss | None = None,
+        **kwargs: Any
     ) -> None:
         self._task = task_name
         self._model_dir = Path(model_dir) if model_dir else Path(__file__).parent
@@ -31,6 +36,7 @@ class DittoTrainer:
         self._epochs = int(kwargs.get("epochs", 20))
         self._learning_rate = float(kwargs.get("learning_rate", 3e-5))
         self._frozen_layer_count = int(kwargs.get("frozen_layer_count", 0))
+        self._loss = loss_fn or BCEWithLogitsLoss()
 
     def _add_text_summary(
         self, summary_writer: SummaryWriter, step_no: int, fmt: str, *args: Any
@@ -55,7 +61,7 @@ class DittoTrainer:
         self,
         epoch: int,
         device: torch.device,
-        model: DittoModel,
+        model: torch.nn.Module,
         train_iter: DataLoader,
         optimizer: Optimizer,
         scheduler: LRScheduler,
@@ -65,7 +71,7 @@ class DittoTrainer:
         batch_no = 0
 
         try:
-            loss_fn = BCEWithLogitsLoss().to(device)  # CrossEntropy
+            loss_fn = self._loss.to(device)  # CrossEntropy
             model.to(device)
             model.train(True)
             batch_loss = 0.0
@@ -123,6 +129,8 @@ class DittoTrainer:
         )
 
         summary_writer = SummaryWriter(log_dir=str(self._tb_log_dir.absolute()))
+
+        # TODO: encapsulate this as evaluator.reset()
         best_xv_f1 = best_test_f1 = 0.0
         try:
             for epoch in range(1, self._epochs + 1):
@@ -143,8 +151,12 @@ class DittoTrainer:
                 if evaluator is None or not save_model:
                     continue
 
+                # TODO: evaluator should return an evaluation object
                 xv_f1, test_f1, threshold = evaluator(model)
+
+                # TODO: replace conditional with evaluation.is_new_highscore
                 if xv_f1 > best_xv_f1:
+                    # TODO: only saving the checkpoint should remain here
                     self._log.info("found new best F1. saving checkpoint")
                     best_xv_f1 = xv_f1
                     best_test_f1 = test_f1
@@ -161,6 +173,8 @@ class DittoTrainer:
                     }
                     torch.save(ckpt, ckpt_path)
 
+                # TODO: pass '_log' as a param to evaluator.reset()
+                # TODO: encapsulate tensorboard logic in the evaluator
                 scalars = {"f1": xv_f1, "t_f1": test_f1}
                 summary_writer.add_scalars(self._task, scalars, epoch)
                 self._log.info(
@@ -171,5 +185,6 @@ class DittoTrainer:
                     best_test_f1,
                 )
         finally:
+            # TODO: implement the evaluator as a context manager
             summary_writer.flush()
             summary_writer.close()
