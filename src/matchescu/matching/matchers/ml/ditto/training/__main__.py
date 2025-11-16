@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
+from typing import Iterable
 
 import click
 import humanize
@@ -36,9 +37,7 @@ from matchescu.matching.matchers.ml.ditto.training._config import (
 )
 from matchescu.matching.matchers.ml.ditto.training._datasets import DittoDataset
 from matchescu.matching.matchers.ml.ditto.training._trainer import DittoTrainer
-from matchescu.matching.matchers.ml.ditto.training._training_evaluator import (
-    DittoTrainingEvaluator,
-)
+from matchescu.matching.matchers.ml.ditto.training._evaluator import TrainingEvaluator
 from matchescu.matching.matchers.ml.ditto.training._logging import log
 
 
@@ -154,16 +153,19 @@ def train_on_magellan_data(
         epochs=train_params.epochs,
         logger=dataset_logger,
     )
-    evaluator = DittoTrainingEvaluator(model_name, xv, test, dataset_logger)
-    trainer.run_training(ditto, train, evaluator, True)
+    tb_log_dir = model_save_dir / model_name / "tensorboard"
+    with TrainingEvaluator(
+        model_name, xv, test, tb_log_dir, dataset_logger
+    ) as evaluator:
+        trainer.run_training(ditto, train, evaluator, True)
 
 
-def table_a_id(rows: list[Record]) -> RefId:
-    return RefId(rows[0]["id"], "tableA")
+def table_a_id(rows: Iterable[Record]) -> RefId:
+    return RefId(next(iter(rows))["id"], "tableA")
 
 
-def table_b_id(rows: list[Record]) -> RefId:
-    return RefId(rows[0]["id"], "tableB")
+def table_b_id(rows: Iterable[Record]) -> RefId:
+    return RefId(next(iter(rows))["id"], "tableB")
 
 
 @click.command
@@ -198,11 +200,6 @@ def run_training(
     root_model_dir = Path(root_model_dir)
     root_data_dir = Path(root_data_dir)
     benchmark_dataset_traits = MagellanTraits()
-    common_kw_args = {
-        "id_factory": table_a_id,
-        "pair_traits": None,  # same as traits
-        "pair_id_factory": table_b_id,
-    }
     config = TrainingConfig.load_json(config_path)
     with warnings.catch_warnings(action="ignore"):
         for dataset_name in config.dataset_names:
@@ -219,8 +216,9 @@ def run_training(
                     train_params,
                     root_data_dir / "magellan",
                     dataset_name,
-                    ds_traits,
-                    **common_kw_args,
+                    traits=ds_traits,
+                    id_factory=table_a_id,
+                    pair_id_factory=table_b_id,
                 )
 
 
