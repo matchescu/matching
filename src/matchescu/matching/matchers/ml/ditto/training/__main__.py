@@ -7,9 +7,8 @@ from pathlib import Path
 
 import click
 import humanize
-import polars as pl
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerFast, DebertaV2TokenizerFast
 
 from matchescu.blocking import TfIdfBlocker
 from matchescu.comparison_filtering import is_cross_source_comparison
@@ -21,11 +20,9 @@ from matchescu.extraction import (
     RecordExtraction,
     single_record,
 )
-from matchescu.matching.evaluation.datasets import MagellanDataset
-from matchescu.matching.matchers.ml.ditto._ditto_dataset import DittoDataset
+from matchescu.matching.evaluation.datasets import MagellanDataset, MagellanTraits
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
-from matchescu.reference_store.comparison_space import BinaryComparisonSpace
-from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
+from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.typing import (
     EntityReferenceIdentifier as RefId,
     EntityReferenceIdFactory,
@@ -37,14 +34,17 @@ from matchescu.matching.matchers.ml.ditto.training._config import (
     DEFAULT_MODEL_DIR,
     DEFAULT_DATA_DIR,
 )
+from matchescu.matching.matchers.ml.ditto.training._datasets import DittoDataset
 from matchescu.matching.matchers.ml.ditto.training._trainer import DittoTrainer
 from matchescu.matching.matchers.ml.ditto.training._training_evaluator import (
     DittoTrainingEvaluator,
 )
 from matchescu.matching.matchers.ml.ditto.training._logging import log
-from matchescu.matching.matchers.ml.ditto.training._magellan_datasets import (
-    MAGELLAN_CONFIG,
-)
+
+
+_MODEL_TOKENIZERS = {
+    "microsoft/deberta-v3-base": DebertaV2TokenizerFast.from_pretrained,
+}
 
 
 def create_comparison_space(id_table, ground_truth, initial_size):
@@ -82,32 +82,6 @@ def timer(start_message: str):
     log.info("%s time elapsed: %s", start_message, duration)
 
 
-def _extract_dataset(dataset_path: Path) -> tuple[IdTable, BinaryComparisonSpace, set]:
-    abt_traits = list(Traits().string(["name", "description"]).currency(["price"]))
-    abt = CsvDataSource(dataset_path / "Abt.csv", traits=abt_traits).read()
-    buy_traits = list(
-        Traits().string(["name", "description", "manufacturer"]).currency(["price"])
-    )
-    buy = CsvDataSource(dataset_path / "Buy.csv", traits=buy_traits).read()
-    # set up ground truth
-    gt_path = dataset_path / "abt_buy_perfectMapping.csv"
-    gt = set(
-        (RefId(row[0], abt.name), RefId(row[1], buy.name))
-        for row in pl.read_csv(gt_path, ignore_errors=True).iter_rows()
-    )
-
-    id_table = InMemoryIdTable()
-    load_data_source(id_table, abt)
-    load_data_source(id_table, buy)
-    original_comparison_space_size = len(abt) * len(buy)
-
-    comparison_space = create_comparison_space(
-        id_table, gt, original_comparison_space_size
-    )
-
-    return id_table, comparison_space, gt
-
-
 @timer(start_message="load dataset")
 def load_magellan_dataset(
     ds_path: Path,
@@ -125,9 +99,10 @@ def load_magellan_dataset(
 
 @timer(start_message="serialize+tokenize")
 def get_magellan_data_loaders(
-    model_name: str, magellan_ds: MagellanDataset, batch_size: int = 32
+    magellan_ds: MagellanDataset,
+    tokenizer: PreTrainedTokenizerFast,
+    batch_size: int = 32,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
     train_ds, xv_ds, test_ds = [
         DittoDataset(
             magellan_ds.id_table, split.comparison_space, split.ground_truth, tokenizer
@@ -149,6 +124,7 @@ def get_magellan_data_loaders(
 def train_on_magellan_data(
     model_save_dir: Path,
     model_name: str,
+    tokenizer: PreTrainedTokenizerFast,
     train_params: ModelTrainingParams,
     dataset_dir: Path,
     dataset_name: str,
@@ -167,7 +143,7 @@ def train_on_magellan_data(
         pair_id_factory,
     )
     train, xv, test = get_magellan_data_loaders(
-        model_name, magellan_ds, train_params.batch_size
+        magellan_ds, tokenizer, train_params.batch_size
     )
     ditto = DittoModel(model_name)
     dataset_logger = log.getChild(dataset_name)
@@ -221,6 +197,7 @@ def run_training(
 ) -> None:
     root_model_dir = Path(root_model_dir)
     root_data_dir = Path(root_data_dir)
+    benchmark_dataset_traits = MagellanTraits()
     common_kw_args = {
         "id_factory": table_a_id,
         "pair_traits": None,  # same as traits
@@ -231,17 +208,27 @@ def run_training(
         for dataset_name in config.dataset_names:
             ds_model_dir = root_model_dir / dataset_name
             for model_name in config.model_names:
+                tokenizer = _new_fast_tokenizer(model_name)
                 train_params = config.get(model=model_name, dataset=dataset_name)
+                ds_traits = benchmark_dataset_traits[dataset_name]
 
                 train_on_magellan_data(
                     ds_model_dir,
                     model_name,
+                    tokenizer,
                     train_params,
                     root_data_dir / "magellan",
                     dataset_name,
-                    traits=MAGELLAN_CONFIG[dataset_name]["traits"],
+                    ds_traits,
                     **common_kw_args,
                 )
+
+
+def _new_fast_tokenizer(model_name: str) -> PreTrainedTokenizerFast:
+    tokenizer_factory = _MODEL_TOKENIZERS.get(
+        model_name, partial(AutoTokenizer.from_pretrained, use_fast=True)
+    )
+    return tokenizer_factory(model_name)
 
 
 if __name__ == "__main__":
