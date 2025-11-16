@@ -1,0 +1,26 @@
+{
+  "learningRate": 0.001,
+  "batchSize": 31,
+  "epochs": 15,
+  "datasets": ["abt-buy"],
+  "models": ["roberta-base", "distilbert-base-uncased"],
+  "datasetConfig": {
+    "abt-buy": {
+      "batchSize": 67,
+      "modelConfig": {
+        "roberta-base": {
+          "epochs": 1
+        }
+      }
+    },
+    "fodors-zagat": {
+      "batchSize": 32,
+      "epochs": 3
+    }
+  },
+  "modelConfig": {
+    "distilbert-base-uncased": {
+      "epochs": 2
+    }
+  }
+}

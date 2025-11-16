@@ -6,8 +6,8 @@ import torch
 from sklearn import metrics
 from torch.utils.data import DataLoader
 
-from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
-from matchescu.matching.ml.ditto._ditto_module import DittoModel
+from matchescu.matching.matchers.ml.ditto._ditto_dataset import DittoDataset
+from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
 
 
 class DittoTrainingEvaluator:

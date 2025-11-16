@@ -5,8 +5,8 @@ from pathlib import Path
 import torch
 from transformers import PreTrainedTokenizerFast
 
-from matchescu.matching.ml.ditto._ditto_module import DittoModel
-from matchescu.matching.ml.ditto._ref_adapter import to_text
+from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
+from matchescu.matching.matchers.ml.ditto._ref_adapter import to_text
 from matchescu.matching.similarity import Similarity
 from matchescu.typing import EntityReference
 

@@ -1,4 +1,3 @@
-import os
 import time
 import warnings
 from contextlib import contextmanager
@@ -23,17 +22,28 @@ from matchescu.extraction import (
     single_record,
 )
 from matchescu.matching.evaluation.datasets import MagellanDataset
-from matchescu.matching.ml.ditto._ditto_dataset import DittoDataset
-from matchescu.matching.ml.ditto._ditto_module import DittoModel
-from matchescu.matching.ml.ditto._ditto_trainer import DittoTrainer
-from matchescu.matching.ml.ditto._ditto_training_evaluator import DittoTrainingEvaluator
-from matchescu.matching.ml.ditto.training._logging import log
-from matchescu.matching.ml.ditto.training._magellan_config import MAGELLAN_CONFIG
+from matchescu.matching.matchers.ml.ditto._ditto_dataset import DittoDataset
+from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
 from matchescu.typing import (
     EntityReferenceIdentifier as RefId,
     EntityReferenceIdFactory,
+)
+
+from matchescu.matching.matchers.ml.ditto.training._config import (
+    TrainingConfig,
+    ModelTrainingParams,
+    DEFAULT_MODEL_DIR,
+    DEFAULT_DATA_DIR,
+)
+from matchescu.matching.matchers.ml.ditto.training._trainer import DittoTrainer
+from matchescu.matching.matchers.ml.ditto.training._training_evaluator import (
+    DittoTrainingEvaluator,
+)
+from matchescu.matching.matchers.ml.ditto.training._logging import log
+from matchescu.matching.matchers.ml.ditto.training._magellan_datasets import (
+    MAGELLAN_CONFIG,
 )
 
 
@@ -69,7 +79,7 @@ def timer(start_message: str):
     yield
     time_end = time.time()
     duration = humanize.naturaldelta(timedelta(seconds=(time_end - time_start)))
-    log.info("%s time elapsed: %s seconds", start_message, duration)
+    log.info("%s time elapsed: %s", start_message, duration)
 
 
 def _extract_dataset(dataset_path: Path) -> tuple[IdTable, BinaryComparisonSpace, set]:
@@ -139,15 +149,13 @@ def get_magellan_data_loaders(
 def train_on_magellan_data(
     model_save_dir: Path,
     model_name: str,
+    train_params: ModelTrainingParams,
     dataset_dir: Path,
     dataset_name: str,
     traits: Traits,
     id_factory: EntityReferenceIdFactory,
     pair_traits: Traits | None = None,
     pair_id_factory: EntityReferenceIdFactory | None = None,
-    batch_size: int = 32,
-    epochs: int = 10,
-    learning_rate: float = 3e-5,
 ):
     pair_traits = pair_traits or traits
     pair_id_factory = pair_id_factory or id_factory
@@ -158,14 +166,16 @@ def train_on_magellan_data(
         pair_traits,
         pair_id_factory,
     )
-    train, xv, test = get_magellan_data_loaders(model_name, magellan_ds, batch_size)
+    train, xv, test = get_magellan_data_loaders(
+        model_name, magellan_ds, train_params.batch_size
+    )
     ditto = DittoModel(model_name)
     dataset_logger = log.getChild(dataset_name)
     trainer = DittoTrainer(
         model_name,
         model_save_dir,
-        learning_rate=learning_rate,
-        epochs=epochs,
+        learning_rate=train_params.learning_rate,
+        epochs=train_params.epochs,
         logger=dataset_logger,
     )
     evaluator = DittoTrainingEvaluator(model_name, xv, test, dataset_logger)
@@ -187,7 +197,7 @@ def table_b_id(rows: list[Record]) -> RefId:
     "root_model_dir",
     required=True,
     type=click.Path(exists=True, dir_okay=True, file_okay=False),
-    default=Path(os.getcwd()) / "models",
+    default=DEFAULT_MODEL_DIR,
 )
 @click.option(
     "-D",
@@ -195,29 +205,19 @@ def table_b_id(rows: list[Record]) -> RefId:
     "root_data_dir",
     required=True,
     type=click.Path(exists=True, dir_okay=True, file_okay=False),
-    default=Path(os.getcwd()) / "data",
+    default=DEFAULT_DATA_DIR,
 )
 @click.option(
-    "-d",
-    "--datasets",
-    "datasets",
-    multiple=True,
-    type=click.Path(),
-    default=list(MAGELLAN_CONFIG),
-)
-@click.option(
-    "-m",
-    "--models",
-    "models_to_train",
-    multiple=True,
-    type=str,
-    default=["roberta-base"],
+    "-f",
+    "--config-file",
+    "config_path",
+    type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
+    default=DEFAULT_MODEL_DIR / "config.json",
 )
 def run_training(
     root_model_dir: Path,
     root_data_dir: Path,
-    datasets: list[str],
-    models_to_train: list[str],
+    config_path: Path,
 ) -> None:
     root_model_dir = Path(root_model_dir)
     root_data_dir = Path(root_data_dir)
@@ -226,16 +226,20 @@ def run_training(
         "pair_traits": None,  # same as traits
         "pair_id_factory": table_b_id,
     }
+    config = TrainingConfig.load_json(config_path)
     with warnings.catch_warnings(action="ignore"):
-        for dataset_name in datasets:
+        for dataset_name in config.dataset_names:
             ds_model_dir = root_model_dir / dataset_name
-            for model_name in models_to_train:
+            for model_name in config.model_names:
+                train_params = config.get(model=model_name, dataset=dataset_name)
+
                 train_on_magellan_data(
                     ds_model_dir,
                     model_name,
+                    train_params,
                     root_data_dir / "magellan",
                     dataset_name,
-                    **MAGELLAN_CONFIG[dataset_name],
+                    traits=MAGELLAN_CONFIG[dataset_name]["traits"],
                     **common_kw_args,
                 )
 
