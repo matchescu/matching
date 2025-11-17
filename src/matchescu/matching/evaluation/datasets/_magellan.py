@@ -141,7 +141,7 @@ class MagellanDataset:
 class MagellanTraits:
     __TRAIT_DICT = {
         "ABT-BUY": Traits().string(["name", "description"]).currency(["price"]),
-        "AMAZON_GOOGLE": Traits().string(["title", "manufacturer"]).currency(["price"]),
+        "AMAZON-GOOGLE": Traits().string(["title", "manufacturer"]).currency(["price"]),
         "BEER": Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]),
         "DBLP-ACM": Traits().string(["title", "authors", "venue"]).int(["year"]),
         "DBLP-SCHOLAR": Traits().string(["title", "authors", "venue", "year"]),
