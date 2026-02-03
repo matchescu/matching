@@ -19,7 +19,7 @@ class DittoModel(nn.Module):
         self._bert = cast(BertModel, AutoModel.from_pretrained(pretrained_model_name))
         hidden_size = self._bert.config.hidden_size
 
-        self._classifier = torch.nn.Linear(hidden_size, 1)
+        self._classifier = torch.nn.Linear(hidden_size, 1, dtype=self._bert.dtype)
         self._device = device
 
     @property
