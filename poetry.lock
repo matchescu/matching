@@ -26,7 +26,6 @@ files = [
 
 [package.dependencies]
 idna = ">=2.8"
-typing_extensions = {version = ">=4.5", markers = "python_version < \"3.13\""}
 
 [package.extras]
 trio = ["trio (>=0.31.0) ; python_version < \"3.10\"", "trio (>=0.32.0) ; python_version >= \"3.10\""]
@@ -1779,69 +1778,69 @@ files = [
 
 [[package]]
 name = "matchescu-base"
-version = "0.22.1"
+version = "0.23.1"
 description = "Base abstract data types for Entity Resolution"
 optional = false
-python-versions = "<4.0,>=3.11"
+python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.11"
 groups = ["main"]
 files = [
-    {file = "matchescu_base-0.22.1-py3-none-any.whl", hash = "sha256:b6a248fa24ac3c3d750a8753a5a3814441779f0b201880b62c0db21a992eb06a"},
-    {file = "matchescu_base-0.22.1.tar.gz", hash = "sha256:60e780293416731a0e3b0d2acc5535def9e6694ebb63c9738bf87d23239d91ce"},
+    {file = "matchescu_base-0.23.1-py3-none-any.whl", hash = "sha256:09805fad6b5fe77c71d453fac83859540fe02ae8bbb94071609ddafdde740f1f"},
+    {file = "matchescu_base-0.23.1.tar.gz", hash = "sha256:ec21dd67e9601d97c5ae18b4da6703284f48d40e6d2fd44a096191f3782f55b8"},
 ]
 
 [package.dependencies]
-networkx = ">=3.4.2,<4.0.0"
+networkx = ">=3.6.1,<4.0.0"
 
 [[package]]
 name = "matchescu-comparison-space-generation"
-version = "0.7.2"
+version = "0.7.3"
 description = ""
 optional = false
-python-versions = "<4.0,>=3.12"
+python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_comparison_space_generation-0.7.2-py3-none-any.whl", hash = "sha256:9d114690e6a15410e3c9a0630025fad950baf7c37b57874f9c3292bff0047d13"},
-    {file = "matchescu_comparison_space_generation-0.7.2.tar.gz", hash = "sha256:8c1e77dd6b4d77bfa347675de3a7bc7f6bea5616158535b42a2997b67624c202"},
+    {file = "matchescu_comparison_space_generation-0.7.3-py3-none-any.whl", hash = "sha256:9a24e6c8cbb5490229e87bcc6e2e3012f77d742b8a8aca55876651647467864c"},
+    {file = "matchescu_comparison_space_generation-0.7.3.tar.gz", hash = "sha256:df5ad2ecf97eafd62ab54927f00c5a82bfd619f9d80504c6d4b361cde7d5c729"},
 ]
 
 [package.dependencies]
-datasketch = ">=1.6.5,<2.0.0"
-matchescu-base = ">=0.22.1,<0.23.0"
-matchescu-reference-store = ">=0.8.3,<0.9.0"
-numpy = ">=2.2.4,<3.0.0"
-scikit-learn = ">=1.6.1,<2.0.0"
-stopwords = ">=1.0.1,<2.0.0"
+datasketch = ">=1.9.0,<2.0.0"
+matchescu-base = ">=0.23.1,<0.24.0"
+matchescu-reference-store = ">=0.8.4,<0.9.0"
+numpy = ">=2.4.2,<3.0.0"
+scikit-learn = ">=1.8.0,<2.0.0"
+stopwords = ">=1.0.2,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-extraction"
-version = "0.7.3"
+version = "0.7.5"
 description = "Extract references from a multitude of data sources"
 optional = false
-python-versions = "<4.0,>=3.12"
+python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_extraction-0.7.3-py3-none-any.whl", hash = "sha256:56fe945f50bbdc76147530050a64050d23e8742cc5c1681da7ff4a6ded28573e"},
-    {file = "matchescu_reference_extraction-0.7.3.tar.gz", hash = "sha256:a2f41fa9a6cc77fc253dee6bab60f22e3f17edc7851505085558bdbb2c073642"},
+    {file = "matchescu_reference_extraction-0.7.5-py3-none-any.whl", hash = "sha256:18eadd093033180ae229274ec2c78fbc5c8393cd42c1819a0e4e58292b78b934"},
+    {file = "matchescu_reference_extraction-0.7.5.tar.gz", hash = "sha256:407b0f785a5b7425b11ec7821603267d59a6b1b2b7bcf02a736c8cbf80d3b6c1"},
 ]
 
 [package.dependencies]
-matchescu-base = ">=0.22.1,<0.23.0"
-polars = ">=1.25.2,<2.0.0"
+matchescu-base = ">=0.23.1,<0.24.0"
+polars = ">=1.38.1,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-store"
-version = "0.8.3"
+version = "0.8.4"
 description = "Entity reference storage data types and APIs"
 optional = false
-python-versions = "<4.0,>=3.12"
+python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_store-0.8.3-py3-none-any.whl", hash = "sha256:dc37db15363a49fdb6690cd616f710ba03b6c9a2cc27ad9497c866e9993695df"},
-    {file = "matchescu_reference_store-0.8.3.tar.gz", hash = "sha256:64c1563751b6b1fa3807f57e1bab8312b9103fc5480d8ac093892062aa1c714d"},
+    {file = "matchescu_reference_store-0.8.4-py3-none-any.whl", hash = "sha256:f34f56d8d1c6370771c901adbea53544eda3a43c33de280b54b2a68a954fb74d"},
+    {file = "matchescu_reference_store-0.8.4.tar.gz", hash = "sha256:66cb31259fd0e79100ca7336eca04945f907ed9f2f991534d116ca986939e0ac"},
 ]
 
 [package.dependencies]
-matchescu-base = ">=0.22.1,<0.23.0"
+matchescu-base = ">=0.23.1,<0.24.0"
 
 [[package]]
 name = "matplotlib-inline"
@@ -2060,36 +2059,11 @@ files = [
 
 [[package]]
 name = "networkx"
-version = "3.6"
-description = "Python package for creating and manipulating graphs and networks"
-optional = false
-python-versions = ">=3.11"
-groups = ["main"]
-markers = "python_version == \"3.14\""
-files = [
-    {file = "networkx-3.6-py3-none-any.whl", hash = "sha256:cdb395b105806062473d3be36458d8f1459a4e4b98e236a66c3a48996e07684f"},
-    {file = "networkx-3.6.tar.gz", hash = "sha256:285276002ad1f7f7da0f7b42f004bcba70d381e936559166363707fdad3d72ad"},
-]
-
-[package.extras]
-benchmarking = ["asv", "virtualenv"]
-default = ["matplotlib (>=3.8)", "numpy (>=1.25)", "pandas (>=2.0)", "scipy (>=1.11.2)"]
-developer = ["mypy (>=1.15)", "pre-commit (>=4.1)"]
-doc = ["intersphinx-registry", "myst-nb (>=1.1)", "numpydoc (>=1.8.0)", "pillow (>=10)", "pydata-sphinx-theme (>=0.16)", "sphinx (>=8.0)", "sphinx-gallery (>=0.18)", "texext (>=0.6.7)"]
-example = ["cairocffi (>=1.7)", "contextily (>=1.6)", "igraph (>=0.11)", "iplotx (>=0.9.0)", "momepy (>=0.7.2)", "osmnx (>=2.0.0)", "scikit-learn (>=1.5)", "seaborn (>=0.13)"]
-extra = ["lxml (>=4.6)", "pydot (>=3.0.1)", "pygraphviz (>=1.14)", "sympy (>=1.10)"]
-release = ["build (>=0.10)", "changelist (==0.5)", "twine (>=4.0)", "wheel (>=0.40)"]
-test = ["pytest (>=7.2)", "pytest-cov (>=4.0)", "pytest-xdist (>=3.0)"]
-test-extras = ["pytest-mpl", "pytest-randomly"]
-
-[[package]]
-name = "networkx"
 version = "3.6.1"
 description = "Python package for creating and manipulating graphs and networks"
 optional = false
 python-versions = "!=3.14.1,>=3.11"
 groups = ["main"]
-markers = "python_version < \"3.14\""
 files = [
     {file = "networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762"},
     {file = "networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509"},
@@ -3301,7 +3275,6 @@ files = [
 [package.dependencies]
 attrs = ">=22.2.0"
 rpds-py = ">=0.7.0"
-typing-extensions = {version = ">=4.4.0", markers = "python_version < \"3.13\""}
 
 [[package]]
 name = "regex"
@@ -4653,5 +4626,5 @@ watchdog = ["watchdog (>=2.3)"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = ">=3.12,<3.15"
-content-hash = "1327d2f373fcf0ffd04c159734350bb74050cb58ce288ae54479eff76a684d1a"
+python-versions = "!=3.14.1,>=3.13,<3.15"
+content-hash = "1ee58230e20865f8b995e224a8c2e3ed0cc1c7b3a48056f5b2bb48f7e90d4a95"

@@ -21,7 +21,7 @@ jobs:
     name: Pre-Merge Check (Build & Test)
     runs-on: ubuntu-latest
     container:
-      image: andreiolar1/python-poetry-mkdocs:3.12.7
+      image: andreiolar1/python-poetry-mkdocs:3.13.5
     if: startsWith(github.head_ref, 'feature/') || startsWith(github.head_ref, 'hotfix/') || startsWith(github.head_ref, 'refactor/')
     steps:
       - name: Checkout code
@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     container:
-      image: andreiolar1/python-poetry-mkdocs:3.12.7
+      image: andreiolar1/python-poetry-mkdocs:3.13.5
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout code

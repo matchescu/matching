@@ -1,6 +1,6 @@
 VENV := $(shell poetry env info --path 2>/dev/null || echo ".venv")
 TIMESTAMP := $(VENV)/.poetry_installed
-PYTHON_VERSION := 3.12
+PYTHON_VERSION := 3.13
 
 .PHONY: check-deps bump-patch bump-minor bump-major bump-release bump-prepatch bump-preminor bump-premajor bump-prerelease re-tag
 
