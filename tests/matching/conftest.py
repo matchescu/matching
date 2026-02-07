@@ -15,8 +15,8 @@ from matchescu.typing import (
     Record,
     DataSource,
     EntityReferenceIdentifier,
+    EntityReference,
 )
-from matchescu.references import EntityReference as RefImpl
 
 
 @pytest.fixture(scope="session")
@@ -83,4 +83,4 @@ def ref_id() -> Callable[[Hashable, str], EntityReferenceIdentifier]:
 
 @pytest.fixture(scope="session")
 def ref(ref_id):
-    return lambda lbl, src: RefImpl(ref_id(lbl, src), {"id": lbl})
+    return lambda lbl, src: EntityReference(ref_id(lbl, src), {"id": lbl})
