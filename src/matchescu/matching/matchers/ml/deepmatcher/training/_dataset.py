@@ -120,7 +120,7 @@ class DeepMatcherDataset(Dataset):
 
 
 if __name__ == "__main__":
-    from matchescu.matching.evaluation.datasets import MagellanDataset, MagellanTraits
+    from matchescu.matching.evaluation.data import MagellanDataset, MagellanTraits
 
     traits = MagellanTraits().beer
 

@@ -4,7 +4,7 @@ import pytest
 
 from matchescu.extraction import Traits
 from matchescu.matching.config import AttrCmpConfig, RecordLinkageConfig
-from matchescu.matching.evaluation.datasets import MagellanDataset
+from matchescu.matching.evaluation.data import MagellanDataset
 from matchescu.matching.similarity import BucketedJaccard, BucketedNorm
 from matchescu.typing import EntityReferenceIdentifier
 

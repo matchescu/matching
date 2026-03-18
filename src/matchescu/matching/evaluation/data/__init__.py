@@ -1,4 +1,4 @@
-from matchescu.matching.evaluation.datasets._magellan import (
+from matchescu.matching.evaluation.data.preblocked import (
     MagellanDataset,
     MagellanTraits,
 )

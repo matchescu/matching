@@ -21,7 +21,7 @@ from matchescu.extraction import (
     RecordExtraction,
     single_record,
 )
-from matchescu.matching.evaluation.datasets import MagellanDataset, MagellanTraits
+from matchescu.matching.evaluation.data import MagellanDataset, MagellanTraits
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.typing import (

@@ -22,7 +22,7 @@ from matchescu.extraction import (
     RecordExtraction,
     single_record,
 )
-from matchescu.matching.evaluation.datasets import MagellanDataset, MagellanTraits
+from matchescu.matching.evaluation.data import MagellanDataset, MagellanTraits
 from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
 from matchescu.matching.matchers.ml.deepmatcher.training._config import (
     TrainingConfig,
