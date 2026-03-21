@@ -22,7 +22,7 @@ from matchescu.extraction import (
     RecordExtraction,
     single_record,
 )
-from matchescu.matching.evaluation.data import MagellanDataset, MagellanTraits
+from matchescu.matching.evaluation.data import MagellanBenchmarkData, MagellanTraits
 from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
 from matchescu.matching.matchers.ml.deepmatcher.training._config import (
     TrainingConfig,
@@ -90,8 +90,8 @@ def load_magellan_dataset(
     left_id_factory: EntityReferenceIdFactory,
     right_traits: Traits | None = None,
     right_id_factory: EntityReferenceIdFactory | None = None,
-) -> MagellanDataset:
-    ds = MagellanDataset(ds_path)
+) -> MagellanBenchmarkData:
+    ds = MagellanBenchmarkData(ds_path)
     ds.load_left(left_traits, left_id_factory)
     ds.load_right(right_traits or left_traits, right_id_factory or left_id_factory)
     ds.load_splits()
@@ -100,7 +100,7 @@ def load_magellan_dataset(
 
 @timer(start_message="serialize+tokenize")
 def get_datasets(
-    magellan_ds: MagellanDataset,
+    magellan_ds: MagellanBenchmarkData,
     tokenizer: PreTrainedTokenizerBase,
 ) -> tuple[DeepMatcherDataset, ...]:
     return tuple(

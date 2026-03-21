@@ -4,7 +4,7 @@ import pytest
 
 from matchescu.extraction import Traits
 from matchescu.matching.config import AttrCmpConfig, RecordLinkageConfig
-from matchescu.matching.evaluation.data import MagellanDataset
+from matchescu.matching.evaluation.data import MagellanBenchmarkData
 from matchescu.matching.similarity import BucketedJaccard, BucketedNorm
 from matchescu.typing import EntityReferenceIdentifier
 
@@ -48,7 +48,7 @@ def id_col():
 
 @pytest.fixture
 def amazon_google(data_dir, amazon_google_traits, id_col):
-    ret = MagellanDataset(data_dir / "amazon_google_exp_data")
+    ret = MagellanBenchmarkData(data_dir / "amazon_google_exp_data")
 
     def ref_id(records, source):
         return EntityReferenceIdentifier(records[0][id_col], source)

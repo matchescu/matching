@@ -21,7 +21,7 @@ from matchescu.extraction import (
     RecordExtraction,
     single_record,
 )
-from matchescu.matching.evaluation.data import MagellanDataset, MagellanTraits
+from matchescu.matching.evaluation.data import MagellanBenchmarkData, MagellanTraits
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.typing import (
@@ -88,8 +88,8 @@ def load_magellan_dataset(
     left_id_factory: EntityReferenceIdFactory,
     right_traits: Traits | None = None,
     right_id_factory: EntityReferenceIdFactory | None = None,
-) -> MagellanDataset:
-    ds = MagellanDataset(ds_path)
+) -> MagellanBenchmarkData:
+    ds = MagellanBenchmarkData(ds_path)
     ds.load_left(left_traits, left_id_factory)
     ds.load_right(right_traits or left_traits, right_id_factory or left_id_factory)
     ds.load_splits()
@@ -98,7 +98,7 @@ def load_magellan_dataset(
 
 @timer(start_message="serialize+tokenize")
 def get_magellan_data_loaders(
-    magellan_ds: MagellanDataset,
+    magellan_ds: MagellanBenchmarkData,
     tokenizer: PreTrainedTokenizerFast,
     batch_size: int = 32,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:

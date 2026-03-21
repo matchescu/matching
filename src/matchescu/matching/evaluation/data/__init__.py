@@ -1,7 +1,7 @@
 from matchescu.matching.evaluation.data.benchmark import (
-    MagellanDataset,
+    MagellanBenchmarkData,
     MagellanTraits,
 )
 
 
-__all__ = ["MagellanDataset", "MagellanTraits"]
+__all__ = ["MagellanBenchmarkData", "MagellanTraits"]

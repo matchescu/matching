@@ -15,7 +15,7 @@ from matchescu.typing import (
 )
 
 
-class MagellanDataset:
+class MagellanBenchmarkData:
     def __init__(self, folder_path: str | PathLike) -> None:
         self.__dataset_dir = Path(folder_path)
         if not self.__dataset_dir.is_dir():
@@ -53,7 +53,7 @@ class MagellanDataset:
 
     def load_left(
         self, traits: Traits, id_factory: EntityReferenceIdFactory
-    ) -> "MagellanDataset":
+    ) -> "MagellanBenchmarkData":
         self.__left_source = self._load_csv_table(
             self.__left_table_path, traits, id_factory
         )
@@ -61,7 +61,7 @@ class MagellanDataset:
 
     def load_right(
         self, traits: Traits, id_factory: EntityReferenceIdFactory
-    ) -> "MagellanDataset":
+    ) -> "MagellanBenchmarkData":
         self.__right_source = self._load_csv_table(
             self.__right_table_path, traits, id_factory
         )
@@ -90,7 +90,7 @@ class MagellanDataset:
         }
         return Split(cs, matcher_gt, clusters)
 
-    def load_splits(self) -> "MagellanDataset":
+    def load_splits(self) -> "MagellanBenchmarkData":
         if not self.__left_source or not self.__right_source:
             raise ValueError(
                 "left + right data sources must be loaded before loading splits"

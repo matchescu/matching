@@ -110,11 +110,11 @@ class DeepMatcherDataset(Dataset):
 
 
 if __name__ == "__main__":
-    from matchescu.matching.evaluation.data import MagellanDataset, MagellanTraits
+    from matchescu.matching.evaluation.data import MagellanBenchmarkData, MagellanTraits
 
     traits = MagellanTraits().beer
 
-    ds = MagellanDataset("data/magellan/beer")
+    ds = MagellanBenchmarkData("data/magellan/beer")
 
     def _id_factory(rows: Iterable[Record], source: str) -> EntityReferenceIdentifier:
         return EntityReferenceIdentifier(next(iter(rows))["id"], source)
