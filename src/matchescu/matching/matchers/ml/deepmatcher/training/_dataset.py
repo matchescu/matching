@@ -29,7 +29,7 @@ class DeepMatcherDataset(Dataset):
         max_len: int = 30,
     ):
         self.__id_table = id_table
-        self.__pairs , self.__labels = split.to_comparison_labels(self.__id_table)
+        self.__pairs, self.__labels = split.to_comparison_labels(self.__id_table)
         self.__max_len = max_len
         self.__attr_map = attr_map
         self.__tokenizer = tokenizer or AutoTokenizer.from_pretrained(

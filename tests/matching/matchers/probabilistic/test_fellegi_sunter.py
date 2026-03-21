@@ -18,7 +18,7 @@ def test_amazon_google(amazon_google, amazon_google_config):
     fs = fs.fit(
         amazon_google.train_split.comparison_space,
         amazon_google.id_table,
-        amazon_google.train_split.ground_truth,
+        set(amazon_google.train_split.matcher_labels),
     )
 
     result = fs.predict(
@@ -42,7 +42,7 @@ def test_amazon_google(amazon_google, amazon_google_config):
 
     from pyresolvemetrics import precision, recall, f1
 
-    gt = amazon_google.test_split.ground_truth - clerical_ref_ids
+    gt = set(amazon_google.test_split.matcher_labels) - clerical_ref_ids
     results = {
         "p": precision(gt, matching_ref_ids),
         "r": recall(gt, matching_ref_ids),

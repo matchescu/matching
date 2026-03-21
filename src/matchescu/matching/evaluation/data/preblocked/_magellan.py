@@ -82,7 +82,9 @@ class MagellanDataset:
         cs = InMemoryComparisonSpace()
         for left, right, _ in rows:
             cs.put(left, right)
-        clusters = {ix: comp for ix, comp in enumerate(nx.connected_components(nx.Graph(gt)), 1)}
+        clusters = {
+            ix: comp for ix, comp in enumerate(nx.connected_components(nx.Graph(gt)), 1)
+        }
         return Split(cs, {cmp: 1 for cmp in gt}, clusters)
 
     def load_splits(self) -> "MagellanDataset":

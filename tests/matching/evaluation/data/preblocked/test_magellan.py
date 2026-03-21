@@ -34,8 +34,8 @@ def test_load_splits(sut, ag_traits, ag_id_factory):
     assert sut.right_source == "tableB"
     assert len(sut.id_table) == 1363 + 3226
     assert len(sut.train_split.comparison_space) == 6874
-    assert len(sut.train_split.ground_truth) == 699
+    assert len(sut.train_split.matcher_labels) == 699
     assert len(sut.valid_split.comparison_space) == 2293
-    assert len(sut.valid_split.ground_truth) == 234
+    assert len(sut.valid_split.matcher_labels) == 234
     assert len(sut.test_split.comparison_space) == 2293
-    assert len(sut.test_split.ground_truth) == 234
+    assert len(sut.test_split.matcher_labels) == 234
