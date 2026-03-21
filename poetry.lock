@@ -1793,20 +1793,20 @@ networkx = ">=3.6.1,<4.0.0"
 
 [[package]]
 name = "matchescu-comparison-space-generation"
-version = "0.7.4"
+version = "0.7.5"
 description = ""
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_comparison_space_generation-0.7.4-py3-none-any.whl", hash = "sha256:6ce77626ea67eda6c588d2eb95193cbc8b9ea961c9cca21009d6754ded6af533"},
-    {file = "matchescu_comparison_space_generation-0.7.4.tar.gz", hash = "sha256:508dd05d33f38bfbe696b0a2f173157b67ea9ec586a47d95dee29d072e89b914"},
+    {file = "matchescu_comparison_space_generation-0.7.5-py3-none-any.whl", hash = "sha256:45fdcb5f7c95c65bab4b0e5162161c1f5b1582f7a8532a07e783fd3717e16ee1"},
+    {file = "matchescu_comparison_space_generation-0.7.5.tar.gz", hash = "sha256:5b73f7819dd113b24a0ce5d4dca85fe563aff29a045e902ad752955a8271e090"},
 ]
 
 [package.dependencies]
 datasketch = ">=1.9.0,<2.0.0"
 matchescu-base = ">=0.24.0,<0.25.0"
-matchescu-reference-store = ">=0.8.5,<0.9.0"
+matchescu-reference-store = ">=0.9.0,<0.10.0"
 numpy = ">=2.4.2,<3.0.0"
 scikit-learn = ">=1.8.0,<2.0.0"
 stopwords = ">=1.0.2,<2.0.0"
@@ -1829,14 +1829,14 @@ polars = ">=1.38.1,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-store"
-version = "0.8.5"
+version = "0.9.0"
 description = "Entity reference storage data types and APIs"
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_store-0.8.5-py3-none-any.whl", hash = "sha256:2345349d0afeb86612d01b952d9fbbdd0f40c00a9907722433283d0dd7a844b6"},
-    {file = "matchescu_reference_store-0.8.5.tar.gz", hash = "sha256:902dc32c2c8823ec3ae017b10c111657ed39909f7ff47f51f5994e856117cfad"},
+    {file = "matchescu_reference_store-0.9.0-py3-none-any.whl", hash = "sha256:5a58dce0497ace81a2d031747ad3384537c4c1f0dad13d6386f83c20633ada0d"},
+    {file = "matchescu_reference_store-0.9.0.tar.gz", hash = "sha256:6823ae62067a428cea9f165312801ab01c301f129e563f317d27993c33c6ef0b"},
 ]
 
 [package.dependencies]
@@ -4730,4 +4730,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "!=3.14.1,>=3.13,<3.15"
-content-hash = "2d3eb9b9a1938fbca76a59eceb77a91a8ad6b2e900e5623f35a3c02bba914d66"
+content-hash = "8639587be2ccb1d46800e8dcc4658a0c64d11b8072f78efc021f4b7ac871feab"
