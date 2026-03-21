@@ -12,6 +12,8 @@ import polars as pl
 
 from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import Traits, single_record, RecordExtraction
+from matchescu.matching.evaluation.data.splits._split import Split
+from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
 from matchescu.typing import EntityReferenceIdentifier, EntityReference
 
@@ -34,7 +36,7 @@ class SplitGenerator:
 
     def __init__(
         self,
-        split_ratio: tuple[int, int, int] = (3, 1, 1),
+        split_ratio: dict[str, int] = None,
         neg_pos_ratio: float = 5.0,
         match_bridge_ratio: float = 2.0,
         max_total_samples: Optional[int] = None,
@@ -58,7 +60,7 @@ class SplitGenerator:
             seed:
                 Seed for reproducibility.
         """
-        self.split_ratio = split_ratio
+        self.split_ratio = split_ratio or {"train": 3, "dev": 1, "test": 1}
         self.neg_pos_ratio = neg_pos_ratio
         self.match_bridge_ratio = match_bridge_ratio
         self.max_total_samples = max_total_samples
@@ -71,8 +73,9 @@ class SplitGenerator:
             tuple[EntityReferenceIdentifier, EntityReferenceIdentifier], int
         ] = {}
         self._cluster_gt: dict[EntityReferenceIdentifier, int] = {}
-        self._clusters: dict[int, list[EntityReferenceIdentifier]] = defaultdict(list)
+        self._clusters: dict[int, set[EntityReferenceIdentifier]] = defaultdict(set)
         self._record_pool: list[EntityReference] = []
+        self._splits: dict[str, pl.DataFrame] = {}
 
     def load(
         self,
@@ -87,7 +90,7 @@ class SplitGenerator:
         self._matcher_gt = matcher_gt
         self._clusters.clear()
         for ref_id, cluster_no in cluster_gt.items():
-            self._clusters[cluster_no].append(ref_id)
+            self._clusters[cluster_no].add(ref_id)
 
         unclustered = 0
         for ref in self._id_table:
@@ -177,6 +180,43 @@ class SplitGenerator:
         )
         self._splits = self._stratified_split(d_bal, [0, *pos_classes])
         return self
+
+    def get_splits(self) -> dict[str, Split]:
+        if self._splits is None or len(self._splits) == 0:
+            raise RuntimeError("generate() before returning splits")
+
+        splits = {}
+        for split_name, df in self._splits.items():
+            split_pairs = [
+                (
+                    EntityReferenceIdentifier(row["left_id"], row["left_source"]),
+                    EntityReferenceIdentifier(row["right_id"], row["right_source"]),
+                )
+                for row in df.iter_rows(named=True)
+            ]
+            cs = InMemoryComparisonSpace()
+            match_gt = {}
+            cluster_gt = {}
+            for x, y in split_pairs:
+                cs.put(x, y)
+                fwd_cmp = (x, y)
+                rev_cmp = (y, x)
+                label = self._matcher_gt.get(fwd_cmp, self._matcher_gt.get(rev_cmp, 0))
+                if label != 0:
+                    match_gt[fwd_cmp] = label
+
+                x_cluster = self._cluster_gt.get(x)
+                y_cluster = self._cluster_gt.get(y)
+                if x_cluster is not None:
+                    cluster_gt[x] = x_cluster
+                if y_cluster is not None:
+                    cluster_gt[y] = y_cluster
+
+            clusters = defaultdict(set)
+            for ref_id, cluster_no in cluster_gt.items():
+                clusters[cluster_no].add(ref_id)
+            splits[split_name] = Split(cs, match_gt, clusters)
+        return splits
 
     def save(self, output_dir: str, prefix: str = "") -> "SplitGenerator":
         """Write the six CSV files to *output_dir*."""
@@ -352,33 +392,39 @@ class SplitGenerator:
         self, df: pl.DataFrame, classes: list[int]
     ) -> dict[str, pl.DataFrame]:
         """Per-class split respecting *split_ratio*, ≥1 per class per split."""
-        train_r, dev_r, test_r = self.split_ratio
-        total_r = train_r + dev_r + test_r
+        ratios = list(self.split_ratio.values())
+        total_r = sum(ratios)
+        parts: dict[str, list] = {k: [] for k in self.split_ratio}
 
-        parts: dict[str, list] = {"train": [], "dev": [], "test": []}
         for c in classes:
             sub = df.filter(pl.col("label") == c)
             n = len(sub)
             assert n >= MIN_PER_CLASS, f"class {c}: {n} < {MIN_PER_CLASS}"
 
-            n_test = max(1, round(n * test_r / total_r))
-            n_dev = max(1, round(n * dev_r / total_r))
-            n_train = n - n_test - n_dev
+            counts = [max(1, round((n * r_k) / total_r)) for r_k in ratios[1:]]
+            n_train = n - sum(counts)
 
-            while n_train < 1 and (n_test > 1 or n_dev > 1):
-                if n_test >= n_dev and n_test > 1:
-                    n_test -= 1
-                elif n_dev > 1:
-                    n_dev -= 1
-                n_train = n - n_test - n_dev
+            while n_train < 1 and any(c > 1 for c in counts):
+                sorted_counts = sorted(
+                    enumerate(counts), key=lambda t: t[1], reverse=True
+                )
+                best_i, best_c = sorted_counts[0]
+                counts[best_i] = best_c - 1
+                n_train = n - sum(counts)
+            counts.insert(0, n_train)
+            assert all(
+                c >= 1 for c in counts
+            ), f"class {c}: cannot split {n} into {len(counts)} non-empty sets"
 
-            assert (
-                n_train >= 1 and n_dev >= 1 and n_test >= 1
-            ), f"class {c}: cannot split {n} into 3 non-empty sets"
-
-            parts["test"].append(sub[:n_test])
-            parts["dev"].append(sub[n_test : n_test + n_dev])
-            parts["train"].append(sub[n_test + n_dev :])
+            for ix, k in enumerate(parts):
+                if ix == 0:
+                    parts[k].append(sub[: counts[ix]])
+                elif ix < len(parts) - 1:
+                    start = sum(counts[:ix])
+                    end = start + counts[ix]
+                    parts[k].append(sub[start:end])
+                else:
+                    parts[k].append(sub[sum(counts[:ix]) :])
 
         return {
             k: pl.concat(v, how="vertical", strict=True).sample(
@@ -463,7 +509,7 @@ Output (in --output-dir): train.csv, test.csv, dev.csv, optionally prefixed.
 
     def _ref_id(records):
         rec = next(iter(records))
-        return EntityReferenceIdentifier(rec["id"], rec["source"])
+        return EntityReferenceIdentifier(rec["id1"], rec["source"])
 
     extract = RecordExtraction(ds, _ref_id, single_record)
     id_table = InMemoryIdTable()
@@ -482,14 +528,19 @@ Output (in --output-dir): train.csv, test.csv, dev.csv, optionally prefixed.
         EntityReferenceIdentifier(x["id"], x["source"]): x["cluster_id"]
         for x in cluster_gt_df.iter_rows(named=True)
     }
-    generator = SplitGenerator(
-        split_ratio=tuple(a.split_ratio),
-        neg_pos_ratio=a.neg_pos_ratio,
-        match_bridge_ratio=a.match_bridge_ratio,
-        max_total_samples=a.max_total_samples,
-        seed=a.random_state,
-    ).load(id_table, cluster_gt, match_gt)
-    generator.generate().save(a.output_dir)
+    split_ratios = dict(zip(["train", "dev", "test"], a.split_ratio))
+    generator = (
+        SplitGenerator(
+            split_ratio=split_ratios,
+            neg_pos_ratio=a.neg_pos_ratio,
+            match_bridge_ratio=a.match_bridge_ratio,
+            max_total_samples=a.max_total_samples,
+            seed=a.random_state,
+        )
+        .load(id_table, cluster_gt, match_gt)
+        .generate()
+    )
+    generator.save(a.output_dir)
 
 
 if __name__ == "__main__":

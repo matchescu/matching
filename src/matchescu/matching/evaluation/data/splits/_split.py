@@ -24,11 +24,12 @@ class Split:
     def to_partition(self) -> frozenset[frozenset[RefId]]:
         """Format the ``*gt_clusters*`` as an algebraic partition."""
         return frozenset(
-            frozenset(x for x in cluster)
-            for cluster in self.gt_clusters.values()
+            frozenset(x for x in cluster) for cluster in self.gt_clusters.values()
         )
 
-    def to_comparison_labels(self, id_table: IdTable) -> tuple[list[tuple[Ref, Ref]], list[int]]:
+    def to_comparison_labels(
+        self, id_table: IdTable
+    ) -> tuple[list[tuple[Ref, Ref]], list[int]]:
         """Provide two lists based on ``self.comparison_space``.
 
         The first list contains pairs of compared references
@@ -60,4 +61,3 @@ class Split:
             accumulator.gt_clusters.update(split.gt_clusters)
             accumulator.id_cluster_map.update(split.id_cluster_map)
         return accumulator
-
