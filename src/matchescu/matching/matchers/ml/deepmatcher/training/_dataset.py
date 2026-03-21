@@ -9,7 +9,7 @@ from typing import Dict, Iterable
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from matchescu.data import Record
-from matchescu.reference_store.comparison_space import BinaryComparisonSpace
+from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.reference_store.id_table import IdTable
 from matchescu.typing import EntityReferenceIdentifier
 
@@ -22,20 +22,14 @@ class DeepMatcherDataset(Dataset):
     def __init__(
         self,
         id_table: IdTable,
-        comparison_space: BinaryComparisonSpace,
-        ground_truth: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
+        split: Split,
         attr_map: dict[str, str] = None,
         exclude_from_comparison: Iterable[str | int] = None,
         tokenizer: PreTrainedTokenizerBase = None,
         max_len: int = 30,
     ):
         self.__id_table = id_table
-        self.__pairs = list(
-            map(lambda pair: tuple(self.__id_table.get_all(pair)), comparison_space)
-        )
-        self.__labels = list(
-            map(lambda pair: int(pair in ground_truth), comparison_space)
-        )
+        self.__pairs , self.__labels = split.to_comparison_labels(self.__id_table)
         self.__max_len = max_len
         self.__attr_map = attr_map
         self.__tokenizer = tokenizer or AutoTokenizer.from_pretrained(
@@ -45,11 +39,7 @@ class DeepMatcherDataset(Dataset):
         left, right = next(iter(self.__pairs))
         min_attr_count = min(len(left), len(right))
         attr_map = attr_map or {i: i for i in range(min_attr_count)}
-        exclude = (
-            set(exclude_from_comparison)
-            if exclude_from_comparison is not None
-            else set()
-        )
+        exclude = set(exclude_from_comparison or ())
         self.__attr_map = {
             l_attr: r_attr
             for l_attr, r_attr in attr_map.items()
@@ -133,10 +123,6 @@ if __name__ == "__main__":
     ds.load_right(traits, partial(_id_factory, source="tableB"))
     ds.load_splits()
 
-    dmds = DeepMatcherDataset(
-        ds.id_table,
-        ds.train_split.comparison_space,
-        ds.train_split.ground_truth,
-    )
-    for item in dmds.to_dataloader():
+    dmds = DeepMatcherDataset(ds.id_table, ds.train_split)
+    for item in dmds.get_data_loader():
         print(item)

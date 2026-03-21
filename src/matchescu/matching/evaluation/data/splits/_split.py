@@ -61,3 +61,6 @@ class Split:
             accumulator.gt_clusters.update(split.gt_clusters)
             accumulator.id_cluster_map.update(split.id_cluster_map)
         return accumulator
+
+    def __len__(self):
+        return len(self.comparison_space)
