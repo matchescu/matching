@@ -67,7 +67,9 @@ class SplitGenerator:
         self._log = log or logging.getLogger(self.__class__.__name__)
 
         self._id_table: IdTable | None = None
-        self._matcher_gt: dict[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier], int] = {}
+        self._matcher_gt: dict[
+            tuple[EntityReferenceIdentifier, EntityReferenceIdentifier], int
+        ] = {}
         self._cluster_gt: dict[EntityReferenceIdentifier, int] = {}
         self._clusters: dict[int, list[EntityReferenceIdentifier]] = defaultdict(list)
         self._record_pool: list[EntityReference] = []
@@ -76,7 +78,9 @@ class SplitGenerator:
         self,
         id_table: IdTable,
         cluster_gt: dict[EntityReferenceIdentifier, int],
-        matcher_gt: dict[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier], int],
+        matcher_gt: dict[
+            tuple[EntityReferenceIdentifier, EntityReferenceIdentifier], int
+        ],
     ) -> "SplitGenerator":
         self._id_table = id_table
         self._cluster_gt = cluster_gt
@@ -92,7 +96,9 @@ class SplitGenerator:
 
         self._log.info(
             "%d entity references, %d clusters represented, %d unclustered",
-            len(self._id_table), len(self._clusters), unclustered
+            len(self._id_table),
+            len(self._clusters),
+            unclustered,
         )
         return self
 
@@ -100,7 +106,9 @@ class SplitGenerator:
         """Generate negatives, balance classes, split into train/dev/test."""
         self._check_loaded()
 
-        self._log.info("Known matching pairs (non-zero class): %d", len(self._matcher_gt))
+        self._log.info(
+            "Known matching pairs (non-zero class): %d", len(self._matcher_gt)
+        )
         pos_classes = list(sorted(set(self._matcher_gt.values()) - {0}))
         by: dict[int, list[tuple]] = defaultdict(list)
         for cmp, c in self._matcher_gt.items():
@@ -108,7 +116,7 @@ class SplitGenerator:
         pos_class_counts = {c: len(by[c]) for c in pos_classes}
         self._log.info(
             "matcher ground truth positive classes: %s",
-            ", ".join(f"[{c}] = {n}" for c, n in pos_class_counts.items())
+            ", ".join(f"[{c}] = {n}" for c, n in pos_class_counts.items()),
         )
         bridge_class_counts = [n for c, n in pos_class_counts.items() if c > 1]
         if len(bridge_class_counts) > 0:
@@ -126,11 +134,7 @@ class SplitGenerator:
         raw_targets = {
             0: n0_target,
             1: n1_target,
-            **{
-                c: n
-                for c, n in pos_class_counts.items()
-                if c > 1
-            }
+            **{c: n for c, n in pos_class_counts.items() if c > 1},
         }
         targets = self._apply_cap(raw_targets)
         for c, n in raw_targets.items():
@@ -140,7 +144,9 @@ class SplitGenerator:
                 case 1:
                     self._log.info("target class 1: %d (from %d)", n, raw_targets[1])
                 case _:
-                    self._log.info("target class %d: %d (available %d)", c, n, raw_targets[c])
+                    self._log.info(
+                        "target class %d: %d (available %d)", c, n, raw_targets[c]
+                    )
 
         samples = {1: self._select_diverse(by[1], targets[1])}
         for c, n in targets.items():
@@ -148,25 +154,26 @@ class SplitGenerator:
                 continue
             class_pool = random.sample(by[c], k=n) if n < raw_targets[c] else by[c]
             samples.update({c: class_pool})
-        samples.update({
-            0: self._generate_negatives(targets[0], set(self._matcher_gt))
-        })
+        samples.update({0: self._generate_negatives(targets[0], set(self._matcher_gt))})
 
         d_bal = pl.DataFrame(
             {
-                "left_id": l.label,
-                "left_source": l.source,
-                "right_id": r.label,
-                "right_source": r.source,
-                "label": c
+                "left_id": left_id.label,
+                "left_source": left_id.source,
+                "right_id": right_id.label,
+                "right_source": right_id.source,
+                "label": c,
             }
             for c, items in samples.items()
-            for l, r in items
+            for left_id, right_id in items
         )
         self._log.info(
             "balanced: %d, %s",
             len(d_bal),
-            ", ".join(f"{c}={n}" for c, n in d_bal['label'].value_counts(sort=True).iter_rows())
+            ", ".join(
+                f"{c}={n}"
+                for c, n in d_bal["label"].value_counts(sort=True).iter_rows()
+            ),
         )
         self._splits = self._stratified_split(d_bal, [0, *pos_classes])
         return self
@@ -174,7 +181,9 @@ class SplitGenerator:
     def save(self, output_dir: str, prefix: str = "") -> "SplitGenerator":
         """Write the six CSV files to *output_dir*."""
         if self._splits is None:
-            raise RuntimeError("call generate(): attempting to save without generating splits")
+            raise RuntimeError(
+                "call generate(): attempting to save without generating splits"
+            )
 
         self._log.info("Saving splits to: %s", output_dir)
         os.makedirs(output_dir, exist_ok=True)
@@ -199,7 +208,9 @@ class SplitGenerator:
             return dict(targets)
 
         self._log.info(
-            "cap check: %d > %d; scaling down proportionally", total, self.max_total_samples
+            "cap check: %d > %d; scaling down proportionally",
+            total,
+            self.max_total_samples,
         )
 
         # Reserve minimum slots for every class first
@@ -215,9 +226,7 @@ class SplitGenerator:
 
         # Distribute the remaining budget proportionally
         remaining = budget - reserved
-        proportional_total = sum(
-            max(targets[c] - MIN_PER_CLASS, 0) for c in classes
-        )
+        proportional_total = sum(max(targets[c] - MIN_PER_CLASS, 0) for c in classes)
 
         result: dict[int, int] = {}
         allocated = 0
@@ -239,12 +248,14 @@ class SplitGenerator:
         self._log.info(
             "scaled targets: %s (total %d))",
             ", ".join(f"{k}={v}" for k, v in result.items()),
-            sum(result.values())
+            sum(result.values()),
         )
         return result
 
     def _generate_negatives(
-        self, n: int, exclude: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
+        self,
+        n: int,
+        exclude: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
     ) -> list[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]]:
         """Sample *n_needed* cross-cluster negative pairs.
 
@@ -254,14 +265,12 @@ class SplitGenerator:
         3. Not a known positive.
         4. Not already generated (no duplicates).
         """
-        self._log.info(f"Generating %d negatives", n)
+        self._log.info("Generating %d negatives", n)
 
         pool = [ref.id for ref in self._id_table]
         n_pool = len(pool)
         if n_pool < 2:
-            raise ValueError(
-                "Record pool has < 2 entries; cannot generate pairs."
-            )
+            raise ValueError("Record pool has < 2 entries; cannot generate pairs.")
 
         seen: set[tuple] = set()
         attempts = 0
@@ -300,13 +309,10 @@ class SplitGenerator:
 
         if len(result) < n:
             self._log.warning(
-                "Only %d/%d negatives after %d attempts",
-                len(result), n, attempts
+                "Only %d/%d negatives after %d attempts", len(result), n, attempts
             )
         else:
-            self._log.info(
-                "Got %d negatives after %d attempts", n, attempts
-            )
+            self._log.info("Got %d negatives after %d attempts", n, attempts)
 
         return result
 
@@ -317,11 +323,14 @@ class SplitGenerator:
             return pool.copy()
 
         freq: Counter = Counter()
-        for l, r in pool:
-            freq[l] += 1
-            freq[r] += 1
+        for left_id, right_id in pool:
+            freq[left_id] += 1
+            freq[right_id] += 1
 
-        scores = np.array([freq[l] + freq[r] for l, r in pool], dtype=np.float64)
+        scores = np.array(
+            [freq[left_id] + freq[right_id] for left_id, right_id in pool],
+            dtype=np.float64,
+        )
         scores += self._rng.random(len(scores)) * 0.01
 
         idx = np.argsort(scores)[:n]
@@ -339,7 +348,9 @@ class SplitGenerator:
     def _clamp(target: int, available: int) -> int:
         return max(MIN_PER_CLASS, min(target, available))
 
-    def _stratified_split(self, df: pl.DataFrame, classes: list[int]) -> dict[str, pl.DataFrame]:
+    def _stratified_split(
+        self, df: pl.DataFrame, classes: list[int]
+    ) -> dict[str, pl.DataFrame]:
         """Per-class split respecting *split_ratio*, ≥1 per class per split."""
         train_r, dev_r, test_r = self.split_ratio
         total_r = train_r + dev_r + test_r
@@ -361,13 +372,13 @@ class SplitGenerator:
                     n_dev -= 1
                 n_train = n - n_test - n_dev
 
-            assert n_train >= 1 and n_dev >= 1 and n_test >= 1, (
-                f"class {c}: cannot split {n} into 3 non-empty sets"
-            )
+            assert (
+                n_train >= 1 and n_dev >= 1 and n_test >= 1
+            ), f"class {c}: cannot split {n} into 3 non-empty sets"
 
             parts["test"].append(sub[:n_test])
-            parts["dev"].append(sub[n_test:n_test+n_dev])
-            parts["train"].append(sub[n_test+n_dev:])
+            parts["dev"].append(sub[n_test : n_test + n_dev])
+            parts["train"].append(sub[n_test + n_dev :])
 
         return {
             k: pl.concat(v, how="vertical", strict=True).sample(
@@ -377,9 +388,7 @@ class SplitGenerator:
         }
 
     def _check_loaded(self) -> None:
-        if any(
-            x is None for x in (self._id_table, self._cluster_gt, self._matcher_gt)
-        ):
+        if any(x is None for x in (self._id_table, self._cluster_gt, self._matcher_gt)):
             raise RuntimeError("Call load() before generate().")
 
 
@@ -444,19 +453,18 @@ Output (in --output-dir): train.csv, test.csv, dev.csv, optionally prefixed.
         "--max-total-samples",
         type=int,
         default=None,
-        help="hard upper limit on total rows (train+dev+test)."
-        "Default: no limit.",
+        help="hard upper limit on total rows (train+dev+test)." "Default: no limit.",
     )
-    ap.add_argument(
-        "--random-state", type=int, default=42, help="random seed"
-    )
+    ap.add_argument("--random-state", type=int, default=42, help="random seed")
     a = ap.parse_args()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     traits = list(Traits().string(["affil1"]))
     ds = CsvDataSource(a.data_source, traits, has_header=True).read()
+
     def _ref_id(records):
         rec = next(iter(records))
         return EntityReferenceIdentifier(rec["id"], rec["source"])
+
     extract = RecordExtraction(ds, _ref_id, single_record)
     id_table = InMemoryIdTable()
     for x in extract():
@@ -465,7 +473,7 @@ Output (in --output-dir): train.csv, test.csv, dev.csv, optionally prefixed.
     match_gt = {
         (
             EntityReferenceIdentifier(x["left_id"], x["left_source"]),
-            EntityReferenceIdentifier(x["right_id"], x["right_source"])
+            EntityReferenceIdentifier(x["right_id"], x["right_source"]),
         ): x["label"]
         for x in match_gt_df.iter_rows(named=True)
     }

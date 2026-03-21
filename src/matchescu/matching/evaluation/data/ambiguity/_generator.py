@@ -12,9 +12,11 @@ import polars as pl
 from matchescu.data import Record
 from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import Traits, RecordExtraction, single_record
+from matchescu.matching.evaluation.data.splits import SplitGenerator
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.typing import (
-    EntityReferenceIdentifier as RefId, EntityReference,
+    EntityReferenceIdentifier as RefId,
+    EntityReference,
 )
 
 try:
@@ -28,8 +30,16 @@ except ImportError:
 
 DIR = Path("./data/affiliationstrings/")
 DEFAULT_BRIDGE_TERMS: list[str] = [
-    "Research", "Center", "Lab", "Institute", "College",
-    "Department", "Division", "Group", "School", "Foundation",
+    "Research",
+    "Center",
+    "Lab",
+    "Institute",
+    "College",
+    "Department",
+    "Division",
+    "Group",
+    "School",
+    "Foundation",
 ]
 
 
@@ -38,13 +48,23 @@ type ComparisonData = tuple[RefId, RefId]
 
 class AmbiguityGenerator:
     _DEFAULT_DEGRADATION_PATTERNS = [
-        r',\s*USA', r',\s*US', r',\s*United States',
-        r',\s*CA', r',\s*California',
-        r',\s*NY', r',\s*New York',
-        r',\s*Germany', r',\s*France', r',\s*Japan',
-        r'\s+Inc\.?', r'\s+Corp\.?', r'\s+Ltd\.?',
-        r'\s+University', r'\s+Univ\.?',
-        r'\s+Research\s+Center', r'\s+Lab(?:oratories)?'
+        r",\s*USA",
+        r",\s*US",
+        r",\s*United States",
+        r",\s*CA",
+        r",\s*California",
+        r",\s*NY",
+        r",\s*New York",
+        r",\s*Germany",
+        r",\s*France",
+        r",\s*Japan",
+        r"\s+Inc\.?",
+        r"\s+Corp\.?",
+        r"\s+Ltd\.?",
+        r"\s+University",
+        r"\s+Univ\.?",
+        r"\s+Research\s+Center",
+        r"\s+Lab(?:oratories)?",
     ]
 
     def __init__(
@@ -53,22 +73,28 @@ class AmbiguityGenerator:
         mapping_gt: dict[ComparisonData, int],
         ambiguity_target_properties: list[str] = None,
         string_degradation_patterns: list[str] = None,
-        id_col: str|int = 0,
+        id_col: str | int = 0,
     ) -> None:
         self._mapping_gt = mapping_gt
         self._id_col = id_col
         self._id_table = reduce(self.__ingest_all, data_sources, InMemoryIdTable())
         self._cluster_id_map, self._cluster_count = self.__get_clusters()
-        self._degradation_patterns = string_degradation_patterns or self._DEFAULT_DEGRADATION_PATTERNS
+        self._degradation_patterns = (
+            string_degradation_patterns or self._DEFAULT_DEGRADATION_PATTERNS
+        )
         self._target_properties = set(ambiguity_target_properties or [])
 
     def __new_ref_id(self, records: Iterable[Record], source: str):
         dominant_record = next(iter(records))
         return RefId(label=dominant_record[self._id_col], source=source)
 
-    def __ingest_all(self, id_table: InMemoryIdTable, data_source: CsvDataSource) -> InMemoryIdTable:
+    def __ingest_all(
+        self, id_table: InMemoryIdTable, data_source: CsvDataSource
+    ) -> InMemoryIdTable:
         id_factory = partial(self.__new_ref_id, source=data_source.name)
-        extract_entity_references = RecordExtraction(data_source, id_factory, single_record)
+        extract_entity_references = RecordExtraction(
+            data_source, id_factory, single_record
+        )
         for ref in extract_entity_references():
             id_table.put(ref)
         return id_table
@@ -90,12 +116,12 @@ class AmbiguityGenerator:
     def degrade_str(self, input_str):
         result = input_str
         for pattern in self._degradation_patterns:
-            result = re.sub(pattern, '', result, flags=re.IGNORECASE)
+            result = re.sub(pattern, "", result, flags=re.IGNORECASE)
 
         # Clean up extra spaces and commas
-        result = re.sub(r'\s*,\s*,', ', ', result)
-        result = re.sub(r'^\s*,\s*|\s*,\s*$', '', result)
-        result = re.sub(r'\s+', ' ', result).strip()
+        result = re.sub(r"\s*,\s*,", ", ", result)
+        result = re.sub(r"^\s*,\s*|\s*,\s*$", "", result)
+        result = re.sub(r"\s+", " ", result).strip()
 
         return result
 
@@ -218,7 +244,7 @@ class AmbiguityGenerator:
             refs = list(self._id_table.get_all(candidates))
             mean_ambiguities = []
             for i, ref in enumerate(refs):
-                others = refs[:i] + refs[i+1:]
+                others = refs[:i] + refs[i + 1 :]
                 ambiguity_scores = [self._ambiguity_score(ref, x) for x in others]
                 mean_ambiguities.append(sum(ambiguity_scores) / len(ambiguity_scores))
             max_ambiguity = 0
@@ -306,9 +332,11 @@ class AmbiguityGenerator:
     def _blend(cls, a: str, b: str) -> str:
         """Alternate characters: even indices from *a*, odd from *b*."""
         return "".join(
-            (a[i] if i % 2 == 0 else b[i])
-            if i < len(a) and i < len(b)
-            else (a[i] if i < len(a) else b[i])
+            (
+                (a[i] if i % 2 == 0 else b[i])
+                if i < len(a) and i < len(b)
+                else (a[i] if i < len(a) else b[i])
+            )
             for i in range(max(len(a), len(b)))
         )
 
@@ -366,11 +394,11 @@ class AmbiguityGenerator:
         for i, w in enumerate(wa):
             for ww in wb:
                 if w.lower() != ww.lower():
-                    _add(" ".join(wa[:i] + [ww] + wa[i + 1:]))
+                    _add(" ".join(wa[:i] + [ww] + wa[i + 1 :]))
         for i, w in enumerate(wb):
             for ww in wa:
                 if w.lower() != ww.lower():
-                    _add(" ".join(wb[:i] + [ww] + wb[i + 1:]))
+                    _add(" ".join(wb[:i] + [ww] + wb[i + 1 :]))
 
         # 5. Subsets & (small) permutations of the word union
         union = list(dict.fromkeys(wa + wb))
@@ -393,7 +421,7 @@ class AmbiguityGenerator:
         lo_a, lo_b = a.lower(), b.lower()
         if lo_a.startswith(lo_b) or lo_b.startswith(lo_a):
             longer, shorter = (a, b) if len(a) >= len(b) else (b, a)
-            extra = longer[len(shorter):].strip()
+            extra = longer[len(shorter) :].strip()
             for k in range(1, len(extra) + 1):
                 _add(f"{shorter} {extra[:k]}")
 
@@ -401,7 +429,11 @@ class AmbiguityGenerator:
 
     @classmethod
     def _generate_ambiguous_text(
-        cls, val_a: str, val_b: str, n: int = 5, bridge_terms: list[str] | None = None,
+        cls,
+        val_a: str,
+        val_b: str,
+        n: int = 5,
+        bridge_terms: list[str] | None = None,
     ) -> list[tuple[str, float, float, float]]:
         """Return the *n* most ambiguous strings between *val_a* and *val_b*.
 
@@ -435,7 +467,7 @@ class AmbiguityGenerator:
             ref_properties = {
                 "source": start_ref,
                 "target": target,
-                "target_cluster_id": target_cluster_id
+                "target_cluster_id": target_cluster_id,
             }
             for k in all_keys:
                 # attribute in one but not the other -> continue
@@ -449,7 +481,9 @@ class AmbiguityGenerator:
                     if k not in self._target_properties:
                         ref_properties[k] = ""
                     else:
-                        ref_properties[k] = self._generate_ambiguous_text(val_a, val_b, 1)[0][0]
+                        ref_properties[k] = self._generate_ambiguous_text(
+                            val_a, val_b, 1
+                        )[0][0]
                 else:
                     ref_properties[k] = None
             new_ref = EntityReference(RefId(max_id + 1, "generated"), ref_properties)
@@ -490,19 +524,18 @@ class AmbiguityGenerator:
         return self._id_table, cluster_gt, directed_gt, undirected_gt
 
 
-
 def load_data(datadir, rec_fname, traits, mapping_fname):
     ds = CsvDataSource(datadir / rec_fname, traits, has_header=True)
     ds.read()
     df = pl.read_csv(
         datadir / mapping_fname,
         has_header=False,
-        schema={"left_id": pl.Int32, "right_id": pl.Int32}
+        schema={"left_id": pl.Int32, "right_id": pl.Int32},
     )
     mappings = {
         (
             RefId(label=row["left_id"], source=ds.name),
-            RefId(label=row["right_id"], source=ds.name)
+            RefId(label=row["right_id"], source=ds.name),
         ): 1
         for row in df.iter_rows(named=True)
     }
@@ -511,58 +544,74 @@ def load_data(datadir, rec_fname, traits, mapping_fname):
 
 def main():
     traits = list(Traits().string(["affil1"]))
-    ds, matching_gt = load_data(DIR, "affiliationstrings_ids.csv", traits, "affiliationstrings_mapping.csv")
+    ds, matching_gt = load_data(
+        DIR, "affiliationstrings_ids.csv", traits, "affiliationstrings_mapping.csv"
+    )
     introduce_ambiguity = AmbiguityGenerator([ds], matching_gt, ["affil1"], None, "id1")
     id_table, cluster_gt, directed_gt, undirected_gt = introduce_ambiguity()
 
-    data_df = pl.DataFrame([
-        {
-            "id1": ref.id.label,
-            "source": ref.id.source,
-            "affil1": ref.affil1,
-        }
-        for ref in id_table
-    ])
-    data_df.write_csv(DIR / f"{ds.name}_with_ambiguity.csv", include_header=True)
-
-    clusters_df = pl.DataFrame([
-        {
-            "id": ref_id.label,
-            "source": ref_id.source,
-            "cluster_id": cluster_id
-        }
-        for cluster_id, ref_ids in cluster_gt.items()
-        for ref_id in ref_ids
-    ])
-    directed_df = pl.DataFrame([
-        {
-            "left_id": l.label,
-            "left_source": l.source,
-            "right_id": r.label,
-            "right_source": r.source,
-            "label": c
-        }
-        for (l, r), c in directed_gt.items()
-    ])
-    undirected_df = pl.DataFrame([
-        {
-            "left_id": l.label,
-            "left_source": l.source,
-            "right_id": r.label,
-            "right_source": r.source,
-            "label": c
-        }
-        for (l, r), c in undirected_gt.items()
-    ])
+    data_df = pl.DataFrame(
+        [
+            {
+                "id1": ref.id.label,
+                "source": ref.id.source,
+                "affil1": ref.affil1,
+            }
+            for ref in id_table
+        ]
+    )
+    clusters_df = pl.DataFrame(
+        [
+            {"id": ref_id.label, "source": ref_id.source, "cluster_id": cluster_id}
+            for cluster_id, ref_ids in cluster_gt.items()
+            for ref_id in ref_ids
+        ]
+    )
+    directed_df = pl.DataFrame(
+        [
+            {
+                "left_id": left_id.label,
+                "left_source": left_id.source,
+                "right_id": right_id.label,
+                "right_source": right_id.source,
+                "label": c,
+            }
+            for (left_id, right_id), c in directed_gt.items()
+        ]
+    )
+    undirected_df = pl.DataFrame(
+        [
+            {
+                "left_id": left_id.label,
+                "left_source": left_id.source,
+                "right_id": right_id.label,
+                "right_source": right_id.source,
+                "label": c,
+            }
+            for (left_id, right_id), c in undirected_gt.items()
+        ]
+    )
 
     ground_truths = {
-        "affiliationstrings_clusters": clusters_df,
-        "affiliationstrings_directed": directed_df,
-        "affiliationstrings_undirected": undirected_df,
+        f"!amb_{ds.name}_clusters": clusters_df,
+        f"!amb_{ds.name}_directed": directed_df,
+        f"!amb_{ds.name}_undirected": undirected_df,
     }
 
+    data_df.write_csv(DIR / f"!amb_{ds.name}.csv", include_header=True)
     for name, df in ground_truths.items():
-        df.write_csv(DIR / f"{name}_amb_gt.csv", include_header=True)
+        df.write_csv(DIR / f"{name}_gt.csv", include_header=True)
+
+    id_cluster_map = {r: c_id for c_id, ids in cluster_gt.items() for r in ids}
+    for name, match_gt in [("directed", directed_gt), ("undirected", undirected_gt)]:
+        generator = SplitGenerator(
+            split_ratio=(3, 1, 1),
+            neg_pos_ratio=8.0,
+            match_bridge_ratio=4.0,
+            max_total_samples=10000,
+            seed=43,
+        ).load(id_table, id_cluster_map, match_gt)
+        generator.generate().save(str(DIR.absolute()), prefix=f"!amb_{ds.name}_{name}")
 
 
 if __name__ == "__main__":
