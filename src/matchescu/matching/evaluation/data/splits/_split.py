@@ -1,5 +1,5 @@
+import copy
 from dataclasses import dataclass, field
-from types import NoneType
 from typing import Set
 
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
@@ -48,15 +48,16 @@ class Split:
             labels.append(label)
         return pairs, labels
 
-    @staticmethod
-    def __join(accum: dict, cs: BinaryComparisonSpace) -> dict:
-        for cmp in cs:
-            accum[cmp] = accum.get(cmp, 0) + 1
-        return accum
-
-    @staticmethod
-    def __to_comparison_space(accum: dict) -> BinaryComparisonSpace:
-
     @classmethod
-    def merge(cls, *splits: "Split") -> "Split":
-        cmp_spaces = map(lambda x: x.comparison_space, splits)
+    def merge(cls, splits: list["Split"]) -> "Split":
+        if splits is None or len(splits) == 0:
+            raise ValueError()
+        accumulator = copy.deepcopy(splits[0])
+        for split in splits[1:]:
+            for x, y in split.comparison_space:
+                accumulator.comparison_space.put(x, y)
+            accumulator.matcher_labels.update(split.matcher_labels)
+            accumulator.gt_clusters.update(split.gt_clusters)
+            accumulator.id_cluster_map.update(split.id_cluster_map)
+        return accumulator
+
