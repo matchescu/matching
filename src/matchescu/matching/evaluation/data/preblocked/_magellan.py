@@ -2,11 +2,11 @@ import itertools
 from os import PathLike
 from pathlib import Path
 
-import networkx as nx
 import polars as pl
 from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import Traits, RecordExtraction, single_record
 from matchescu.matching.evaluation.data.splits._split import Split
+from matchescu.matching.evaluation.ground_truth._ecp import EquivalenceClassPartitioner
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
 from matchescu.typing import (
@@ -70,22 +70,25 @@ class MagellanDataset:
     def __load_split(self, path: Path) -> Split:
         rows = list(
             itertools.starmap(
-                lambda left, right, is_match: (
-                    RefId(left, self.__left_source),
-                    RefId(right, self.__right_source),
+                lambda x, y, is_match: (
+                    RefId(x, self.__left_source),
+                    RefId(y, self.__right_source),
                     is_match,
                 ),
                 pl.read_csv(path, ignore_errors=True).iter_rows(named=False),
             )
         )
-        gt = set((left, right) for left, right, is_match in rows if is_match == 1)
         cs = InMemoryComparisonSpace()
         for left, right, _ in rows:
             cs.put(left, right)
+
+        matcher_gt = {(left, right): label for left, right, label in rows if label == 1}
+        ecp = EquivalenceClassPartitioner(self.__id_table.ids())
         clusters = {
-            ix: comp for ix, comp in enumerate(nx.connected_components(nx.Graph(gt)), 1)
+            cluster_no: set(cluster)
+            for cluster_no, cluster in enumerate(ecp(matcher_gt))
         }
-        return Split(cs, {cmp: 1 for cmp in gt}, clusters)
+        return Split(cs, matcher_gt, clusters)
 
     def load_splits(self) -> "MagellanDataset":
         if not self.__left_source or not self.__right_source:
