@@ -1,7 +1,5 @@
 """Dataset and data loading utilities for entity matching"""
 
-from functools import partial
-
 import torch
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, Iterable
@@ -119,8 +117,8 @@ if __name__ == "__main__":
     def _id_factory(rows: Iterable[Record], source: str) -> EntityReferenceIdentifier:
         return EntityReferenceIdentifier(next(iter(rows))["id"], source)
 
-    ds.load_left(traits, partial(_id_factory, source="tableA"))
-    ds.load_right(traits, partial(_id_factory, source="tableB"))
+    ds.load_left(traits)
+    ds.load_right(traits)
     ds.load_splits()
 
     dmds = DeepMatcherDataset(ds.id_table, ds.train_split)

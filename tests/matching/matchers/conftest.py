@@ -1,5 +1,3 @@
-from functools import partial
-
 import pytest
 
 from matchescu.extraction import Traits
@@ -53,8 +51,8 @@ def amazon_google(data_dir, amazon_google_traits, id_col):
     def ref_id(records, source):
         return EntityReferenceIdentifier(records[0][id_col], source)
 
-    ret.load_left(amazon_google_traits, partial(ref_id, source=ret.left_source))
-    ret.load_right(amazon_google_traits, partial(ref_id, source=ret.right_source))
+    ret.load_left(amazon_google_traits)
+    ret.load_right(amazon_google_traits)
     ret.load_splits()
 
     return ret

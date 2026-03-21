@@ -4,31 +4,15 @@ from contextlib import contextmanager
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
-from typing import Iterable
 
 import click
 import humanize
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, PreTrainedTokenizerFast, DebertaV2TokenizerFast
 
-from matchescu.blocking import TfIdfBlocker
-from matchescu.comparison_filtering import is_cross_source_comparison
-from matchescu.csg import BinaryComparisonSpaceGenerator, BinaryComparisonSpaceEvaluator
-from matchescu.data import Record
-from matchescu.data_sources import CsvDataSource
-from matchescu.extraction import (
-    Traits,
-    RecordExtraction,
-    single_record,
-)
+from matchescu.extraction import Traits
 from matchescu.matching.evaluation.data import MagellanBenchmarkData, MagellanTraits
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
-from matchescu.reference_store.id_table import InMemoryIdTable
-from matchescu.typing import (
-    EntityReferenceIdentifier as RefId,
-    EntityReferenceIdFactory,
-)
-
 from matchescu.matching.matchers.ml.ditto.training._config import (
     TrainingConfig,
     ModelTrainingParams,
@@ -46,31 +30,6 @@ _MODEL_TOKENIZERS = {
 }
 
 
-def create_comparison_space(id_table, ground_truth, initial_size):
-    csg = (
-        BinaryComparisonSpaceGenerator()
-        .add_blocker(TfIdfBlocker(id_table, 0.23))
-        .add_filter(is_cross_source_comparison)
-    )
-    comparison_space = csg()
-    eval_cs = BinaryComparisonSpaceEvaluator(ground_truth, initial_size)
-    metrics = eval_cs(comparison_space)
-    print(metrics)
-    return comparison_space
-
-
-def _id(records: list[Record], source: str):
-    return RefId(records[0][0], source)
-
-
-def load_data_source(id_table: InMemoryIdTable, data_source: CsvDataSource) -> None:
-    extract_references = RecordExtraction(
-        data_source, partial(_id, source=data_source.name), single_record
-    )
-    for ref in extract_references():
-        id_table.put(ref)
-
-
 @contextmanager
 def timer(start_message: str):
     log.info(start_message)
@@ -85,13 +44,11 @@ def timer(start_message: str):
 def load_magellan_dataset(
     ds_path: Path,
     left_traits: Traits,
-    left_id_factory: EntityReferenceIdFactory,
     right_traits: Traits | None = None,
-    right_id_factory: EntityReferenceIdFactory | None = None,
 ) -> MagellanBenchmarkData:
     ds = MagellanBenchmarkData(ds_path)
-    ds.load_left(left_traits, left_id_factory)
-    ds.load_right(right_traits or left_traits, right_id_factory or left_id_factory)
+    ds.load_left(left_traits)
+    ds.load_right(right_traits or left_traits)
     ds.load_splits()
     return ds
 
@@ -103,9 +60,7 @@ def get_magellan_data_loaders(
     batch_size: int = 32,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     train_ds, xv_ds, test_ds = [
-        DittoDataset(
-            magellan_ds.id_table, split.comparison_space, split.ground_truth, tokenizer
-        )
+        DittoDataset(magellan_ds.id_table, split, tokenizer)
         for split in [
             magellan_ds.train_split,
             magellan_ds.valid_split,
@@ -120,32 +75,18 @@ def get_magellan_data_loaders(
 
 
 @timer(start_message="train ditto")
-def train_on_magellan_data(
+def train_on_benchmark_data(
     model_save_dir: Path,
     model_name: str,
+    benchmark_data: MagellanBenchmarkData,
     tokenizer: PreTrainedTokenizerFast,
     train_params: ModelTrainingParams,
-    dataset_dir: Path,
-    dataset_name: str,
-    traits: Traits,
-    id_factory: EntityReferenceIdFactory,
-    pair_traits: Traits | None = None,
-    pair_id_factory: EntityReferenceIdFactory | None = None,
 ):
-    pair_traits = pair_traits or traits
-    pair_id_factory = pair_id_factory or id_factory
-    magellan_ds = load_magellan_dataset(
-        dataset_dir / dataset_name,
-        traits,
-        id_factory,
-        pair_traits,
-        pair_id_factory,
-    )
     train, xv, test = get_magellan_data_loaders(
-        magellan_ds, tokenizer, train_params.batch_size
+        benchmark_data, tokenizer, train_params.batch_size
     )
     ditto = DittoModel(model_name)
-    dataset_logger = log.getChild(dataset_name)
+    dataset_logger = log.getChild(benchmark_data.name)
     trainer = DittoTrainer(
         model_name,
         model_save_dir,
@@ -158,14 +99,6 @@ def train_on_magellan_data(
         model_name, xv, test, tb_log_dir, dataset_logger
     ) as evaluator:
         trainer.run_training(ditto, train, evaluator, True)
-
-
-def table_a_id(rows: Iterable[Record]) -> RefId:
-    return RefId(next(iter(rows))["id"], "tableA")
-
-
-def table_b_id(rows: Iterable[Record]) -> RefId:
-    return RefId(next(iter(rows))["id"], "tableB")
 
 
 @click.command
@@ -203,22 +136,20 @@ def run_training(
     config = TrainingConfig.load_json(config_path)
     with warnings.catch_warnings(action="ignore"):
         for dataset_name in config.dataset_names:
+            ds_path = root_data_dir / "magellan" / dataset_name
             ds_model_dir = root_model_dir / dataset_name
             for model_name in config.model_names:
                 tokenizer = _new_fast_tokenizer(model_name)
                 train_params = config.get(model=model_name, dataset=dataset_name)
                 ds_traits = benchmark_dataset_traits[dataset_name]
+                benchmark_data = load_magellan_dataset(ds_path, ds_traits)
 
-                train_on_magellan_data(
+                train_on_benchmark_data(
                     ds_model_dir,
                     model_name,
+                    benchmark_data,
                     tokenizer,
                     train_params,
-                    root_data_dir / "magellan",
-                    dataset_name,
-                    traits=ds_traits,
-                    id_factory=table_a_id,
-                    pair_id_factory=table_b_id,
                 )
 
 
