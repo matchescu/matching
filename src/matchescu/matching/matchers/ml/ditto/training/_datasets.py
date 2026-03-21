@@ -8,10 +8,9 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizerFast
 
+from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.matchers.ml.ditto._ref_adapter import to_text
-from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable
-from matchescu.typing import EntityReferenceIdentifier
 
 
 def alphanumeric(token):
@@ -290,8 +289,7 @@ class DittoDataset(Dataset):
     def __init__(
         self,
         id_table: IdTable,
-        comparison_space: BinaryComparisonSpace,
-        ground_truth: set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]],
+        split: Split,
         tokenizer: PreTrainedTokenizerFast,
         max_len=256,
         size=None,
@@ -300,14 +298,7 @@ class DittoDataset(Dataset):
         right_cols: tuple | None = None,
     ):
         self.__id_table = id_table
-        self.__pairs = list(
-            map(lambda pair: tuple(self.__id_table.get_all(pair)), comparison_space)
-        )
-        self.__labels = list(
-            map(lambda pair: int(pair in ground_truth), comparison_space)
-        )
-        self.__comparison_space = comparison_space
-        self.__ground_truth = ground_truth
+        self.__pairs, self.__labels = split.to_comparison_labels(self.__id_table)
         self.__tokenizer = tokenizer
         self.__max_len = max_len
         self.__size = size

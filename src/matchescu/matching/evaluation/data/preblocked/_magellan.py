@@ -1,15 +1,13 @@
 import itertools
-from dataclasses import dataclass
 from os import PathLike
 from pathlib import Path
 
+import networkx as nx
 import polars as pl
 from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import Traits, RecordExtraction, single_record
-from matchescu.reference_store.comparison_space import (
-    BinaryComparisonSpace,
-    InMemoryComparisonSpace,
-)
+from matchescu.matching.evaluation.data.splits._split import Split
+from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
 from matchescu.typing import (
     EntityReferenceIdFactory,
@@ -18,11 +16,6 @@ from matchescu.typing import (
 
 
 class MagellanDataset:
-    @dataclass
-    class Split:
-        comparison_space: BinaryComparisonSpace
-        ground_truth: set[tuple[RefId, RefId]]
-
     def __init__(self, folder_path: str | PathLike) -> None:
         self.__dataset_dir = Path(folder_path)
         if not self.__dataset_dir.is_dir():
@@ -45,9 +38,9 @@ class MagellanDataset:
         self.__id_table: IdTable = InMemoryIdTable()
         self.__left_source = self.__left_table_path.stem
         self.__right_source = self.__right_table_path.stem
-        self._train: MagellanDataset.Split | None = None
-        self._valid: MagellanDataset.Split | None = None
-        self._test: MagellanDataset.Split | None = None
+        self._train: Split | None = None
+        self._valid: Split | None = None
+        self._test: Split | None = None
 
     def _load_csv_table(
         self, path: Path, traits: Traits, id_factory: EntityReferenceIdFactory
@@ -74,7 +67,7 @@ class MagellanDataset:
         )
         return self
 
-    def __load_split(self, path: Path) -> "MagellanDataset.Split":
+    def __load_split(self, path: Path) -> Split:
         rows = list(
             itertools.starmap(
                 lambda left, right, is_match: (
@@ -89,7 +82,10 @@ class MagellanDataset:
         cs = InMemoryComparisonSpace()
         for left, right, _ in rows:
             cs.put(left, right)
-        return MagellanDataset.Split(cs, gt)
+        clusters = {
+            ix: comp for ix, comp in enumerate(nx.connected_components(nx.Graph(gt)), 1)
+        }
+        return Split(cs, {cmp: 1 for cmp in gt}, clusters)
 
     def load_splits(self) -> "MagellanDataset":
         if not self.__left_source or not self.__right_source:
@@ -114,28 +110,19 @@ class MagellanDataset:
         return self.__right_source
 
     @property
-    def train_split(self) -> "MagellanDataset.Split":
+    def train_split(self) -> Split:
         return self._train
 
     @property
-    def valid_split(self) -> "MagellanDataset.Split":
+    def valid_split(self) -> Split:
         return self._valid
 
     @property
-    def test_split(self) -> "MagellanDataset.Split":
+    def test_split(self) -> Split:
         return self._test
 
-    def all_data(self) -> "MagellanDataset.Split":
-        gt = self._train.ground_truth.union(self._valid.ground_truth).union(
-            self._test.ground_truth
-        )
-        cs = InMemoryComparisonSpace()
-        for split in (self._train, self._valid, self._test):
-            for left, right in split.comparison_space:
-                cs.put(left, right)
-        for left, right in gt:
-            cs.put(left, right)
-        return MagellanDataset.Split(cs, gt)
+    def all_data(self) -> Split:
+        return Split.merge([self._train, self._test, self._valid])
 
 
 class MagellanTraits:
