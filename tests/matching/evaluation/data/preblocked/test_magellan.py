@@ -2,7 +2,7 @@ from functools import partial
 
 import pytest
 
-from matchescu.matching.evaluation.data.preblocked._magellan import MagellanDataset
+from matchescu.matching.evaluation.data.benchmark._magellan import MagellanDataset
 
 
 @pytest.fixture
