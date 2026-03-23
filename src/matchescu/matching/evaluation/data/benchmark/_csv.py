@@ -1,0 +1,188 @@
+from pathlib import Path
+from typing import Iterable, Mapping, Union
+
+from matchescu.extraction import Traits
+from matchescu.matching.evaluation.data import CsvRecordExtraction
+from matchescu.matching.evaluation.data.splits import SplitGenerator
+from matchescu.matching.evaluation.ground_truth import read_pairwise_mapping_csv, read_clusters_csv, \
+    EquivalenceClassPartitioner
+from matchescu.reference_store.id_table import InMemoryIdTable
+
+from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
+
+
+class CsvBenchmarkData(BenchmarkData):
+    __DEFAULT_SPLIT_RATIOS = {"train": 3, "valid": 1, "test": 1}
+
+    def __init__(
+        self,
+        data_dir: Path,
+        source_files: list[str],
+    ):
+        self._data_dir = data_dir
+        paths = [data_dir / src for src in source_files]
+        self._paths = list(self._check_files(paths))
+        self._id_table = None
+        self._match_gt = None
+        self._cluster_gt = None
+        self.__splits = {}
+
+    def load_data(
+        self,
+        traits: Iterable[Traits] | Mapping[str, Traits],
+        id_cols: Iterable[str|int] | Mapping[str, str|int] | None = None,
+        source_cols: Iterable[str|int] | Mapping[str, str|int] | None = None,
+        has_headers: bool = True,
+    ) -> "CsvBenchmarkData":
+        if not traits:
+            raise ValueError("must provide traits")
+        file_traits = self._get_file_params(traits, Traits)
+        file_id_cols = {p: None for p in self._paths}
+        if id_cols is not None:
+            file_id_cols = self._get_file_params(id_cols, Union[str, int])
+        file_source_cols = {p: None for p in self._paths}
+        if source_cols is not None:
+            file_source_cols = self._get_file_params(source_cols, Union[str, int])
+        self._build_id_table(file_traits, file_id_cols, file_source_cols, has_headers)
+        return self
+
+    def with_ideal_mapping(
+        self,
+        mapping_file: str,
+        id_cols: tuple[str|int, str|int] = None,
+        source_cols: tuple[str|int,str|int] = None,
+        label_col: str|int|None = None,
+        has_header: bool = False,
+    ) -> "CsvBenchmarkData":
+        mapping_path = self._data_dir / mapping_file
+        sources = [] if source_cols is not None else [p.stem for p in self._paths]
+        self._match_gt = read_pairwise_mapping_csv(
+            mapping_path,
+            *sources,
+            id_cols=id_cols,
+            source_cols=source_cols,
+            label_col=label_col,
+            has_header=has_header,
+        )
+        return self
+
+    def with_clusters(
+        self,
+        clusters_file: str|None = None,
+        id_col: str|int = 0,
+        source_col: str|int = 1,
+        cluster_label_col: str|int = 2,
+        has_headers: bool = True,
+    )-> "CsvBenchmarkData":
+        if clusters_file is not None:
+            self._cluster_gt = {
+                ref_id: cluster_no
+                for cluster_no, cluster in read_clusters_csv(
+                    self._data_dir / clusters_file,
+                    has_header=has_headers,
+                    id_col=id_col,
+                    source_col=source_col,
+                    label_col=cluster_label_col,
+                    source_name=self._paths[0].stem,
+                ).items()
+                for ref_id in cluster
+            }
+        else:
+            if len(set(self._match_gt.values())) > 2:
+                raise ValueError("missing cluster labels for multi-class pairwise mappings")
+            ecp = EquivalenceClassPartitioner(self._id_table.ids())
+            try:
+                self._cluster_gt = {
+                    ref_id: idx
+                    for idx, cluster in enumerate(ecp(self._match_gt), 1)
+                    for ref_id in cluster
+                }
+            except KeyError as e:
+                raise KeyError("could not find item in ID table") from e
+        return self
+
+    def split(
+        self,
+        split_ratios: Mapping[str, int] | None = None,
+        neg_pos_ratio: float = 8.0,
+        bridge_class_ratio: float = 4.0,
+        max_sample_count: int | None = None,
+    ) -> "CsvBenchmarkData":
+        if self._id_table is None:
+            raise RuntimeError("call load_data() before calling split()")
+        if self._match_gt is None:
+            raise RuntimeError("call with_ideal_mapping() before calling split()")
+        if self._cluster_gt is None:
+            raise RuntimeError("call with_clusters() before calling split()")
+        splitter = SplitGenerator(
+            split_ratios or self.__DEFAULT_SPLIT_RATIOS,
+            neg_pos_ratio,
+            bridge_class_ratio,
+            max_sample_count,
+        ).load(self._id_table, self._cluster_gt, self._match_gt).generate()
+        self.__splits = splitter.get_splits()
+        return self
+
+    def __getattr__(self, item: str):
+        if item in self.__splits:
+            return self.__splits[item]
+        raise AttributeError(f"{item} split not found")
+
+    def __dir__(self):
+        return sorted([*super().__dir__(), *self.__splits.keys()])
+
+
+
+    @property
+    def comparison_space_size(self) -> int:
+        n = len(self._id_table)
+        return (n * (n-1)) // 2
+
+    @property
+    def ideal_mapping_size(self) -> int:
+        return len(self._match_gt)
+
+    @property
+    def cluster_count(self) -> int:
+        return len(self._cluster_gt)
+
+    def _build_id_table(self, file_traits: dict, file_id_cols: dict, file_source_cols: dict, has_headers: bool):
+        self._id_table = InMemoryIdTable()
+        for path, traits in file_traits.items():
+            id_col = file_id_cols[path]
+            source_col = file_source_cols[path]
+            extract = CsvRecordExtraction(path, traits, id_col, source_col, has_headers)
+            for ref in extract():
+                self._id_table.put(ref)
+
+    def _get_file_params[T](self, params: Iterable[T] | Mapping[str, T], item_type: type[T]) -> dict[Path, T]:
+        if isinstance(params, Mapping):
+            return self._get_file_param_from_mapping(params)
+        elif isinstance(params, Iterable):
+            return self._get_file_param_from_iterable(params, item_type)
+        else:
+            raise ValueError(f"unsupported traits input type: {type(params)}")
+
+    def _get_file_param_from_iterable[T](
+        self, param: Iterable[T], item_type: type[T]
+    ) -> dict[Path, T]:
+        lst = list(param)
+        has_incorrect_type = any(not isinstance(x, item_type) for x in lst)
+        if has_incorrect_type:
+            raise ValueError(f"not all items in sequence were {item_type}")
+        if (len(lst) != 1) ^ (len(lst) != len(self._paths)):
+            raise ValueError(
+                f"sequence must be of length 1 or {len(self._paths)}"
+            )
+        if len(lst) == 1:
+            return {p: lst[0] for p in self._paths}
+        else:
+            return dict(zip(self._paths, lst))
+
+    def _get_file_param_from_mapping[T](self, param: Mapping[str, T]) -> dict[Path, T]:
+        missing_keys = [x.name for x in self._paths if x.name not in param]
+        if len(param) != len(self._paths) or len(missing_keys) > 0:
+            raise ValueError(
+                f"mapping is missing values for: {", ".join(missing_keys)}"
+            )
+        return {p: param[p.name] for p in self._paths}

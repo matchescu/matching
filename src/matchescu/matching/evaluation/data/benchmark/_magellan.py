@@ -4,17 +4,18 @@ from pathlib import Path
 
 import polars as pl
 from matchescu.extraction import Traits
+from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 from matchescu.matching.evaluation.data.extraction._record_extraction import (
     CsvRecordExtraction,
 )
 from matchescu.matching.evaluation.data.splits._split import Split
-from matchescu.matching.evaluation.ground_truth._ecp import EquivalenceClassPartitioner
+from matchescu.matching.evaluation.ground_truth import EquivalenceClassPartitioner
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
 from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
-class MagellanBenchmarkData:
+class MagellanBenchmarkData(BenchmarkData):
     SPLIT_NAMES = ["train", "valid", "test"]
 
     def __init__(self, folder_path: str | PathLike) -> None:
@@ -28,17 +29,15 @@ class MagellanBenchmarkData:
         self.__split_paths = [
             self.__dataset_dir / f"{split}.csv" for split in self.SPLIT_NAMES
         ]
-        self.__check_files(
-            self.__left_table_path, self.__right_table_path, *self.__split_paths
+        self._check_files(
+            [
+                self.__left_table_path,
+                self.__right_table_path,
+                *self.__split_paths,
+            ]
         )
         self.__id_table = InMemoryIdTable()
         self.__splits = {}
-
-    @staticmethod
-    def __check_files(*paths: Path):
-        for path in paths:
-            if not path.is_file():
-                raise FileNotFoundError(path)
 
     def _load_csv_table(self, path: Path, traits: Traits) -> str:
         extract = CsvRecordExtraction(path, traits)
