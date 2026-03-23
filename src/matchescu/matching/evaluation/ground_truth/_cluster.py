@@ -8,10 +8,10 @@ from matchescu.typing import EntityReferenceIdentifier as RefId
 def read_csv(
     path: Path,
     has_header: bool = True,
-    id_col: str|int = 0,
-    source_col: str|int|None = None,
-    label_col: str|int|None = None,
-    source_name: str|None = None,
+    id_col: str | int = 0,
+    source_col: str | int | None = None,
+    label_col: str | int | None = None,
+    source_name: str | None = None,
 ) -> dict[int, set[RefId]]:
     if source_name is None and source_col is None:
         raise ValueError("must specify at least one of source name or source column")

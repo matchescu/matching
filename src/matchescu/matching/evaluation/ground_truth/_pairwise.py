@@ -5,12 +5,12 @@ from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
 def read_csv(
-    path: str|Path,
+    path: str | Path,
     *sources: str,
     has_header: bool = True,
-    id_cols: tuple[str|int, str|int]|None = None,
-    source_cols: tuple[str|int, str|int]|None = None,
-    label_col: str|int|None = None,
+    id_cols: tuple[str | int, str | int] | None = None,
+    source_cols: tuple[str | int, str | int] | None = None,
+    label_col: str | int | None = None,
 ) -> dict[tuple[RefId, RefId], int]:
     """Read a pairwise ground truth from a CSV file.
 
@@ -48,7 +48,7 @@ def read_csv(
     lid_col, rid_col = id_cols or (0, 1)
     lsrc_col, rsrc_col = source_cols or (None, None)
     if has_header:
-        col_to_idx = {col:i for i, col in enumerate(df.columns)}
+        col_to_idx = {col: i for i, col in enumerate(df.columns)}
         lid_col = col_to_idx.get(lid_col, lid_col)
         rid_col = col_to_idx.get(rid_col, rid_col)
         lsrc_col = col_to_idx.get(lsrc_col, lsrc_col)
@@ -57,23 +57,18 @@ def read_csv(
     else:
         checked = lid_col, rid_col, lsrc_col, rsrc_col, label_col
         if any(val is not None and not isinstance(val, int) for val in checked):
-            raise ValueError("only int indexers supported for CSV files without header row")
+            raise ValueError(
+                "only int indexers supported for CSV files without header row"
+            )
 
     def _get_ids(r):
         lsource = r[lsrc_col] if lsrc_col is not None else sources[0]
         rsource = (
             r[rsrc_col]
             if rsrc_col is not None
-            else (
-                sources[1]
-                if len(sources) > 1
-                else lsource
-            )
+            else (sources[1] if len(sources) > 1 else lsource)
         )
-        return (
-            RefId(r[lid_col], lsource),
-            RefId(r[rid_col], rsource)
-        )
+        return (RefId(r[lid_col], lsource), RefId(r[rid_col], rsource))
 
     def _is_positive_label(r):
         if label_col is None:
@@ -82,6 +77,6 @@ def read_csv(
 
     return {
         _get_ids(r): r[label_col] if label_col is not None else 1
-        for r in df.iter_rows(named=False) if _is_positive_label(r)
+        for r in df.iter_rows(named=False)
+        if _is_positive_label(r)
     }
-

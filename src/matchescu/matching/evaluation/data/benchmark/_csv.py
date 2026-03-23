@@ -4,8 +4,11 @@ from typing import Iterable, Mapping, Union
 from matchescu.extraction import Traits
 from matchescu.matching.evaluation.data import CsvRecordExtraction
 from matchescu.matching.evaluation.data.splits import SplitGenerator
-from matchescu.matching.evaluation.ground_truth import read_pairwise_mapping_csv, read_clusters_csv, \
-    EquivalenceClassPartitioner
+from matchescu.matching.evaluation.ground_truth import (
+    read_pairwise_mapping_csv,
+    read_clusters_csv,
+    EquivalenceClassPartitioner,
+)
 from matchescu.reference_store.id_table import InMemoryIdTable
 
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
@@ -30,8 +33,8 @@ class CsvBenchmarkData(BenchmarkData):
     def load_data(
         self,
         traits: Iterable[Traits] | Mapping[str, Traits],
-        id_cols: Iterable[str|int] | Mapping[str, str|int] | None = None,
-        source_cols: Iterable[str|int] | Mapping[str, str|int] | None = None,
+        id_cols: Iterable[str | int] | Mapping[str, str | int] | None = None,
+        source_cols: Iterable[str | int] | Mapping[str, str | int] | None = None,
         has_headers: bool = True,
     ) -> "CsvBenchmarkData":
         if not traits:
@@ -49,9 +52,9 @@ class CsvBenchmarkData(BenchmarkData):
     def with_ideal_mapping(
         self,
         mapping_file: str,
-        id_cols: tuple[str|int, str|int] = None,
-        source_cols: tuple[str|int,str|int] = None,
-        label_col: str|int|None = None,
+        id_cols: tuple[str | int, str | int] = None,
+        source_cols: tuple[str | int, str | int] = None,
+        label_col: str | int | None = None,
         has_header: bool = False,
     ) -> "CsvBenchmarkData":
         mapping_path = self._data_dir / mapping_file
@@ -68,12 +71,12 @@ class CsvBenchmarkData(BenchmarkData):
 
     def with_clusters(
         self,
-        clusters_file: str|None = None,
-        id_col: str|int = 0,
-        source_col: str|int = 1,
-        cluster_label_col: str|int = 2,
+        clusters_file: str | None = None,
+        id_col: str | int = 0,
+        source_col: str | int = 1,
+        cluster_label_col: str | int = 2,
         has_headers: bool = True,
-    )-> "CsvBenchmarkData":
+    ) -> "CsvBenchmarkData":
         if clusters_file is not None:
             self._cluster_gt = {
                 ref_id: cluster_no
@@ -89,7 +92,9 @@ class CsvBenchmarkData(BenchmarkData):
             }
         else:
             if len(set(self._match_gt.values())) > 2:
-                raise ValueError("missing cluster labels for multi-class pairwise mappings")
+                raise ValueError(
+                    "missing cluster labels for multi-class pairwise mappings"
+                )
             ecp = EquivalenceClassPartitioner(self._id_table.ids())
             try:
                 self._cluster_gt = {
@@ -114,12 +119,16 @@ class CsvBenchmarkData(BenchmarkData):
             raise RuntimeError("call with_ideal_mapping() before calling split()")
         if self._cluster_gt is None:
             raise RuntimeError("call with_clusters() before calling split()")
-        splitter = SplitGenerator(
-            split_ratios or self.__DEFAULT_SPLIT_RATIOS,
-            neg_pos_ratio,
-            bridge_class_ratio,
-            max_sample_count,
-        ).load(self._id_table, self._cluster_gt, self._match_gt).generate()
+        splitter = (
+            SplitGenerator(
+                split_ratios or self.__DEFAULT_SPLIT_RATIOS,
+                neg_pos_ratio,
+                bridge_class_ratio,
+                max_sample_count,
+            )
+            .load(self._id_table, self._cluster_gt, self._match_gt)
+            .generate()
+        )
         self.__splits = splitter.get_splits()
         return self
 
@@ -131,12 +140,10 @@ class CsvBenchmarkData(BenchmarkData):
     def __dir__(self):
         return sorted([*super().__dir__(), *self.__splits.keys()])
 
-
-
     @property
     def comparison_space_size(self) -> int:
         n = len(self._id_table)
-        return (n * (n-1)) // 2
+        return (n * (n - 1)) // 2
 
     @property
     def ideal_mapping_size(self) -> int:
@@ -146,7 +153,13 @@ class CsvBenchmarkData(BenchmarkData):
     def cluster_count(self) -> int:
         return len(self._cluster_gt)
 
-    def _build_id_table(self, file_traits: dict, file_id_cols: dict, file_source_cols: dict, has_headers: bool):
+    def _build_id_table(
+        self,
+        file_traits: dict,
+        file_id_cols: dict,
+        file_source_cols: dict,
+        has_headers: bool,
+    ):
         self._id_table = InMemoryIdTable()
         for path, traits in file_traits.items():
             id_col = file_id_cols[path]
@@ -155,7 +168,9 @@ class CsvBenchmarkData(BenchmarkData):
             for ref in extract():
                 self._id_table.put(ref)
 
-    def _get_file_params[T](self, params: Iterable[T] | Mapping[str, T], item_type: type[T]) -> dict[Path, T]:
+    def _get_file_params[T](
+        self, params: Iterable[T] | Mapping[str, T], item_type: type[T]
+    ) -> dict[Path, T]:
         if isinstance(params, Mapping):
             return self._get_file_param_from_mapping(params)
         elif isinstance(params, Iterable):
@@ -171,9 +186,7 @@ class CsvBenchmarkData(BenchmarkData):
         if has_incorrect_type:
             raise ValueError(f"not all items in sequence were {item_type}")
         if (len(lst) != 1) ^ (len(lst) != len(self._paths)):
-            raise ValueError(
-                f"sequence must be of length 1 or {len(self._paths)}"
-            )
+            raise ValueError(f"sequence must be of length 1 or {len(self._paths)}")
         if len(lst) == 1:
             return {p: lst[0] for p in self._paths}
         else:

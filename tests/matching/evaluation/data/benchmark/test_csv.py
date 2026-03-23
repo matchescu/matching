@@ -38,17 +38,17 @@ def test_single_source_directed_matcher_gt_must_specify_cluster_labels(
         CsvBenchmarkData(affils_dir, ["affiliationstrings_ids.csv"])
         .load_data([affils_traits], [affils_id_col])
         .with_ideal_mapping(
-            "directed_with_label.csv",
-            has_header=True,
-            label_col="label"
+            "directed_with_label.csv", has_header=True, label_col="label"
         )
     )
 
     with pytest.raises(ValueError) as err_proxy:
         data.with_clusters()
 
-
-    assert str(err_proxy.value) == "missing cluster labels for multi-class pairwise mappings"
+    assert (
+        str(err_proxy.value)
+        == "missing cluster labels for multi-class pairwise mappings"
+    )
 
 
 def test_split(affils_dir, affils_id_col, affils_traits):
