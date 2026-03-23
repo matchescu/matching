@@ -205,12 +205,12 @@ class SplitGenerator:
                 if label != 0:
                     match_gt[fwd_cmp] = label
 
-                x_cluster = self._cluster_gt.get(x)
-                y_cluster = self._cluster_gt.get(y)
-                if x_cluster is not None:
-                    cluster_gt[x] = x_cluster
-                if y_cluster is not None:
-                    cluster_gt[y] = y_cluster
+                    x_cluster = self._cluster_gt.get(x)
+                    y_cluster = self._cluster_gt.get(y)
+                    if x_cluster is not None:
+                        cluster_gt[x] = x_cluster
+                    if y_cluster is not None:
+                        cluster_gt[y] = y_cluster
 
             clusters = defaultdict(set)
             for ref_id, cluster_no in cluster_gt.items():

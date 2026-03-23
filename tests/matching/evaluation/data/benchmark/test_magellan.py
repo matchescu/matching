@@ -1,32 +1,30 @@
-from functools import partial
-
 import pytest
 
-from matchescu.matching.evaluation.data.preblocked._magellan import MagellanDataset
+from matchescu.matching.evaluation.data.benchmark._magellan import MagellanBenchmarkData
 
 
 @pytest.fixture
 def sut(ag_dir):
-    return MagellanDataset(ag_dir)
+    return MagellanBenchmarkData(ag_dir)
 
 
 def test_load_left(sut, ag_traits, ag_id_factory):
-    ds = sut.load_left(ag_traits, partial(ag_id_factory, source="tableA"))
+    ds = sut.load_left(ag_traits)
 
     assert ds.left_source == "tableA"
     assert len(ds.id_table) == 1363
 
 
 def test_load_right(sut, ag_traits, ag_id_factory):
-    ds = sut.load_right(ag_traits, partial(ag_id_factory, source="tableB"))
+    ds = sut.load_right(ag_traits)
 
     assert ds.right_source == "tableB"
     assert len(ds.id_table) == 3226
 
 
 def test_load_splits(sut, ag_traits, ag_id_factory):
-    sut.load_left(ag_traits, partial(ag_id_factory, source="tableA"))
-    sut.load_right(ag_traits, partial(ag_id_factory, source="tableB"))
+    sut.load_left(ag_traits)
+    sut.load_right(ag_traits)
 
     sut.load_splits()
 

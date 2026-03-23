@@ -2,100 +2,97 @@ import itertools
 from os import PathLike
 from pathlib import Path
 
-import networkx as nx
 import polars as pl
-from matchescu.data_sources import CsvDataSource
-from matchescu.extraction import Traits, RecordExtraction, single_record
+from matchescu.extraction import Traits
+from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
+from matchescu.matching.evaluation.data.extraction._record_extraction import (
+    CsvRecordExtraction,
+)
 from matchescu.matching.evaluation.data.splits._split import Split
+from matchescu.matching.evaluation.ground_truth import EquivalenceClassPartitioner
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
-from matchescu.typing import (
-    EntityReferenceIdFactory,
-    EntityReferenceIdentifier as RefId,
-)
+from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
-class MagellanDataset:
+class MagellanBenchmarkData(BenchmarkData):
+    SPLIT_NAMES = ["train", "valid", "test"]
+
     def __init__(self, folder_path: str | PathLike) -> None:
         self.__dataset_dir = Path(folder_path)
         if not self.__dataset_dir.is_dir():
             raise ValueError(f"'{self.__dataset_dir}' is not a directory")
         self.__left_table_path = self.__dataset_dir / "tableA.csv"
-        self.__right_table_path = self.__dataset_dir / "tableB.csv"
-        self.__train_path = self.__dataset_dir / "train.csv"
-        self.__valid_path = self.__dataset_dir / "valid.csv"
-        self.__test_path = self.__dataset_dir / "test.csv"
-        for path in (
-            self.__left_table_path,
-            self.__right_table_path,
-            self.__train_path,
-            self.__valid_path,
-            self.__test_path,
-        ):
-            if not path.is_file():
-                raise FileNotFoundError(path)
-
-        self.__id_table: IdTable = InMemoryIdTable()
         self.__left_source = self.__left_table_path.stem
+        self.__right_table_path = self.__dataset_dir / "tableB.csv"
         self.__right_source = self.__right_table_path.stem
-        self._train: Split | None = None
-        self._valid: Split | None = None
-        self._test: Split | None = None
-
-    def _load_csv_table(
-        self, path: Path, traits: Traits, id_factory: EntityReferenceIdFactory
-    ) -> str:
-        ds = CsvDataSource(path, list(traits)).read()
-        re = RecordExtraction(ds, id_factory, single_record)
-        for ref in list(re()):
-            self.__id_table.put(ref)
-        return ds.name
-
-    def load_left(
-        self, traits: Traits, id_factory: EntityReferenceIdFactory
-    ) -> "MagellanDataset":
-        self.__left_source = self._load_csv_table(
-            self.__left_table_path, traits, id_factory
+        self.__split_paths = [
+            self.__dataset_dir / f"{split}.csv" for split in self.SPLIT_NAMES
+        ]
+        self._check_files(
+            [
+                self.__left_table_path,
+                self.__right_table_path,
+                *self.__split_paths,
+            ]
         )
+        self.__id_table = InMemoryIdTable()
+        self.__splits = {}
+
+    def _load_csv_table(self, path: Path, traits: Traits) -> str:
+        extract = CsvRecordExtraction(path, traits)
+        for ref in extract():
+            self.__id_table.put(ref)
+        return extract.data_source.name
+
+    def load_left(self, traits: Traits) -> "MagellanBenchmarkData":
+        self.__left_source = self._load_csv_table(self.__left_table_path, traits)
         return self
 
-    def load_right(
-        self, traits: Traits, id_factory: EntityReferenceIdFactory
-    ) -> "MagellanDataset":
-        self.__right_source = self._load_csv_table(
-            self.__right_table_path, traits, id_factory
-        )
+    def load_right(self, traits: Traits) -> "MagellanBenchmarkData":
+        self.__right_source = self._load_csv_table(self.__right_table_path, traits)
         return self
 
     def __load_split(self, path: Path) -> Split:
         rows = list(
             itertools.starmap(
-                lambda left, right, is_match: (
-                    RefId(left, self.__left_source),
-                    RefId(right, self.__right_source),
+                lambda x, y, is_match: (
+                    RefId(x, self.__left_source),
+                    RefId(y, self.__right_source),
                     is_match,
                 ),
                 pl.read_csv(path, ignore_errors=True).iter_rows(named=False),
             )
         )
-        gt = set((left, right) for left, right, is_match in rows if is_match == 1)
         cs = InMemoryComparisonSpace()
+        ids = {}
         for left, right, _ in rows:
             cs.put(left, right)
-        clusters = {
-            ix: comp for ix, comp in enumerate(nx.connected_components(nx.Graph(gt)), 1)
-        }
-        return Split(cs, {cmp: 1 for cmp in gt}, clusters)
+            ids[left] = None
+            ids[right] = None
 
-    def load_splits(self) -> "MagellanDataset":
+        matcher_gt = {(left, right): label for left, right, label in rows if label == 1}
+        ecp = EquivalenceClassPartitioner(ids)
+        clusters = {
+            cluster_no: set(cluster)
+            for cluster_no, cluster in enumerate(ecp(matcher_gt), 1)
+        }
+        return Split(cs, matcher_gt, clusters)
+
+    def load_splits(self) -> "MagellanBenchmarkData":
         if not self.__left_source or not self.__right_source:
             raise ValueError(
                 "left + right data sources must be loaded before loading splits"
             )
-        self._train = self.__load_split(self.__train_path)
-        self._valid = self.__load_split(self.__valid_path)
-        self._test = self.__load_split(self.__test_path)
+        self.__splits = {
+            f"{name}_split": self.__load_split(path)
+            for name, path in zip(self.SPLIT_NAMES, self.__split_paths)
+        }
         return self
+
+    @property
+    def name(self) -> str:
+        return self.__dataset_dir.stem
 
     @property
     def id_table(self) -> IdTable:
@@ -109,20 +106,16 @@ class MagellanDataset:
     def right_source(self) -> str:
         return self.__right_source
 
-    @property
-    def train_split(self) -> Split:
-        return self._train
+    def __getattr__(self, item: str):
+        if item in self.__splits:
+            return self.__splits[item]
+        raise AttributeError(f"{item} split not found")
 
-    @property
-    def valid_split(self) -> Split:
-        return self._valid
-
-    @property
-    def test_split(self) -> Split:
-        return self._test
+    def __dir__(self):
+        return sorted([*super().__dir__(), *self.__splits.keys()])
 
     def all_data(self) -> Split:
-        return Split.merge([self._train, self._test, self._valid])
+        return Split.merge(list(self.__splits.values()))
 
 
 class MagellanTraits:

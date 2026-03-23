@@ -1,7 +1,5 @@
 """Dataset and data loading utilities for entity matching"""
 
-from functools import partial
-
 import torch
 from torch.utils.data import Dataset, DataLoader
 from typing import Dict, Iterable
@@ -110,17 +108,17 @@ class DeepMatcherDataset(Dataset):
 
 
 if __name__ == "__main__":
-    from matchescu.matching.evaluation.data import MagellanDataset, MagellanTraits
+    from matchescu.matching.evaluation.data import MagellanBenchmarkData, MagellanTraits
 
     traits = MagellanTraits().beer
 
-    ds = MagellanDataset("data/magellan/beer")
+    ds = MagellanBenchmarkData("data/magellan/beer")
 
     def _id_factory(rows: Iterable[Record], source: str) -> EntityReferenceIdentifier:
         return EntityReferenceIdentifier(next(iter(rows))["id"], source)
 
-    ds.load_left(traits, partial(_id_factory, source="tableA"))
-    ds.load_right(traits, partial(_id_factory, source="tableB"))
+    ds.load_left(traits)
+    ds.load_right(traits)
     ds.load_splits()
 
     dmds = DeepMatcherDataset(ds.id_table, ds.train_split)
