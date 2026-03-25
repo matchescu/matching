@@ -1,6 +1,6 @@
 import pytest
 
-from matchescu.matching.matchers.ml.ditto.training._config import TrainingConfig
+from matchescu.matching.matchers.ml.training._config import TrainingConfig
 
 
 @pytest.fixture
