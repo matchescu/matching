@@ -1,4 +1,3 @@
-from logging import Logger, getLogger
 from os import PathLike
 from pathlib import Path
 from typing import Any, cast
@@ -15,25 +14,30 @@ from transformers import get_linear_schedule_with_warmup
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.matchers.ml.ditto.training._datasets import DittoDataset
 from matchescu.matching.matchers.ml.ditto.training._evaluator import TrainingEvaluator
+from matchescu.matching.matchers.ml.training import BaseTrainer
+from ._params import DittoModelTrainingParams
 
 
-class DittoTrainer:
+class DittoTrainer(
+    BaseTrainer[DittoModel, DittoModelTrainingParams], capability="ditto"
+):
+    hyperparams_schema = DittoModelTrainingParams
+
     def __init__(
         self,
         task_name: str,
+        hyper_params: DittoModelTrainingParams,
         model_dir: str | PathLike | None = None,
         loss_fn: _Loss | None = None,
         **kwargs: Any,
     ) -> None:
-        self._task = task_name
-        self._model_dir = Path(model_dir) if model_dir else Path(__file__).parent
-        self._log = cast(
-            Logger, kwargs.get("logger", getLogger(self.__class__.__name__))
-        ).getChild(self._task)
-        self._epochs = int(kwargs.get("epochs", 20))
-        self._learning_rate = float(kwargs.get("learning_rate", 3e-5))
-        self._frozen_layer_count = int(kwargs.get("frozen_layer_count", 0))
-        self._loss = loss_fn or BCEWithLogitsLoss()
+        super().__init__(
+            task_name,
+            model_dir or Path(__file__).parent,
+            hyper_params,
+            loss_fn or BCEWithLogitsLoss(),
+            **kwargs,
+        )
 
     def __get_device(self):
         device = torch.device("cpu")
@@ -107,18 +111,18 @@ class DittoTrainer:
         summary_writer: SummaryWriter | None = None,
     ):
         device = self.__get_device()
-        model = model.with_frozen_bert_layers(self._frozen_layer_count)
+        model = model.with_frozen_bert_layers(self._params.frozen_layer_count)
 
-        optimizer = torch.optim.AdamW(model.parameters(), lr=self._learning_rate)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=self._params.learning_rate)
         total_batches = (
             len(cast(DittoDataset, training_data.dataset)) // training_data.batch_size
         )
-        num_steps = total_batches * self._epochs
+        num_steps = total_batches * self._params.epochs
         scheduler = get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=0, num_training_steps=num_steps
         )
 
-        for epoch in range(1, self._epochs + 1):
+        for epoch in range(1, self._params.epochs + 1):
             self._log.info("epoch %d - train start", epoch)
             try:
                 train_metrics = self._train_one_epoch(

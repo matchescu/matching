@@ -135,7 +135,7 @@ def run_training(
     benchmark_dataset_traits = MagellanTraits()
     config = TrainingConfig.load_json(config_path)
     with warnings.catch_warnings(action="ignore"):
-        for dataset_name in config.dataset_names:
+        for dataset_name in config.included_datasets:
             ds_path = root_data_dir / "magellan" / dataset_name
             ds_model_dir = root_model_dir / dataset_name
             for model_name in config.model_names:
