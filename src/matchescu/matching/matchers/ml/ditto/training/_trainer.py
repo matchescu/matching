@@ -8,14 +8,17 @@ from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from transformers import get_linear_schedule_with_warmup
 
-from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
-from matchescu.matching.matchers.ml.ditto.training._datasets import DittoDataset
 from matchescu.matching.matchers.ml.training import BaseTrainer
+
+from .._ditto_module import DittoModel
+from ._config import CAPABILITY
+from ._datasets import DittoDataset
 from ._params import DittoModelTrainingParams
 
 
 class DittoTrainer(
-    BaseTrainer[DittoModel, DittoModelTrainingParams, DittoDataset], capability="ditto"
+    BaseTrainer[DittoModel, DittoModelTrainingParams, DittoDataset],
+    capability=CAPABILITY,
 ):
     hyperparams_schema = DittoModelTrainingParams
 

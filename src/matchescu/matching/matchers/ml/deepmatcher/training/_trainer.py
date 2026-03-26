@@ -5,12 +5,10 @@ import torch
 from torch import nn
 from torch.nn.modules.loss import _Loss
 
-from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
-from matchescu.matching.matchers.ml.deepmatcher.training._dataset import (
-    DeepMatcherDataset,
-)
 from matchescu.matching.matchers.ml.training import BaseTrainer, ModelTrainingParams
-from matchescu.matching.matchers.ml.training._typevars import TModel
+
+from .._matcher import DeepMatcherModule
+from ._dataset import DeepMatcherDataset
 
 
 class DeepMatcherTrainer(
@@ -34,7 +32,9 @@ class DeepMatcherTrainer(
         )
 
     @classmethod
-    def _forward_pass(cls, model: TModel, batch: Any, device: torch.device) -> tuple:
+    def _forward_pass(
+        cls, model: DeepMatcherModule, batch: Any, device: torch.device
+    ) -> tuple:
         inputs = {k: v.to(device) for k, v in batch.items() if k != "label"}
         labels = batch["label"].to(device)
 

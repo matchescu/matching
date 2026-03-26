@@ -6,14 +6,14 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
 
 from matchescu.matching.matchers.ml.training import BaseEvaluator
-from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
-from matchescu.matching.matchers.ml.deepmatcher.training._dataset import (
-    DeepMatcherDataset,
-)
+
+from .._matcher import DeepMatcherModule
+from ._config import CAPABILITY
+from ._dataset import DeepMatcherDataset
 
 
 class TrainingEvaluator(
-    BaseEvaluator[DeepMatcherModule, DeepMatcherDataset], capability="deepmatcher"
+    BaseEvaluator[DeepMatcherModule, DeepMatcherDataset], capability=CAPABILITY
 ):
     def __init__(
         self,

@@ -8,11 +8,13 @@ from sklearn import metrics
 from torch.utils.data import DataLoader
 
 from matchescu.matching.matchers.ml.training import BaseEvaluator
-from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
-from matchescu.matching.matchers.ml.ditto.training._datasets import DittoDataset
+
+from .._ditto_module import DittoModel
+from ._config import CAPABILITY
+from ._datasets import DittoDataset
 
 
-class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability="ditto"):
+class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPABILITY):
     _BEST_THRESHOLD_KEY = "best_threshold"
 
     def __init__(

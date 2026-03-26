@@ -80,7 +80,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
 
     @classmethod
     @abstractmethod
-    def _forward_pass(cls, model: TModel, batch: tuple, device: torch.device) -> tuple:
+    def _forward_pass(cls, model: TModel, batch: Any, device: torch.device) -> tuple:
         raise NotImplementedError
 
     def _train_one_epoch(
