@@ -1,9 +1,10 @@
 {
+  "kind": "ditto",
   "learningRate": 0.001,
   "batchSize": 31,
   "epochs": 15,
   "datasets": ["abt-buy"],
-  "models": ["roberta-base", "distilbert-base-uncased"],
+  "models":  ["roberta-base", "distilbert-base-uncased"],
   "datasetConfig": {
     "abt-buy": {
       "batchSize": 67,
@@ -15,7 +16,10 @@
     },
     "fodors-zagat": {
       "batchSize": 32,
-      "epochs": 3
+      "epochs": 3,
+      "hybrid-attention": {
+        "batchSize": 48
+      }
     }
   },
   "modelConfig": {

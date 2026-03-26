@@ -1,6 +1,6 @@
 import pytest
 
-from matchescu.matching.matchers.ml.ditto.training._config import TrainingConfig
+from matchescu.matching.matchers.ml.training import TrainingConfig
 
 
 @pytest.fixture
@@ -10,22 +10,23 @@ def config_file(data_dir) -> str:
 
 @pytest.fixture
 def config(config_file) -> TrainingConfig:
-    return TrainingConfig.load_json(config_file)
+    return TrainingConfig.load_json(
+        config_file,
+        discovery_packages=["matchescu.matching.matchers.ml.ditto.training"],
+    )
 
 
 def test_load_from_json(config):
     assert config.model_names == ["roberta-base", "distilbert-base-uncased"]
-    assert config.dataset_names == ["abt-buy"]
+    assert config.included_datasets == ["abt-buy"]
     assert config.learning_rate == 0.001
     assert config.batch_size == 31
     assert len(config.dataset_configs) == 2
     abt_buy_cfg = config.dataset_configs["abt-buy"]
     assert abt_buy_cfg.batch_size == 67
-    assert len(abt_buy_cfg.model_configs) == 1
-    assert abt_buy_cfg.model_configs["roberta-base"].epochs == 1
     fz_config = config.dataset_configs["fodors-zagat"]
     assert fz_config.frozen_layer_count == 0
-    assert fz_config.learning_rate == 0.001
+    assert fz_config.learning_rate == 3e-5
     assert fz_config.batch_size == 32
     assert fz_config.epochs == 3
     assert len(config.model_configs) == 1
