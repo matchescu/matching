@@ -4,33 +4,29 @@ from os import PathLike
 from pathlib import Path
 from typing import ClassVar, Type, Any, Generic, cast
 
+import torch
 from torch.nn.modules.loss import _Loss
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler, OneCycleLR
 from torch.utils.data import DataLoader
 
 from ._evaluator import BaseEvaluator
 from ._params import ModelTrainingParams
 from ._registry import CapabilityRegistry
-from ._typevars import TModel, TParams
+from ._typevars import TModel, TParams, TDataset
 
 
-class BaseTrainer(ABC, Generic[TModel, TParams]):
-    """
-    Subclass with ``capability="xxx"`` to auto-register::
+class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
+    """Subclasses of this class train matcher models.
 
-        class DittoTrainer(BaseTrainer, capability="ditto"):
-            hyperparams_schema = DittoHyperParams
-
-            def train(self, model_name, hyperparams): ...
+    They can also be configured via config files if they advertise a ``capability``.
+    The capability of each trainer tells the configuration system what types of
+    hyperparameters they support for training and the kinds of models they can
+    handle.
     """
 
     capability: ClassVar[str] = ""
     hyperparams_schema: ClassVar[Type[ModelTrainingParams]] = ModelTrainingParams
-
-    def __init_subclass__(cls, capability: str = "", **kwargs: Any) -> None:
-        super().__init_subclass__(**kwargs)
-        if capability:
-            cls.capability = capability
-            CapabilityRegistry.register_trainer(capability, cls)
 
     def __init__(
         self,
@@ -48,13 +44,138 @@ class BaseTrainer(ABC, Generic[TModel, TParams]):
             Logger, kwargs.get("logger", getLogger(self.__class__.__name__))
         ).getChild(self._task)
 
+    def __init_subclass__(cls, capability: str = "", **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if capability:
+            cls.capability = capability
+            CapabilityRegistry.register_trainer(capability, cls)
+
+    def _get_device(self):
+        device = torch.device("cpu")
+        if torch.cuda.is_available():
+            device = torch.cuda.current_device()
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps:0")
+        else:
+            if torch.backends.mps.is_built():
+                self._log.info("MPS built, but not available.")
+            else:
+                self._log.info("Not Mac, nor CUDA.")
+        return device
+
+    def _setup_model(self, model: TModel) -> TModel:
+        return model
+
+    def _create_scheduler(self, dataset: TDataset, optimizer: Optimizer):
+        total_batches = len(dataset) // self._params.batch_size
+        num_steps = total_batches * self._params.epochs
+
+        return OneCycleLR(
+            optimizer,
+            self._params.learning_rate,
+            total_steps=num_steps,
+            epochs=self._params.epochs,
+            anneal_strategy="cos",
+        )
+
+    @classmethod
     @abstractmethod
+    def _forward_pass(cls, model: TModel, batch: tuple, device: torch.device) -> tuple:
+        raise NotImplementedError
+
+    def _train_one_epoch(
+        self,
+        epoch: int,
+        device: torch.device,
+        model: torch.nn.Module,
+        train_iter: DataLoader[TDataset],
+        optimizer: Optimizer,
+        scheduler: LRScheduler,
+    ):
+        total_loss = 0.0
+        batch_no = 0
+
+        try:
+            loss_fn = self._loss.to(device)
+            model.to(device)
+            model.train(True)
+            batch_loss = 0.0
+            for i, batch in enumerate(train_iter):
+                optimizer.zero_grad()
+                prediction, y = self._forward_pass(model, batch, device)
+
+                loss = loss_fn(prediction, y.to(device).float())
+
+                loss.backward()
+                optimizer.step()
+                scheduler.step()
+
+                step_loss = loss.item()
+                total_loss += step_loss
+                batch_loss += step_loss
+                batch_no = i + 1
+                if batch_no % 10 == 0:
+                    batch_loss = batch_loss / 10
+                    fmt = f"batch {batch_no}: avg loss over last 10 batches=%.4f"
+                    self._log.info(fmt, batch_loss)
+                del loss
+        finally:
+            model.train(False)
+
+        avg_loss = total_loss / batch_no if batch_no > 0 else 0
+        self._log.info("epoch %d: avg loss=%.4f", epoch, avg_loss)
+        return {"average_loss": avg_loss}
+
     def run_training(
         self,
         model: TModel,
-        training_data: DataLoader,
-        evaluator: BaseEvaluator,
-        save_model: bool,
-        **kwargs: Any,
-    ) -> Any:
-        pass
+        training_data: DataLoader[TDataset],
+        evaluator: BaseEvaluator[TModel, TDataset],
+        save_model: bool = False,
+    ):
+        device = self._get_device()
+        model = self._setup_model(model)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=self._params.learning_rate)
+        scheduler = self._create_scheduler(training_data.dataset, optimizer)
+
+        for epoch in range(1, self._params.epochs + 1):
+            self._log.info("epoch %d - train start", epoch)
+            try:
+                train_metrics = self._train_one_epoch(
+                    epoch,
+                    device,
+                    model,
+                    training_data,
+                    optimizer,
+                    scheduler,
+                )
+            finally:
+                self._log.info("epoch %d - train end", epoch)
+
+            if evaluator is None or not save_model:
+                continue
+
+            has_new_best, best_config = evaluator(model, train_metrics, epoch)
+            if has_new_best:
+                self._save_checkpoint(epoch, model, optimizer, scheduler, best_config)
+
+    def _save_checkpoint(
+        self,
+        epoch: int,
+        model: TModel,
+        optimizer: Optimizer,
+        scheduler: LRScheduler,
+        additional_info: dict | None = None,
+    ):
+        task_model_dir = self._model_dir / self._task
+        task_model_dir.mkdir(parents=True, exist_ok=True)
+        ckpt_path = task_model_dir / "model.pt"
+        ckpt = {
+            "model": model.state_dict(),
+            "optimizer": optimizer.state_dict(),
+            "scheduler": scheduler.state_dict(),
+            "epoch": epoch,
+        }
+        if additional_info:
+            ckpt.update(additional_info)
+        torch.save(ckpt, ckpt_path)

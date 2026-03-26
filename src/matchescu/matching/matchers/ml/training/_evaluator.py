@@ -3,23 +3,19 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from os import PathLike
 from pathlib import Path
-from typing import ClassVar, Type, Any, Generic, TypeVar
+from typing import ClassVar, Any, Generic
 
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from ._params import ModelTrainingParams
 from ._registry import CapabilityRegistry
-from ._typevars import TModel
-
-
-TDataset = TypeVar("TDataset", bound=Dataset)
+from ._typevars import TModel, TDataset
 
 
 class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
     capability: ClassVar[str] = ""
-    hyperparams_schema: ClassVar[Type[ModelTrainingParams]] = ModelTrainingParams
-    _IS_EVAL_KWARG = "is_evaluating"
+
+    __IS_EVAL_KWARG = "is_evaluating"
 
     def __init__(
         self,
@@ -84,7 +80,7 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
         return ", ".join(f"{k}={v:.4f}" for k, v in value.items())
 
     def _is_evaluating(self, **kwargs: Any) -> bool:
-        return bool(kwargs.pop(self._IS_EVAL_KWARG, False))
+        return bool(kwargs.pop(self.__IS_EVAL_KWARG, False))
 
     def __call__(
         self, model: TModel, training_metrics: dict, epoch: int
@@ -107,7 +103,7 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
                 return found_new_best, best_config
 
             self._log.info("evaluating on test")
-            best_config[self._IS_EVAL_KWARG] = True
+            best_config[self.__IS_EVAL_KWARG] = True
             ok, best_config = self._run_model(model, self._test_data, **best_config)
             if not ok:
                 self._log.warning("failed to evaluate model on test")
