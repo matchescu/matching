@@ -3,25 +3,29 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from os import PathLike
 from pathlib import Path
-from typing import ClassVar, Type, Any, Generic
+from typing import ClassVar, Type, Any, Generic, TypeVar
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from torch.utils.tensorboard import SummaryWriter
 
 from ._params import ModelTrainingParams
 from ._registry import CapabilityRegistry
-from ._typevars import TModel, TParams
+from ._typevars import TModel
 
 
-class BaseEvaluator(AbstractContextManager, Generic[TModel, TParams]):
+TDataset = TypeVar("TDataset", bound=Dataset)
+
+
+class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
     capability: ClassVar[str] = ""
     hyperparams_schema: ClassVar[Type[ModelTrainingParams]] = ModelTrainingParams
+    _IS_EVAL_KWARG = "is_evaluating"
 
     def __init__(
         self,
         task_name: str,
-        dev_data: DataLoader,
-        test_data: DataLoader,
+        dev_data: DataLoader[TDataset],
+        test_data: DataLoader[TDataset],
         tb_log_dir: str | PathLike | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -45,8 +49,45 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TParams]):
         return self._summary_writer
 
     @abstractmethod
+    def _run_model(
+        self, model: TModel, data: DataLoader[TDataset], **kwargs: Any
+    ) -> tuple[bool, dict]:
+        """Run the model in evaluation mode on the specified data.
+
+        This method serves to purposes: hyperparameter tuning and model
+        evaluation. When invoked for hyperparameter tuning by the ``_tune``
+        method, this method must find the optimal configuration of the model
+        given the supplied input data. The boolean return value will be
+        interpreted as having found the best configuration. The returned mapping
+        will contain the best configuration in this case. Here, the 'best'
+        configuration is determined factoring in all previous runs as well. If
+        a new best configuration was not found then ``False, {}`` must be
+        returned.
+
+        When invoked for evaluating the model from the ``_evaluate`` method,
+        this method will be called with the best known configuration obtained
+        during the ``_tune`` phase. This configuration will be supplied through
+        the ``kwargs``. The expected return value in this case is the input
+        configuration (passed through ``kwargs``), updated with new information
+        from the evaluation phase. The boolean flag should simply indicate
+        whether the run was successful or not in this case.
+
+        :param model: the model to run in evaluation mode
+        :param data: the data to use as input for the model
+
+        :return: a boolean and a dict containing the model's best configuration.
+        """
+        pass
+
+    @classmethod
+    def _repr_config(cls, value: dict) -> str:
+        return ", ".join(f"{k}={v:.4f}" for k, v in value.items())
+
+    def _is_evaluating(self, **kwargs: Any) -> bool:
+        return bool(kwargs.pop(self._IS_EVAL_KWARG, False))
+
     def __call__(
-        self, model_name: str, training_metrics: dict, hyperparams: TParams
+        self, model: TModel, training_metrics: dict, epoch: int
     ) -> tuple[bool, dict]:
         """Find the metadata of the best model version on the dev data.
 
@@ -55,7 +96,31 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TParams]):
         test split. The boolean value indicates whether the new call identified
         a better model version compared to the previous call.
         """
-        pass
+        prev_training = model.training
+        try:
+            model.eval()
+
+            self._log.info("tuning on dev")
+            found_new_best, best_config = self._run_model(model, self._xv_data)
+            if not found_new_best:
+                self._log.info("hyperparameter tuning: no improvements")
+                return found_new_best, best_config
+
+            self._log.info("evaluating on test")
+            best_config[self._IS_EVAL_KWARG] = True
+            ok, best_config = self._run_model(model, self._test_data, **best_config)
+            if not ok:
+                self._log.warning("failed to evaluate model on test")
+                return ok, best_config
+
+            training_metrics.update(best_config)
+            self._summary_writer.add_scalars(self._task, training_metrics, epoch)
+            self._log.info(
+                "hyperparameter tuning succeeded: %s", self._repr_config(best_config)
+            )
+            return found_new_best, best_config
+        finally:
+            model.train(prev_training)
 
     def __enter__(self) -> "BaseEvaluator":
         if self._summary_writer is not None:

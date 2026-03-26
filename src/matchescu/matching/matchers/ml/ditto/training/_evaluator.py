@@ -10,12 +10,11 @@ from torch.utils.data import DataLoader
 from matchescu.matching.matchers.ml.training import BaseEvaluator
 from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
 from matchescu.matching.matchers.ml.ditto.training._datasets import DittoDataset
-from ._params import DittoModelTrainingParams
 
 
-class TrainingEvaluator(
-    BaseEvaluator[DittoModel, DittoModelTrainingParams], capability="ditto"
-):
+class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability="ditto"):
+    _BEST_THRESHOLD_KEY = "best_threshold"
+
     def __init__(
         self,
         task_name: str,
@@ -25,7 +24,6 @@ class TrainingEvaluator(
         logger: logging.Logger | None = None,
     ) -> None:
         super().__init__(task_name, xv_data, test_data, tb_log_dir, logger)
-        self._best_test_f1 = 0.0
         self._best_xv_f1 = 0.0
 
     @staticmethod
@@ -43,54 +41,28 @@ class TrainingEvaluator(
         best_idx = np.argmax(f1_scores)
         return float(f1_scores[best_idx]), float(thresholds[best_idx])
 
-    @staticmethod
     @torch.no_grad()
-    def _evaluate_model(
-        model: DittoModel, data_loader: DataLoader, threshold: float | None = None
-    ):
-        model.eval()
+    def _run_model(
+        self, model: DittoModel, data_loader: DataLoader[DittoDataset], **kwargs
+    ) -> tuple[bool, dict]:
 
         batch_results = map(lambda b: (torch.sigmoid(model(b[0])), b[1]), data_loader)
         all_probs, all_y = zip(*batch_results)
         all_probs = torch.cat(all_probs).detach().cpu().numpy()
         all_y = torch.cat(all_y).detach().cpu().numpy()
 
-        if threshold is not None:
+        if self._is_evaluating(**kwargs):
+            # evaluate the model
+            threshold = float(kwargs[self._BEST_THRESHOLD_KEY])
             pred = (all_probs > threshold).astype(int)
             f1 = metrics.f1_score(all_y, pred)
-            return f1, threshold
-        return TrainingEvaluator.__best_threshold(all_probs, all_y)
+            kwargs.update({"test_f1": f1, "test_threshold": threshold})
+            return True, kwargs
 
-    def __call__(
-        self, model: DittoModel, train_metrics: dict, epoch: int
-    ) -> tuple[bool, float]:
-        self._log.info("evaluating on cross-validation set")
-        xv_f1, best_xv_threshold = self._evaluate_model(model, self._xv_data)
-        self._log.info(
-            "X validation F1=%.4f, best threshold=%.2f",
-            xv_f1,
-            best_xv_threshold,
-        )
-        test_f1, _ = self._evaluate_model(
-            model, self._test_data, threshold=best_xv_threshold
-        )
-        self._log.info("test F1=%.4f", test_f1)
-        train_metrics.update({"dev F1": xv_f1, "test F1": test_f1})
-        self._summary_writer.add_scalars(self._task, train_metrics, epoch)
-        found_new_best = False
+        # tune the model
+        f1, threshold = TrainingEvaluator.__best_threshold(all_probs, all_y)
+        if f1 <= self._best_xv_f1:
+            return False, {}
 
-        if xv_f1 > self._best_xv_f1:
-            self._log.info("found new best F1. saving checkpoint")
-            self._best_xv_f1 = xv_f1
-            self._best_test_f1 = test_f1
-
-            self._log.info(
-                "xv_f1=%.4f, best_xv_f1=%.4f, test_f1=%.4f, best_test_f1=%.4f",
-                xv_f1,
-                self._best_xv_f1,
-                test_f1,
-                self._best_test_f1,
-            )
-            found_new_best = True
-
-        return found_new_best, best_xv_threshold
+        self._best_xv_f1 = f1
+        return True, {"dev_f1": f1, self._BEST_THRESHOLD_KEY: threshold}
