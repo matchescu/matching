@@ -1,10 +1,11 @@
-"""Hybrid entity matching model implementation"""
+"""Hybrid attention entity matching model implementation"""
 
 import torch
 import torch.nn as nn
 
-from matchescu.matching.matchers.ml.deepmatcher._highway import HighwayNet
-from matchescu.matching.matchers.ml.deepmatcher._attention import SymmetricAttention
+from ._params import DeepMatcherModelTrainingParams
+from ._highway import HighwayNet
+from ._attention import SymmetricAttention
 
 
 class AttributeEncoder(nn.Module):
@@ -99,36 +100,23 @@ class AttributeEncoder(nn.Module):
 class DeepMatcherModule(nn.Module):
     """Main entity matching model supporting multiple attributes"""
 
-    def __init__(
-        self,
-        vocab_size: int,
-        embedding_dim: int,
-        num_attributes: int = 3,
-        hidden_size: int = 100,
-        dropout: float = 0.2,
-    ):
-        """
-        Args:
-            vocab_size: Size of vocabulary
-            embedding_dim: Dimension of embedding vectors
-            num_attributes: Number of attributes per entity
-            hidden_size: Size of RNN hidden state (per direction)
-            dropout: Dropout probability
-        """
+    def __init__(self, params: DeepMatcherModelTrainingParams):
         super().__init__()
-        self.num_attributes = num_attributes
+        self.num_attributes = params.num_attributes
 
         # Shared encoder for all attributes (parameter sharing)
         self.attribute_encoder = AttributeEncoder(
-            vocab_size, embedding_dim, hidden_size, dropout
+            params.vocab_size, params.embedding_dim, params.hidden_size, params.dropout
         )
 
         # Final attribute aggregator
         self.aggregator = nn.Sequential(
-            nn.Linear(num_attributes * 16 * hidden_size, hidden_size),
+            nn.Linear(
+                params.num_attributes * 16 * params.hidden_size, params.hidden_size
+            ),
             nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_size, 2),
+            nn.Dropout(params.dropout),
+            nn.Linear(params.hidden_size, 2),
         )
         self._device = None
 

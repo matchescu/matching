@@ -31,9 +31,9 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     def __init__(
         self,
         task: str,
-        model_dir: str | PathLike,
         hyper_params: TParams,
-        loss_fn: _Loss,
+        model_dir: str | PathLike,
+        loss_fn: _Loss | None = None,
         **kwargs: Any,
     ) -> None:
         self._task = task
@@ -116,8 +116,11 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
                 batch_no = i + 1
                 if batch_no % 10 == 0:
                     batch_loss = batch_loss / 10
-                    fmt = f"batch {batch_no}: avg loss over last 10 batches=%.4f"
-                    self._log.info(fmt, batch_loss)
+                    self._log.info(
+                        "batch %d: avg loss over last 10 batches=%.4f",
+                        batch_no,
+                        batch_loss,
+                    )
                 del loss
         finally:
             model.train(False)
@@ -179,3 +182,4 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         if additional_info:
             ckpt.update(additional_info)
         torch.save(ckpt, ckpt_path)
+        self._log.info("saved checkpoint to %s", ckpt_path)

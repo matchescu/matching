@@ -11,9 +11,9 @@ from transformers import get_linear_schedule_with_warmup
 from matchescu.matching.matchers.ml.training import BaseTrainer
 
 from .._ditto_module import DittoModel
+from .._params import DittoModelTrainingParams
 from ._config import CAPABILITY
 from ._datasets import DittoDataset
-from ._params import DittoModelTrainingParams
 
 
 class DittoTrainer(
@@ -25,15 +25,15 @@ class DittoTrainer(
     def __init__(
         self,
         task_name: str,
-        hyper_params: DittoModelTrainingParams,
+        hyperparams: DittoModelTrainingParams,
         model_dir: str | PathLike | None = None,
         loss_fn: _Loss | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(
             task_name,
+            hyperparams,
             model_dir or Path(__file__).parent,
-            hyper_params,
             loss_fn or BCEWithLogitsLoss(),
             **kwargs,
         )

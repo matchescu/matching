@@ -46,7 +46,7 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
 
     @abstractmethod
     def _run_model(
-        self, model: TModel, data: DataLoader[TDataset], **kwargs: Any
+        self, model: TModel, data: DataLoader[TDataset], best_config: dict | None = None
     ) -> tuple[bool, dict]:
         """Run the model in evaluation mode on the specified data.
 
@@ -79,8 +79,10 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
     def _repr_config(cls, value: dict) -> str:
         return ", ".join(f"{k}={v:.4f}" for k, v in value.items())
 
-    def _is_evaluating(self, **kwargs: Any) -> bool:
-        return bool(kwargs.pop(self.__IS_EVAL_KWARG, False))
+    def _is_evaluating(self, config: dict | None) -> bool:
+        if not config:
+            return False
+        return bool(config.pop(self.__IS_EVAL_KWARG, False))
 
     def __call__(
         self, model: TModel, training_metrics: dict, epoch: int
@@ -104,16 +106,14 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
 
             self._log.info("evaluating on test")
             best_config[self.__IS_EVAL_KWARG] = True
-            ok, best_config = self._run_model(model, self._test_data, **best_config)
+            ok, best_config = self._run_model(model, self._test_data, best_config)
             if not ok:
                 self._log.warning("failed to evaluate model on test")
                 return ok, best_config
 
             training_metrics.update(best_config)
             self._summary_writer.add_scalars(self._task, training_metrics, epoch)
-            self._log.info(
-                "hyperparameter tuning succeeded: %s", self._repr_config(best_config)
-            )
+            self._log.info("tuning succeeded: %s", self._repr_config(best_config))
             return found_new_best, best_config
         finally:
             model.train(prev_training)

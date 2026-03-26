@@ -5,26 +5,18 @@ import torch
 import torch.nn as nn
 from transformers import AutoModel, BertModel
 
+from ._params import DittoModelTrainingParams
+
 
 class DittoModel(nn.Module):
-    def __init__(
-        self,
-        pretrained_model_name: str,
-        alpha_aug: float = 0.8,
-        device: torch.device | None = None,
-    ):
+    def __init__(self, params: DittoModelTrainingParams):
         super().__init__()
-        self._alpha_aug = alpha_aug
-        self._bert_name = pretrained_model_name
-        self._bert = cast(BertModel, AutoModel.from_pretrained(pretrained_model_name))
+        self._alpha_aug = params.alpha_aug
+        self._bert_name = params.pretrained_model_name
+        self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
         hidden_size = self._bert.config.hidden_size
 
         self._classifier = torch.nn.Linear(hidden_size, 1, dtype=self._bert.dtype)
-        self._device = device
-
-    @property
-    def device(self) -> torch.device:
-        return self._device
 
     def forward(self, x1, x2=None):
         enc = self._bert_encode(x1, x2)
@@ -66,7 +58,6 @@ class DittoModel(nn.Module):
     def to(self, device: str | torch.device) -> None:
         self._bert = self._bert.to(device)
         self._classifier = self._classifier.to(device)
-        self._device = device
 
     def train(self, mode: bool = True) -> "DittoModel":
         if mode:

@@ -45,7 +45,10 @@ class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPA
 
     @torch.no_grad()
     def _run_model(
-        self, model: DittoModel, data_loader: DataLoader[DittoDataset], **kwargs
+        self,
+        model: DittoModel,
+        data_loader: DataLoader[DittoDataset],
+        best_config: dict | None = None,
     ) -> tuple[bool, dict]:
 
         batch_results = map(lambda b: (torch.sigmoid(model(b[0])), b[1]), data_loader)
@@ -53,13 +56,13 @@ class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPA
         all_probs = torch.cat(all_probs).detach().cpu().numpy()
         all_y = torch.cat(all_y).detach().cpu().numpy()
 
-        if self._is_evaluating(**kwargs):
+        if self._is_evaluating(best_config):
             # evaluate the model
-            threshold = float(kwargs[self._BEST_THRESHOLD_KEY])
+            threshold = float(best_config[self._BEST_THRESHOLD_KEY])
             pred = (all_probs > threshold).astype(int)
             f1 = metrics.f1_score(all_y, pred)
-            kwargs.update({"test_f1": f1, "test_threshold": threshold})
-            return True, kwargs
+            best_config.update({"test_f1": f1, "test_threshold": threshold})
+            return True, best_config
 
         # tune the model
         f1, threshold = TrainingEvaluator.__best_threshold(all_probs, all_y)

@@ -21,15 +21,13 @@ class DeepMatcherDataset(Dataset):
         self,
         id_table: IdTable,
         split: Split,
+        tokenizer: PreTrainedTokenizerBase = None,
         attr_map: dict[str, str] = None,
         exclude_from_comparison: Iterable[str | int] = None,
-        tokenizer: PreTrainedTokenizerBase = None,
         max_len: int = 30,
     ):
         self.__id_table = id_table
         self.__pairs, self.__labels = split.to_comparison_labels(self.__id_table)
-        self.__max_len = max_len
-        self.__attr_map = attr_map
         self.__tokenizer = tokenizer or AutoTokenizer.from_pretrained(
             DeepMatcherDataset.__DEFAULT_TOKENIZER_NAME,
         )

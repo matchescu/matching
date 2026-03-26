@@ -112,18 +112,16 @@ class TrainingConfig:
             default_evaluator=default_evaluator,
         )
         cfg._schema = getattr(trainer_cls, "hyperparams_schema", ModelTrainingParams)
+        cfg._variants = {
+            model: _ResolvedVariant(trainer_cls, evaluator_cls, cfg._schema, {})
+            for model in cfg.included_models
+        }
 
         raw_model_configs: dict = raw.get("modelConfig", {})
         for model_name, spec in raw_model_configs.items():
             if not isinstance(spec, dict):
                 continue
             overrides = spec.copy()
-            cfg._variants[model_name] = _ResolvedVariant(
-                trainer_cls=trainer_cls,
-                evaluator_cls=evaluator_cls,
-                hyperparams_schema=cfg._schema,
-                overrides=overrides,
-            )
             cfg._model_hp[model_name] = overrides
             cfg._model_hp_objs[model_name] = cfg._schema.model_validate(overrides)
 

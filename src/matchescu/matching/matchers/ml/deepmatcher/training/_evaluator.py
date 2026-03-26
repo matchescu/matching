@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from typing import Any
 
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
@@ -30,7 +29,7 @@ class TrainingEvaluator(
         self,
         model: DeepMatcherModule,
         data: DataLoader[DeepMatcherDataset],
-        **kwargs: Any
+        best_config: dict | None = None,
     ) -> tuple[bool, dict]:
         y_pred = []
         y_true = []
@@ -46,11 +45,12 @@ class TrainingEvaluator(
 
         f1 = f1_score(y_true, y_pred)
 
-        if self._is_evaluating(**kwargs):
-            kwargs.update({"test_f1": f1})
-            return True, kwargs
+        if self._is_evaluating(best_config):
+            best_config.update({"test_f1": f1})
+            return True, best_config
         else:
             if f1 > self._best_xv_f1:
+                self._best_xv_f1 = f1
                 return True, {"dev_f1": f1}
             else:
                 return False, {}
