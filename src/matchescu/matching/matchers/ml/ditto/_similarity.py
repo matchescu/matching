@@ -6,7 +6,7 @@ import torch
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.matchers._result import MatchResult
-from matchescu.matching.matchers.ml.ditto._ditto_module import DittoModel
+from matchescu.matching.matchers.ml.ditto._module import DittoModel
 from matchescu.matching.matchers.ml.ditto._encoder import to_ditto_text
 from matchescu.matching.similarity import Similarity
 from matchescu.typing import EntityReference

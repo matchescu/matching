@@ -6,7 +6,7 @@ from sklearn.metrics import f1_score
 
 from matchescu.matching.matchers.ml.training import BaseEvaluator
 
-from .._matcher import DeepMatcherModule
+from .._module import DeepMatcherModule
 from ._config import CAPABILITY
 from ._dataset import DeepMatcherDataset
 

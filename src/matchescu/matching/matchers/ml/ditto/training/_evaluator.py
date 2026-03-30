@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from matchescu.matching.matchers.ml.training import BaseEvaluator
 
-from .._ditto_module import DittoModel
+from .._module import DittoModel
 from ._config import CAPABILITY
 from ._datasets import DittoDataset
 

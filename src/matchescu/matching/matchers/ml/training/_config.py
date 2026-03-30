@@ -28,6 +28,7 @@ from ._params import ModelTrainingParams
 from ._evaluator import BaseEvaluator
 from ._exceptions import ConfigurationError
 from ._registry import CapabilityRegistry
+from ._typevars import TParams
 
 
 # Consts, utilities and classes safe for internal use only
@@ -178,11 +179,11 @@ class TrainingConfig:
             case _:
                 raise ValueError(f"Unsupported dataset params type: {type(params)}")
 
-    def get(
+    def get[TParams](
         self,
         model: str | None = None,
         dataset: str | None = None,
-    ) -> ModelTrainingParams:
+    ) -> TParams:
         """Resolve hyperparameters with a cascading fallback.
 
         The order in which settings are resolved is:

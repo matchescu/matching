@@ -1,4 +1,5 @@
-from matchescu.matching.matchers.ml.deepmatcher._matcher import DeepMatcherModule
+from ._module import DeepMatcherModule
+from ._similarity import DeepMatcherSimilarity
 
 
-__all__ = ["DeepMatcherModule"]
+__all__ = ["DeepMatcherModule", "DeepMatcherSimilarity"]

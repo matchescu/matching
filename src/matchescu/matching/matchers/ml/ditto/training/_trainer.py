@@ -10,7 +10,7 @@ from transformers import get_linear_schedule_with_warmup
 
 from matchescu.matching.matchers.ml.training import BaseTrainer
 
-from .._ditto_module import DittoModel
+from .._module import DittoModel
 from .._params import DittoModelTrainingParams
 from ._config import CAPABILITY
 from ._datasets import DittoDataset
