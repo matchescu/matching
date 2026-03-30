@@ -14,8 +14,16 @@ from os import PathLike
 from pathlib import Path
 from typing import Any, Type
 
+from pydantic import TypeAdapter
 from pydantic.alias_generators import to_camel
 
+from matchescu.matching.evaluation.data.benchmark._base import BenchmarkDataFactory
+from ._dataset_config import (
+    AnyDatasetParams,
+    MagellanBenchmarkDataConfig,
+    CsvBenchmarkDataConfig,
+)
+from ._dataset_factory import MagellanBenchmarkDataFactory, CsvBenchmarkDataFactory
 from ._params import ModelTrainingParams
 from ._evaluator import BaseEvaluator
 from ._exceptions import ConfigurationError
@@ -31,6 +39,7 @@ _STRUCTURAL_KEYS = frozenset(
         "datasetConfig",
         "modelConfig",
         "models",
+        "dataSources",
     }
 )
 
@@ -77,6 +86,7 @@ class TrainingConfig:
     """
 
     def __init__(self) -> None:
+        self._ds_adapter = TypeAdapter(AnyDatasetParams)
         self._global_hp: dict[str, Any] = {}
         self._variants: dict[str, _ResolvedVariant] = {}
         self._model_hp: dict[str, dict[str, Any]] = {}
@@ -84,6 +94,7 @@ class TrainingConfig:
         self._dataset_hp: dict[str, dict[str, Any]] = {}
         self._ds_hp_objs: dict[str, Any] = {}
         self._dataset_model_hp: dict[str, dict[str, dict[str, Any]]] = {}
+        self._dataset_factories: dict[str, BenchmarkDataFactory] = {}
         self.included_datasets: list[str] = []
         self.included_models: list[str] = []
 
@@ -128,7 +139,9 @@ class TrainingConfig:
         for ds_name, ds_raw in raw.get("datasetConfig", {}).items():
             ds_cfg = _extract_hyper_params(ds_raw)
             cfg._dataset_hp[ds_name] = ds_cfg
-            cfg._ds_hp_objs[ds_name] = cfg._schema.model_validate(ds_cfg)
+            merged = cfg._global_hp.copy()
+            merged.update(ds_cfg)
+            cfg._ds_hp_objs[ds_name] = cfg._schema.model_validate(merged)
 
             ds_models: dict[str, dict[str, Any]] = {}
             # nested modelConfig block
@@ -146,7 +159,22 @@ class TrainingConfig:
             if ds_models:
                 cfg._dataset_model_hp[ds_name] = ds_models
 
+        for ds_name, ds_raw in raw.get("datasets", {}).items():
+            params = cfg._ds_adapter.validate_python(ds_raw)
+            cfg._dataset_factories[ds_name] = cfg.create_benchmark_data_factory(params)
+
         return cfg
+
+    @staticmethod
+    def create_benchmark_data_factory(params: AnyDatasetParams) -> BenchmarkDataFactory:
+        """Given a validated dataset params object, return the right factory."""
+        match params:
+            case MagellanBenchmarkDataConfig():
+                return MagellanBenchmarkDataFactory(params)
+            case CsvBenchmarkDataConfig():
+                return CsvBenchmarkDataFactory(params)
+            case _:
+                raise ValueError(f"Unsupported dataset params type: {type(params)}")
 
     def get(
         self,
@@ -208,6 +236,10 @@ class TrainingConfig:
 
         # If there aren't any model overrides, simply return the dataset hyper-params
         return local_obj
+
+    @property
+    def dataset_factories(self) -> dict[str, BenchmarkDataFactory]:
+        return self._dataset_factories
 
     @property
     def model_names(self) -> list[str]:

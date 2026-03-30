@@ -17,25 +17,24 @@ from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 class CsvBenchmarkData(BenchmarkData):
     __DEFAULT_SPLIT_RATIOS = {"train": 3, "valid": 1, "test": 1}
 
-    def __init__(
-        self,
-        data_dir: Path,
-        source_files: list[str],
-    ):
+    def __init__(self, data_dir: Path, source_files: list[str]):
+        super().__init__()
         self._data_dir = data_dir
         paths = [data_dir / src for src in source_files]
         self._paths = list(self._check_files(paths))
-        self._id_table = None
         self._match_gt = None
         self._cluster_gt = None
-        self.__splits = {}
+
+    @property
+    def name(self) -> str:
+        return self._data_dir.stem
 
     def load_data(
         self,
         traits: Iterable[Traits] | Mapping[str, Traits],
         id_cols: Iterable[str | int] | Mapping[str, str | int] | None = None,
         source_cols: Iterable[str | int] | Mapping[str, str | int] | None = None,
-        has_headers: bool = True,
+        headers: Iterable[bool] | Mapping[str, bool] | None = None,
     ) -> "CsvBenchmarkData":
         if not traits:
             raise ValueError("must provide traits")
@@ -46,7 +45,10 @@ class CsvBenchmarkData(BenchmarkData):
         file_source_cols = {p: None for p in self._paths}
         if source_cols is not None:
             file_source_cols = self._get_file_params(source_cols, Union[str, int])
-        self._build_id_table(file_traits, file_id_cols, file_source_cols, has_headers)
+        file_headers = {p: True for p in self._paths}
+        if headers is not None:
+            file_headers = self._get_file_params(headers, bool)
+        self._build_id_table(file_traits, file_id_cols, file_source_cols, file_headers)
         return self
 
     def with_ideal_mapping(
@@ -112,6 +114,7 @@ class CsvBenchmarkData(BenchmarkData):
         neg_pos_ratio: float = 8.0,
         bridge_class_ratio: float = 4.0,
         max_sample_count: int | None = None,
+        save: bool = False,
     ) -> "CsvBenchmarkData":
         if self._id_table is None:
             raise RuntimeError("call load_data() before calling split()")
@@ -129,16 +132,10 @@ class CsvBenchmarkData(BenchmarkData):
             .load(self._id_table, self._cluster_gt, self._match_gt)
             .generate()
         )
-        self.__splits = splitter.get_splits()
+        if save:
+            splitter.save(self._data_dir)
+        self._splits = {f"{k}_split": v for k, v in splitter.get_splits().items()}
         return self
-
-    def __getattr__(self, item: str):
-        if item in self.__splits:
-            return self.__splits[item]
-        raise AttributeError(f"{item} split not found")
-
-    def __dir__(self):
-        return sorted([*super().__dir__(), *self.__splits.keys()])
 
     @property
     def comparison_space_size(self) -> int:
@@ -155,15 +152,16 @@ class CsvBenchmarkData(BenchmarkData):
 
     def _build_id_table(
         self,
-        file_traits: dict,
-        file_id_cols: dict,
-        file_source_cols: dict,
-        has_headers: bool,
+        file_traits: dict[Path, Traits],
+        file_id_cols: dict[Path, str | int | None],
+        file_source_cols: dict[Path, str | int | None],
+        file_has_headers: dict[Path, bool],
     ):
         self._id_table = InMemoryIdTable()
         for path, traits in file_traits.items():
             id_col = file_id_cols[path]
             source_col = file_source_cols[path]
+            has_headers = file_has_headers[path]
             extract = CsvRecordExtraction(path, traits, id_col, source_col, has_headers)
             for ref in extract():
                 self._id_table.put(ref)

@@ -11,8 +11,7 @@ import humanize
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoTokenizer, PreTrainedTokenizerFast, DebertaV2TokenizerFast
 
-from matchescu.extraction import Traits
-from matchescu.matching.evaluation.data import MagellanBenchmarkData, MagellanTraits
+from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
 from matchescu.matching.matchers.ml.deepmatcher.training import (
     DeepMatcherDataset,
@@ -50,38 +49,25 @@ def timer(start_message: str):
     log.info("%s time elapsed: %s", start_message, duration)
 
 
-@timer(start_message="load dataset")
-def load_magellan_dataset(
-    ds_path: Path,
-    left_traits: Traits,
-    right_traits: Traits | None = None,
-) -> MagellanBenchmarkData:
-    ds = MagellanBenchmarkData(ds_path)
-    ds.load_left(left_traits)
-    ds.load_right(right_traits or left_traits)
-    ds.load_splits()
-    return ds
-
-
 @timer(start_message="serialize+tokenize")
-def get_magellan_data_loaders(
+def get_benchmark_data_loaders(
     ds_cls: type[Union[Dataset, Sized]],
-    magellan_ds: MagellanBenchmarkData,
+    benchmark_data: BenchmarkData,
     tokenizer: PreTrainedTokenizerFast,
     batch_size: int = 32,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     train_ds, xv_ds, test_ds = [
-        ds_cls(magellan_ds.id_table, split, tokenizer)
+        ds_cls(benchmark_data.id_table, split, tokenizer)
         for split in [
-            magellan_ds.train_split,
-            magellan_ds.valid_split,
-            magellan_ds.test_split,
+            benchmark_data.train_split,
+            benchmark_data.valid_split,
+            benchmark_data.test_split,
         ]
     ]
     return (
         train_ds.get_data_loader(batch_size, shuffle=True),
-        train_ds.get_data_loader(batch_size * 16),
-        train_ds.get_data_loader(batch_size * 16),
+        xv_ds.get_data_loader(batch_size * 16),
+        test_ds.get_data_loader(batch_size * 16),
     )
 
 
@@ -91,14 +77,14 @@ def train_on_benchmark_data[TParams](
     model_name: str,
     trainer_cls: type[BaseTrainer],
     evaluator_cls: type[BaseEvaluator],
-    benchmark_data: MagellanBenchmarkData,
+    benchmark_data: BenchmarkData,
     tokenizer: PreTrainedTokenizerFast,
     train_params: TParams,
 ):
     if (model_and_ds := _TRAINER_MAPPINGS.get(trainer_cls)) is None:
         raise RuntimeError(f"unsupported trainer: {trainer_cls.__qualname__}")
     model_cls, ds_cls = model_and_ds
-    train, xv, test = get_magellan_data_loaders(
+    train, xv, test = get_benchmark_data_loaders(
         ds_cls, benchmark_data, tokenizer, train_params.batch_size
     )
     matcher_model = model_cls(train_params)
@@ -145,7 +131,6 @@ def run_training(
 ) -> None:
     root_model_dir = Path(root_model_dir)
     root_data_dir = Path(root_data_dir)
-    benchmark_dataset_traits = MagellanTraits()
     config = TrainingConfig.load_json(
         config_path,
         discovery_packages=[
@@ -155,13 +140,14 @@ def run_training(
     )
     with warnings.catch_warnings(action="ignore"):
         for dataset_name in config.included_datasets:
-            ds_path = root_data_dir / "magellan" / dataset_name
             ds_model_dir = root_model_dir / dataset_name
+            benchmark_data = config.dataset_factories[dataset_name].create(
+                root_data_dir
+            )
+
             for model_name in config.model_names:
                 tokenizer = _new_fast_tokenizer(model_name)
                 train_params = config.get(model=model_name, dataset=dataset_name)
-                ds_traits = benchmark_dataset_traits[dataset_name]
-                benchmark_data = load_magellan_dataset(ds_path, ds_traits)
                 trainer_cls = config.get_trainer(model_name)
                 eval_cls = config.get_evaluator(model_name)
 

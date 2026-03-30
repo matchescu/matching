@@ -18,7 +18,11 @@ def config(config_file) -> TrainingConfig:
 
 def test_load_from_json(config):
     assert config.model_names == ["roberta-base", "distilbert-base-uncased"]
-    assert config.included_datasets == ["abt-buy"]
+    assert config.included_datasets == [
+        "amazon-google",
+        "affiliationstrings",
+        "abt-buy",
+    ]
     assert config.learning_rate == 0.001
     assert config.batch_size == 31
     assert len(config.dataset_configs) == 2
@@ -66,3 +70,7 @@ def test_fodors_zagat(config):
     assert train_params.epochs == 3
     assert train_params.learning_rate == 0.001
     assert train_params.frozen_layer_count == 0
+
+
+def test_dataset_configs(config):
+    assert len(config.dataset_factories) == 3

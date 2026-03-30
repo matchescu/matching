@@ -61,7 +61,7 @@ def test_split(affils_dir, affils_id_col, affils_traits):
 
     data.split()
 
-    assert len(data.train) > 0
+    assert len(data.train_split) > 0
 
 
 def test_split_with_max_comparison_space(affils_dir, affils_id_col, affils_traits):
@@ -74,4 +74,4 @@ def test_split_with_max_comparison_space(affils_dir, affils_id_col, affils_trait
 
     data.split(max_sample_count=10000)
 
-    assert len(data.train) + len(data.test) + len(data.valid) == 10000
+    assert len(data.train_split) + len(data.test_split) + len(data.valid_split) == 10000

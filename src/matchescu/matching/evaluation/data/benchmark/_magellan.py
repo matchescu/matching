@@ -11,14 +11,12 @@ from matchescu.matching.evaluation.data.extraction._record_extraction import (
 from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.evaluation.ground_truth import EquivalenceClassPartitioner
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
-from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
 from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
 class MagellanBenchmarkData(BenchmarkData):
-    SPLIT_NAMES = ["train", "valid", "test"]
-
     def __init__(self, folder_path: str | PathLike) -> None:
+        super().__init__()
         self.__dataset_dir = Path(folder_path)
         if not self.__dataset_dir.is_dir():
             raise ValueError(f"'{self.__dataset_dir}' is not a directory")
@@ -27,7 +25,7 @@ class MagellanBenchmarkData(BenchmarkData):
         self.__right_table_path = self.__dataset_dir / "tableB.csv"
         self.__right_source = self.__right_table_path.stem
         self.__split_paths = [
-            self.__dataset_dir / f"{split}.csv" for split in self.SPLIT_NAMES
+            self.__dataset_dir / f"{split}.csv" for split in self._SPLIT_NAMES
         ]
         self._check_files(
             [
@@ -36,13 +34,11 @@ class MagellanBenchmarkData(BenchmarkData):
                 *self.__split_paths,
             ]
         )
-        self.__id_table = InMemoryIdTable()
-        self.__splits = {}
 
     def _load_csv_table(self, path: Path, traits: Traits) -> str:
         extract = CsvRecordExtraction(path, traits)
         for ref in extract():
-            self.__id_table.put(ref)
+            self._id_table.put(ref)
         return extract.data_source.name
 
     def load_left(self, traits: Traits) -> "MagellanBenchmarkData":
@@ -84,19 +80,15 @@ class MagellanBenchmarkData(BenchmarkData):
             raise ValueError(
                 "left + right data sources must be loaded before loading splits"
             )
-        self.__splits = {
+        self._splits = {
             f"{name}_split": self.__load_split(path)
-            for name, path in zip(self.SPLIT_NAMES, self.__split_paths)
+            for name, path in zip(self._SPLIT_NAMES, self.__split_paths)
         }
         return self
 
     @property
     def name(self) -> str:
         return self.__dataset_dir.stem
-
-    @property
-    def id_table(self) -> IdTable:
-        return self.__id_table
 
     @property
     def left_source(self) -> str:
@@ -107,15 +99,15 @@ class MagellanBenchmarkData(BenchmarkData):
         return self.__right_source
 
     def __getattr__(self, item: str):
-        if item in self.__splits:
-            return self.__splits[item]
+        if item in self._splits:
+            return self._splits[item]
         raise AttributeError(f"{item} split not found")
 
     def __dir__(self):
-        return sorted([*super().__dir__(), *self.__splits.keys()])
+        return sorted([*super().__dir__(), *self._splits.keys()])
 
     def all_data(self) -> Split:
-        return Split.merge(list(self.__splits.values()))
+        return Split.merge(list(self._splits.values()))
 
 
 class MagellanTraits:
@@ -144,9 +136,6 @@ class MagellanTraits:
         .string(["title", "category", "brand", "modelno"])
         .currency(["price"]),
     }
-
-    def __getattr__(self, item: str) -> Traits:
-        return self[item]
 
     def __getitem__(self, item: str) -> Traits:
         assert isinstance(item, str)
