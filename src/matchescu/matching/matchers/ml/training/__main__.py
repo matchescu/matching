@@ -146,8 +146,8 @@ def run_training(
             )
 
             for model_name in config.model_names:
-                tokenizer = _new_fast_tokenizer(model_name)
                 train_params = config.get(model=model_name, dataset=dataset_name)
+                tokenizer = _new_fast_tokenizer(train_params.model_name or model_name)
                 trainer_cls = config.get_trainer(model_name)
                 eval_cls = config.get_evaluator(model_name)
 

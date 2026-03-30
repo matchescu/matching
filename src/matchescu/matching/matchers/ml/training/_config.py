@@ -134,14 +134,16 @@ class TrainingConfig:
                 continue
             overrides = spec.copy()
             cfg._model_hp[model_name] = overrides
-            cfg._model_hp_objs[model_name] = cfg._schema.model_validate(overrides)
+            cfg._model_hp_objs[model_name] = cfg._schema.model_validate(
+                {**cfg._global_hp, **overrides}
+            )
 
         for ds_name, ds_raw in raw.get("datasetConfig", {}).items():
             ds_cfg = _extract_hyper_params(ds_raw)
             cfg._dataset_hp[ds_name] = ds_cfg
-            merged = cfg._global_hp.copy()
-            merged.update(ds_cfg)
-            cfg._ds_hp_objs[ds_name] = cfg._schema.model_validate(merged)
+            cfg._ds_hp_objs[ds_name] = cfg._schema.model_validate(
+                {**cfg._global_hp, **ds_cfg}
+            )
 
             ds_models: dict[str, dict[str, Any]] = {}
             # nested modelConfig block

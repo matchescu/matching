@@ -78,6 +78,7 @@
     "fodors-zagat": {
       "batchSize": 32,
       "epochs": 3,
+      "learningRate": 3e-5,
       "hybrid-attention": {
         "batchSize": 48
       }

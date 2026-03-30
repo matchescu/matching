@@ -23,3 +23,4 @@ class ModelTrainingParams(ConfigModel):
     learning_rate: float = Field(default=3e-5)
     epochs: int = Field(default=10)
     batch_size: int = Field(default=32)
+    model_name: str | None = None

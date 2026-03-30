@@ -68,7 +68,7 @@ def test_fodors_zagat(config):
 
     assert train_params.batch_size == 32
     assert train_params.epochs == 3
-    assert train_params.learning_rate == 0.001
+    assert train_params.learning_rate == 3e-5
     assert train_params.frozen_layer_count == 0
 
 
