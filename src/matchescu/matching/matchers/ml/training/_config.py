@@ -18,17 +18,16 @@ from pydantic import TypeAdapter
 from pydantic.alias_generators import to_camel
 
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkDataFactory
-from ._dataset_config import (
-    AnyDatasetParams,
+from matchescu.matching.matchers.ml.core import ModelTrainingParams
+from matchescu.matching.config import (
+    AnyDatasetConfig,
     MagellanBenchmarkDataConfig,
     CsvBenchmarkDataConfig,
 )
 from ._dataset_factory import MagellanBenchmarkDataFactory, CsvBenchmarkDataFactory
-from ._params import ModelTrainingParams
 from ._evaluator import BaseEvaluator
 from ._exceptions import ConfigurationError
 from ._registry import CapabilityRegistry
-from ._typevars import TParams
 
 
 # Consts, utilities and classes safe for internal use only
@@ -87,7 +86,7 @@ class TrainingConfig:
     """
 
     def __init__(self) -> None:
-        self._ds_adapter = TypeAdapter(AnyDatasetParams)
+        self._ds_adapter = TypeAdapter(AnyDatasetConfig)
         self._global_hp: dict[str, Any] = {}
         self._variants: dict[str, _ResolvedVariant] = {}
         self._model_hp: dict[str, dict[str, Any]] = {}
@@ -169,7 +168,7 @@ class TrainingConfig:
         return cfg
 
     @staticmethod
-    def create_benchmark_data_factory(params: AnyDatasetParams) -> BenchmarkDataFactory:
+    def create_benchmark_data_factory(params: AnyDatasetConfig) -> BenchmarkDataFactory:
         """Given a validated dataset params object, return the right factory."""
         match params:
             case MagellanBenchmarkDataConfig():

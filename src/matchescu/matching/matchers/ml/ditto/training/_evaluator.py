@@ -15,7 +15,7 @@ from ._datasets import DittoDataset
 
 
 class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPABILITY):
-    _BEST_THRESHOLD_KEY = "best_threshold"
+    THRESHOLD_KEY = "best_threshold"
 
     def __init__(
         self,
@@ -58,7 +58,7 @@ class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPA
 
         if self._is_evaluating(best_config):
             # evaluate the model
-            threshold = float(best_config[self._BEST_THRESHOLD_KEY])
+            threshold = float(best_config[self.THRESHOLD_KEY])
             pred = (all_probs > threshold).astype(int)
             f1 = metrics.f1_score(all_y, pred)
             best_config.update({"test_f1": f1, "test_threshold": threshold})
@@ -70,4 +70,4 @@ class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPA
             return False, {}
 
         self._best_xv_f1 = f1
-        return True, {"dev_f1": f1, self._BEST_THRESHOLD_KEY: threshold}
+        return True, {"dev_f1": f1, self.THRESHOLD_KEY: threshold}

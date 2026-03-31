@@ -3,7 +3,7 @@ from typing import Iterable
 import torch
 from transformers import PreTrainedTokenizerBase
 
-from matchescu.matching.matchers._result import MatchResult
+from matchescu.matching.matchers.ml.core import MatchResult
 from matchescu.matching.matchers.ml.deepmatcher._encoder import (
     to_deepmatcher_repr,
     ensure_attr_map,

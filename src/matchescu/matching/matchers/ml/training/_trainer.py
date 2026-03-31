@@ -10,10 +10,15 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, OneCycleLR
 from torch.utils.data import DataLoader
 
+from matchescu.matching.matchers.ml.core import (
+    AdditionalModelInfo,
+    ModelTrainingParams,
+    TModel,
+    TParams,
+    TDataset,
+)
 from ._evaluator import BaseEvaluator
-from ._params import ModelTrainingParams
 from ._registry import CapabilityRegistry
-from ._typevars import TModel, TParams, TDataset
 
 
 class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
@@ -160,7 +165,15 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
 
             has_new_best, best_config = evaluator(model, train_metrics, epoch)
             if has_new_best:
-                self._save_checkpoint(epoch, model, optimizer, scheduler, best_config)
+                self._save_checkpoint(
+                    epoch,
+                    model,
+                    optimizer,
+                    scheduler,
+                    AdditionalModelInfo(
+                        hyperparameters=self._params, best_config=best_config
+                    ),
+                )
 
     def _save_checkpoint(
         self,
@@ -168,7 +181,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         model: TModel,
         optimizer: Optimizer,
         scheduler: LRScheduler,
-        additional_info: dict | None = None,
+        additional_info: AdditionalModelInfo[TParams],
     ):
         task_model_dir = self._model_dir / self._task
         task_model_dir.mkdir(parents=True, exist_ok=True)
@@ -178,8 +191,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
             "optimizer": optimizer.state_dict(),
             "scheduler": scheduler.state_dict(),
             "epoch": epoch,
+            "additional_info": additional_info.model_dump(),
         }
-        if additional_info:
-            ckpt.update(additional_info)
         torch.save(ckpt, ckpt_path)
         self._log.info("saved checkpoint to %s", ckpt_path)

@@ -5,9 +5,11 @@ from pathlib import Path
 import torch
 from transformers import PreTrainedTokenizerFast
 
-from matchescu.matching.matchers._result import MatchResult
+from matchescu.matching.matchers.ml.core import AdditionalModelInfo, MatchResult
 from matchescu.matching.matchers.ml.ditto._module import DittoModel
 from matchescu.matching.matchers.ml.ditto._encoder import to_ditto_text
+from matchescu.matching.matchers.ml.ditto._params import DittoModelTrainingParams
+from matchescu.matching.matchers.ml.ditto.training._evaluator import TrainingEvaluator
 from matchescu.matching.similarity import Similarity
 from matchescu.typing import EntityReference
 
@@ -36,14 +38,23 @@ class DittoSimilarity(Similarity[MatchResult]):
     def match_threshold(self) -> float:
         return self.__threshold
 
-    def load_pretrained(self, model_name: str) -> None:
-        model_path = self.__model_dir / model_name / "model.pt"
-        if not model_path.exists():
-            raise FileNotFoundError(model_path)
-        model_dict = torch.load(model_path)
-        self.__threshold = float(model_dict["threshold"])
-        self.__model = DittoModel(model_name)
+    def load_from_file(self, path: str | PathLike) -> "DittoSimilarity":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(path)
+        model_dict = torch.load(path)
+        if (additional_info := model_dict.get("additional_info")) is None:
+            raise ValueError("expected hyperparameters to be bundled with model")
+
+        additional_info = AdditionalModelInfo[DittoModelTrainingParams].model_validate(
+            additional_info
+        )
+        self.__model = DittoModel(additional_info.hyperparameters)
+        self.__threshold = float(
+            additional_info.best_config.get(TrainingEvaluator.THRESHOLD_KEY, 0.5)
+        )
         self.__model.load_state_dict(model_dict["model"])
+        return self
 
     def _compute_similarity(
         self, a: EntityReference, b: EntityReference

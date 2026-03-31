@@ -3,7 +3,7 @@ from typing import Literal, Annotated, Union
 
 from pydantic import Field
 
-from matchescu.matching.matchers.ml.training._config_model import ConfigModel
+from matchescu.matching.config import ConfigModel
 
 
 class TraitConfig(ConfigModel):
@@ -64,7 +64,7 @@ class CsvBenchmarkDataConfig(BenchmarkDataConfig):
     splits: SplitConfig | None = None
 
 
-AnyDatasetParams = Annotated[
+AnyDatasetConfig = Annotated[
     Union[MagellanBenchmarkDataConfig, CsvBenchmarkDataConfig],
     Field(discriminator="type"),
 ]

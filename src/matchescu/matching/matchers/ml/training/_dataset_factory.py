@@ -8,7 +8,7 @@ from matchescu.matching.evaluation.data.benchmark._magellan import (
     MagellanTraits,
 )
 
-from matchescu.matching.matchers.ml.training._dataset_config import (
+from matchescu.matching.config import (
     TraitConfig,
     MagellanBenchmarkDataConfig,
     CsvBenchmarkDataConfig,

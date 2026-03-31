@@ -1,4 +1,4 @@
-from matchescu.matching.matchers.ml.training import ModelTrainingParams
+from matchescu.matching.matchers.ml.core import ModelTrainingParams
 
 
 class DeepMatcherModelTrainingParams(ModelTrainingParams):

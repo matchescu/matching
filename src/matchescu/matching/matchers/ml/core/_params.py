@@ -1,6 +1,6 @@
 from pydantic import Field
 
-from matchescu.matching.matchers.ml.training._config_model import ConfigModel
+from matchescu.matching.config import ConfigModel
 
 
 class ModelTrainingParams(ConfigModel):
