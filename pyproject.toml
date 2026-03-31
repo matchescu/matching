@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "matchescu-matching"
-version = "0.17.0"
+version = "0.17.1"
 description = "Common types and algorithms used for matching two information"
 authors = ["Andrei Olar <andrei.olar@ubbcluj.ro>"]
 license = "MIT"
@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{include = "matchescu", from="src"}]
 
 [tool.poetry.scripts]
-train-ditto = "matchescu.matching.matchers.ml.ditto.training.__main__:run_training"
+train = "matchescu.matching.matchers.ml.training.__main__:run_training"
 
 [tool.poetry.dependencies]
 python = "!=3.14.1,>=3.13,<3.15"
