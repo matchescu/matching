@@ -24,7 +24,10 @@ from matchescu.matching.config import (
     MagellanBenchmarkDataConfig,
     CsvBenchmarkDataConfig,
 )
-from ._dataset_factory import MagellanBenchmarkDataFactory, CsvBenchmarkDataFactory
+from matchescu.matching.evaluation.data.benchmark._magellan import (
+    MagellanBenchmarkDataFactory,
+)
+from matchescu.matching.evaluation.data.benchmark._csv import CsvBenchmarkDataFactory
 from ._evaluator import BaseEvaluator
 from ._exceptions import ConfigurationError
 from ._registry import CapabilityRegistry

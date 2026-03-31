@@ -4,7 +4,11 @@ from pathlib import Path
 
 import polars as pl
 from matchescu.extraction import Traits
+
+from matchescu.matching.config import MagellanBenchmarkDataConfig, TraitConfig
+from matchescu.matching.evaluation.data.benchmark import BenchmarkDataFactory
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
+from matchescu.matching.evaluation.data.benchmark._config_adapters import get_traits
 from matchescu.matching.evaluation.data.extraction._record_extraction import (
     CsvRecordExtraction,
 )
@@ -142,3 +146,35 @@ class MagellanTraits:
         key = item.upper()
         assert key in self.__TRAIT_DICT
         return self.__TRAIT_DICT[key]
+
+
+class MagellanBenchmarkDataFactory(BenchmarkDataFactory[MagellanBenchmarkData]):
+    """Initialize fully loaded ``MagellanBenchmarkData`` from config."""
+
+    _MAGELLAN_TRAITS = MagellanTraits()
+
+    def __init__(self, params: MagellanBenchmarkDataConfig) -> None:
+        self._params = params
+
+    def create(self, root_data_dir: Path | None = None) -> MagellanBenchmarkData:
+        data_dir = Path(self._params.directory)
+        if not data_dir.is_absolute() and root_data_dir is not None:
+            data_dir = root_data_dir / data_dir
+        data = MagellanBenchmarkData(data_dir)
+        left_traits = self._resolve_traits(self._params.left_traits)
+        right_traits = (
+            self._resolve_traits(self._params.right_traits)
+            if self._params.right_traits is not None
+            else left_traits
+        )
+
+        data.load_left(left_traits).load_right(right_traits).load_splits()
+        return data
+
+    @classmethod
+    def _resolve_traits(cls, trait_configs: str | list[TraitConfig]):
+        """A string is looked up in the well-known MagellanTraits dict;
+        a list of TraitConfig is built manually."""
+        if isinstance(trait_configs, str):
+            return cls._MAGELLAN_TRAITS[trait_configs]
+        return get_traits(trait_configs)
