@@ -8,8 +8,8 @@ from typing import ClassVar, Any, Generic
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+from matchescu.matching.matchers.ml.core import TModel, TDataset
 from ._registry import CapabilityRegistry
-from ._typevars import TModel, TDataset
 
 
 class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):

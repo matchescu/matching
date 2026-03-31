@@ -3,7 +3,68 @@
   "learningRate": 0.001,
   "batchSize": 31,
   "epochs": 15,
-  "datasets": ["abt-buy"],
+  "datasets": {
+    "amazon-google": {
+      "type": "magellan",
+      "directory": "amazon_google_exp_data",
+      "leftTraits": "amazon-google"
+    },
+    "affiliationstrings": {
+      "type": "csv",
+      "directory": "affiliationstrings",
+      "sources": [
+        {
+          "fileName": "affiliationstrings_ids.csv",
+          "hasHeader": true,
+          "idCol": "id1",
+          "traits": [
+            {"type": "string", "keys": ["affil1"]}
+          ]
+        }
+      ],
+      "pairwiseMapping": {
+        "fileName": "affiliationstrings_mapping.csv",
+        "hasHeader": false
+      },
+      "splits": {
+        "ratios": {
+          "train": 3,
+          "valid": 1,
+          "test": 1
+        },
+        "maxTotalSampleCount": 10000
+      }
+    },
+    "abt-buy": {
+      "type": "csv",
+      "directory": "abt-buy",
+      "sources": [
+        {
+          "fileName": "Abt.csv",
+          "hasHeader": true,
+          "idCol": "id",
+          "traits": [
+            {"type":  "string", "keys": ["name", "description"]},
+            {"type":  "price", "keys":  ["price"]}
+          ]
+        },
+        {
+          "fileName": "Buy.csv",
+          "hasHeader": true,
+          "idCol": "id",
+          "traits": [
+            {"type":  "string", "keys": ["name", "description", "manufacturer"]},
+            {"type":  "price", "keys":  ["price"]}
+          ]
+        }
+      ],
+      "pairwiseMapping": {
+        "fileName": "abt_buy_perfectMapping.csv",
+        "leftIdCol": "idAbt",
+        "rightIdCol": "idBuy"
+      }
+    }
+  },
   "models":  ["roberta-base", "distilbert-base-uncased"],
   "datasetConfig": {
     "abt-buy": {
@@ -17,6 +78,7 @@
     "fodors-zagat": {
       "batchSize": 32,
       "epochs": 3,
+      "learningRate": 3e-5,
       "hybrid-attention": {
         "batchSize": 48
       }

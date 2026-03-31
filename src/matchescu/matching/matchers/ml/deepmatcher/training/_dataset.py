@@ -8,6 +8,10 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from matchescu.data import Record
 from matchescu.matching.evaluation.data.splits._split import Split
+from matchescu.matching.matchers.ml.deepmatcher._encoder import (
+    to_deepmatcher_repr,
+    ensure_attr_map,
+)
 from matchescu.reference_store.id_table import IdTable
 from matchescu.typing import EntityReferenceIdentifier
 
@@ -33,14 +37,9 @@ class DeepMatcherDataset(Dataset):
         )
         self.__max_len = max_len
         left, right = next(iter(self.__pairs))
-        min_attr_count = min(len(left), len(right))
-        attr_map = attr_map or {i: i for i in range(min_attr_count)}
-        exclude = set(exclude_from_comparison or ())
-        self.__attr_map = {
-            l_attr: r_attr
-            for l_attr, r_attr in attr_map.items()
-            if left not in exclude and right not in exclude
-        }
+        self.__attr_map = ensure_attr_map(
+            left, right, attr_map, exclude_from_comparison
+        )
         self.__attr_count = len(self.__attr_map)
 
     @property
@@ -56,35 +55,9 @@ class DeepMatcherDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         left, right = self.__pairs[idx]
-        left_tokens = []
-        right_tokens = []
-
-        for left_attr, right_attr in self.__attr_map.items():
-            left_text = str(left[left_attr])
-            left_enc = self.__tokenizer(
-                left_text,
-                padding="max_length",
-                truncation=True,
-                max_length=self.__max_len,
-                return_tensors=None,
-            )
-            right_text = str(right[right_attr])
-            right_enc = self.__tokenizer(
-                right_text,
-                padding="max_length",
-                truncation=True,
-                max_length=self.__max_len,
-                return_tensors=None,
-            )
-            left_tokens.append(left_enc["input_ids"])
-            right_tokens.append(right_enc["input_ids"])
-        left_attrs = torch.tensor(left_tokens, dtype=torch.long)
-        right_attrs = torch.tensor(right_tokens, dtype=torch.long)
-        return {
-            "left_attrs": left_attrs,
-            "right_attrs": right_attrs,
-            "label": torch.tensor(self.__labels[idx], dtype=torch.float),
-        }
+        return to_deepmatcher_repr(
+            left, right, self.__tokenizer, self.__attr_map, self.__max_len
+        )
 
     @staticmethod
     def __dl_collate_fn(dataset_record):

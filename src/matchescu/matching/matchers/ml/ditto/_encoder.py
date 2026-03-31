@@ -1,7 +1,7 @@
 from matchescu.typing import EntityReference
 
 
-def to_text(ref: EntityReference, cols: list = None) -> str:
+def to_ditto_text(ref: EntityReference, cols: list = None) -> str:
     cols = set(cols or [])
     return " ".join(
         f"COL {col} VAL {val}"

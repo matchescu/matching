@@ -12,7 +12,7 @@ class DittoModel(nn.Module):
     def __init__(self, params: DittoModelTrainingParams):
         super().__init__()
         self._alpha_aug = params.alpha_aug
-        self._bert_name = params.pretrained_model_name
+        self._bert_name = params.model_name or "roberta-base"
         self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
         hidden_size = self._bert.config.hidden_size
 

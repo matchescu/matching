@@ -9,7 +9,7 @@ from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.evaluation.data.splits._split import Split
-from matchescu.matching.matchers.ml.ditto._ref_adapter import to_text
+from matchescu.matching.matchers.ml.ditto._encoder import to_ditto_text
 from matchescu.reference_store.id_table import IdTable
 
 
@@ -326,8 +326,8 @@ class DittoDataset(Dataset):
             int: the label of the pair (0: unmatch, 1: match)
         """
         left, right = self.__pairs[idx]
-        left_text = to_text(left, self.__left_cols)
-        right_text = to_text(right, self.__right_cols)
+        left_text = to_ditto_text(left, self.__left_cols)
+        right_text = to_ditto_text(right, self.__right_cols)
         x = self.__tokenizer.encode(
             text=left_text,
             text_pair=right_text,

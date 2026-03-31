@@ -218,7 +218,7 @@ class SplitGenerator:
             splits[split_name] = Split(cs, match_gt, clusters)
         return splits
 
-    def save(self, output_dir: str, prefix: str = "") -> "SplitGenerator":
+    def save(self, output_dir: str | os.PathLike, prefix: str = "") -> "SplitGenerator":
         """Write the six CSV files to *output_dir*."""
         if self._splits is None:
             raise RuntimeError(

@@ -1,8 +1,9 @@
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
+
+from matchescu.matching.config import ConfigModel
 
 
-class ModelTrainingParams(BaseModel):
+class ModelTrainingParams(ConfigModel):
     """
     Base hyperparameter configuration.
 
@@ -19,13 +20,7 @@ class ModelTrainingParams(BaseModel):
     :type batch_size: int
     """
 
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        serialize_by_alias=True,
-        extra="ignore",
-    )
-
     learning_rate: float = Field(default=3e-5)
     epochs: int = Field(default=10)
     batch_size: int = Field(default=32)
+    model_name: str | None = None
