@@ -1,37 +1,56 @@
+from os import PathLike
+from pathlib import Path
 from typing import Iterable
 
 import torch
 from transformers import PreTrainedTokenizerBase
 
-from matchescu.matching.matchers.ml.core import MatchResult
+from matchescu.matching.matchers.ml.core import MatchResult, AdditionalModelInfo
 from matchescu.matching.matchers.ml.deepmatcher._encoder import (
     to_deepmatcher_repr,
     ensure_attr_map,
 )
-from matchescu.matching.matchers.ml.deepmatcher._module import DeepMatcherModule
 from matchescu.matching.similarity import Similarity
 from matchescu.typing import EntityReference
+
+from ._module import DeepMatcherModule
+from ._params import DeepMatcherModelTrainingParams
 
 
 class DeepMatcherSimilarity(Similarity[MatchResult]):
     def __init__(
         self,
-        model: DeepMatcherModule,
         tokenizer: PreTrainedTokenizerBase,
         attr_map: dict | None = None,
         max_len: int = 30,
         excluded_attrs: Iterable[str | int] | None = None,
     ) -> None:
         super().__init__(0, 0)
-        self._model = model
+        self._model = None
         self._tokenizer = tokenizer
         self._attrs = attr_map
         self._max_len = max_len
         self._excluded = set(excluded_attrs or ())
 
+    def load_from_file(self, path: str | PathLike) -> "DeepMatcherSimilarity":
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(path)
+        model_dict = torch.load(path)
+        if (additional_info := model_dict.get("additional_info")) is None:
+            raise ValueError("expected hyperparameters to be bundled with model")
+
+        additional_info = AdditionalModelInfo[
+            DeepMatcherModelTrainingParams
+        ].model_validate(additional_info)
+        self._model = DeepMatcherModule(additional_info.hyperparameters)
+        return self
+
     def _compute_similarity(
         self, a: EntityReference, b: EntityReference
     ) -> MatchResult:
+        if self._model is None:
+            raise RuntimeError("load model before calling")
         if not all(isinstance(r, EntityReference) for r in (a, b)):
             raise TypeError("both parameters must be entity references")
 
