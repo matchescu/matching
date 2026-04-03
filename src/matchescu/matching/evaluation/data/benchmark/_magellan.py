@@ -71,7 +71,8 @@ class MagellanBenchmarkData(BenchmarkData):
             ids[left] = None
             ids[right] = None
 
-        matcher_gt = {(left, right): label for left, right, label in rows if label == 1}
+        matcher_gt = {(left, right): label for left, right, label in rows if label > 0}
+        self._match_gt.update(matcher_gt)
         ecp = EquivalenceClassPartitioner(ids)
         clusters = {
             cluster_no: set(cluster)
@@ -81,12 +82,20 @@ class MagellanBenchmarkData(BenchmarkData):
 
     def load_splits(self) -> "MagellanBenchmarkData":
         if not self.__left_source or not self.__right_source:
-            raise ValueError(
-                "left + right data sources must be loaded before loading splits"
-            )
+            raise RuntimeError("load left and right tables before splitting")
+        del self._match_gt
+        del self._cluster_gt
+        self._match_gt = {}
+        self._cluster_gt = {}
         self._splits = {
             f"{name}_split": self.__load_split(path)
             for name, path in zip(self._SPLIT_NAMES, self.__split_paths)
+        }
+        ecp = EquivalenceClassPartitioner(self._id_table.ids())
+        self._cluster_gt = {
+            ref_id: cluster_no
+            for cluster_no, cluster in enumerate(ecp(self._match_gt), start=1)
+            for ref_id in cluster
         }
         return self
 
@@ -111,7 +120,7 @@ class MagellanBenchmarkData(BenchmarkData):
         return sorted([*super().__dir__(), *self._splits.keys()])
 
     def all_data(self) -> Split:
-        return Split.merge(list(self._splits.values()))
+        return self._global_split
 
 
 class MagellanTraits:

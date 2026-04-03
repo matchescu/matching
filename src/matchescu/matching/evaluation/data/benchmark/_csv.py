@@ -24,8 +24,6 @@ class CsvBenchmarkData(BenchmarkData):
         self._data_dir = data_dir
         paths = [data_dir / src for src in source_files]
         self._paths = list(self._check_files(paths))
-        self._match_gt = None
-        self._cluster_gt = None
 
     @property
     def name(self) -> str:

@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Iterable, TypeVar, Generic
 
 from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
+from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
 class BenchmarkData(ABC):
@@ -10,7 +11,9 @@ class BenchmarkData(ABC):
 
     def __init__(self):
         self._splits = {}
-        self._id_table = InMemoryIdTable()
+        self._id_table: IdTable = InMemoryIdTable()
+        self._match_gt: dict[tuple[RefId, RefId], int] = {}
+        self._cluster_gt: dict[RefId, int] = {}
 
     @property
     def id_table(self) -> IdTable:
@@ -20,6 +23,14 @@ class BenchmarkData(ABC):
     @abstractmethod
     def name(self) -> str:
         raise NotImplementedError
+
+    @property
+    def true_matches(self) -> dict[tuple[RefId, RefId], int]:
+        return self._match_gt
+
+    @property
+    def true_clusters(self) -> dict[RefId, int]:
+        return self._cluster_gt
 
     @staticmethod
     def _check_files(paths: list[str | Path]) -> Iterable[Path]:

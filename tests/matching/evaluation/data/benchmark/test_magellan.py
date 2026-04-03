@@ -37,3 +37,25 @@ def test_load_splits(sut, ag_traits, ag_id_factory):
     assert len(sut.valid_split.matcher_labels) == 234
     assert len(sut.test_split.comparison_space) == 2293
     assert len(sut.test_split.matcher_labels) == 234
+
+
+def test_true_matches(sut, ag_traits, ag_id_factory):
+    sut.load_left(ag_traits)
+    sut.load_right(ag_traits)
+
+    sut.load_splits()
+
+    assert len(sut.true_matches) == sum(
+        len(x.matcher_labels)
+        for x in [sut.train_split, sut.valid_split, sut.test_split]
+    )
+
+
+def test_true_clusters(sut, ag_traits, ag_id_factory):
+    sut.load_left(ag_traits)
+    sut.load_right(ag_traits)
+
+    sut.load_splits()
+
+    assert len(sut.true_clusters) == len(sut.id_table)
+    assert len(set(sut.true_clusters.values())) <= len(sut.id_table)
