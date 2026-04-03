@@ -5,12 +5,16 @@ from pathlib import Path
 import torch
 from transformers import PreTrainedTokenizerFast
 
-from matchescu.matching.matchers.ml.core import AdditionalModelInfo, MatchResult
+from matchescu.matching.matchers.ml.core import AdditionalModelInfo
 from matchescu.matching.matchers.ml.ditto._module import DittoModel
 from matchescu.matching.matchers.ml.ditto._encoder import to_ditto_text
 from matchescu.matching.matchers.ml.ditto._params import DittoModelTrainingParams
 from matchescu.matching.matchers.ml.ditto.training._evaluator import TrainingEvaluator
+from matchescu.matching.matchers.ml.transformers import (
+    suppress_transformer_modeling_utils_warnings,
+)
 from matchescu.matching.similarity import Similarity
+from matchescu.similarity import MatchResult
 from matchescu.typing import EntityReference
 
 
@@ -24,7 +28,8 @@ class DittoSimilarity(Similarity[MatchResult]):
         left_cols: Iterable[str] | None = None,
         right_cols: Iterable[str] | None = None,
     ) -> None:
-        super().__init__(0, 0)
+        non_match = MatchResult(0, [1, 0])
+        super().__init__(non_match, non_match)
         model_dir = model_dir or curdir
         self.__tokenizer = tokenizer
         self.__max_len = max_len
@@ -49,7 +54,8 @@ class DittoSimilarity(Similarity[MatchResult]):
         additional_info = AdditionalModelInfo[DittoModelTrainingParams].model_validate(
             additional_info
         )
-        self.__model = DittoModel(additional_info.hyperparameters)
+        with suppress_transformer_modeling_utils_warnings():
+            self.__model = DittoModel(additional_info.hyperparameters)
         self.__threshold = float(
             additional_info.best_config.get(TrainingEvaluator.THRESHOLD_KEY, 0.5)
         )
@@ -69,5 +75,8 @@ class DittoSimilarity(Similarity[MatchResult]):
                 )
             ).unsqueeze(0)
             weight = torch.sigmoid(self.__model(encoded_text)).item()
-
-        return MatchResult(1 if weight > self.__threshold else 0, weight)
+        prediction = 1 if weight > self.__threshold else 0
+        weights = [0, 0]
+        weights[prediction] = weight
+        weights[1 - prediction] = 1 - weight
+        return MatchResult(prediction, weights)

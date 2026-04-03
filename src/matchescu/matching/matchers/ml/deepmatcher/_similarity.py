@@ -5,12 +5,13 @@ from typing import Iterable
 import torch
 from transformers import PreTrainedTokenizerBase
 
-from matchescu.matching.matchers.ml.core import MatchResult, AdditionalModelInfo
+from matchescu.matching.matchers.ml.core import AdditionalModelInfo
 from matchescu.matching.matchers.ml.deepmatcher._encoder import (
     to_deepmatcher_repr,
     ensure_attr_map,
 )
 from matchescu.matching.similarity import Similarity
+from matchescu.similarity import MatchResult
 from matchescu.typing import EntityReference
 
 from ._module import DeepMatcherModule
@@ -25,7 +26,8 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
         max_len: int = 30,
         excluded_attrs: Iterable[str | int] | None = None,
     ) -> None:
-        super().__init__(0, 0)
+        non_match = MatchResult(0, [1, 0])
+        super().__init__(non_match, non_match)
         self._model = None
         self._tokenizer = tokenizer
         self._attrs = attr_map
@@ -59,6 +61,6 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
         with torch.no_grad():
             tokens = to_deepmatcher_repr(a, b, self._tokenizer, attr_map, self._max_len)
             result = self._model(**tokens)
-            prediction = torch.argmax(result)
+            prediction = torch.argmax(result).item()
 
-        return MatchResult(1 if prediction > 0 else 0, result[prediction])
+        return MatchResult(prediction, result)
