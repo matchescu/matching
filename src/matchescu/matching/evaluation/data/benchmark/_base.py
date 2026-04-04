@@ -29,8 +29,17 @@ class BenchmarkData(ABC):
         return self._match_gt
 
     @property
-    def true_clusters(self) -> dict[RefId, int]:
+    def ref_id_cluster_map(self) -> dict[RefId, int]:
         return self._cluster_gt
+
+    def compute_clusters(self) -> frozenset[frozenset[RefId]]:
+        clusters = {}
+        for ref_id, cluster_no in self._cluster_gt.items():
+            clusters.setdefault(cluster_no, set()).add(ref_id)
+        return frozenset(
+            frozenset(ref_id for ref_id in cluster)
+            for cluster_no, cluster in clusters.items()
+        )
 
     @staticmethod
     def _check_files(paths: list[str | Path]) -> Iterable[Path]:

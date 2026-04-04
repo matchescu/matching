@@ -88,7 +88,7 @@ def test_true_matches(affils_dir, affils_id_col, affils_traits):
         line_count = len(f.readlines())
 
     assert len(data.true_matches) == line_count
-    assert len(data.true_clusters) == 0
+    assert len(data.ref_id_cluster_map) == 0
 
 
 def test_true_clusters(affils_dir, affils_id_col, affils_traits):
@@ -100,7 +100,7 @@ def test_true_clusters(affils_dir, affils_id_col, affils_traits):
         .with_clusters()
     )
 
-    assert len(data.true_clusters) == len(data.id_table)
-    cluster_count = len(set(data.true_clusters.values()))
+    assert len(data.ref_id_cluster_map) == len(data.id_table)
+    cluster_count = len(set(data.ref_id_cluster_map.values()))
     assert cluster_count == 330
     assert cluster_count <= len(data.id_table)

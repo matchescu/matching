@@ -57,5 +57,5 @@ def test_true_clusters(sut, ag_traits, ag_id_factory):
 
     sut.load_splits()
 
-    assert len(sut.true_clusters) == len(sut.id_table)
-    assert len(set(sut.true_clusters.values())) <= len(sut.id_table)
+    assert len(sut.ref_id_cluster_map) == len(sut.id_table)
+    assert len(set(sut.ref_id_cluster_map.values())) <= len(sut.id_table)
