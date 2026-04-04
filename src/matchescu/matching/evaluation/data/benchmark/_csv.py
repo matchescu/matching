@@ -257,21 +257,18 @@ class CsvBenchmarkDataFactory(BenchmarkDataFactory[CsvBenchmarkData]):
                 mapping_file=pwm,
                 id_cols=(0, 1),
                 source_cols=None,
-                label_col=2,
+                label_col=None,
                 has_header=True,
             )
         else:
             source_cols = None
             if pwm.left_source_col is not None and pwm.right_source_col is not None:
                 source_cols = (pwm.left_source_col, pwm.right_source_col)
-            label_col = -1
-            if pwm.label_col is not None:
-                label_col = pwm.label_col
             return data.with_ideal_mapping(
                 mapping_file=pwm.file_name,
                 id_cols=(pwm.left_id_col, pwm.right_id_col),
                 source_cols=source_cols,
-                label_col=label_col,
+                label_col=pwm.label_col,
                 has_header=pwm.has_header,
             )
 
