@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Union
 
 from matchescu.extraction import Traits
+from matchescu.matching.config._dataset_config import ClusterGroundTruthConfig
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.matching.config import CsvBenchmarkDataConfig
 from matchescu.matching.evaluation.data.extraction import CsvRecordExtraction
@@ -275,13 +276,18 @@ class CsvBenchmarkDataFactory(BenchmarkDataFactory[CsvBenchmarkData]):
             )
 
     def _load_clusters(self, data: CsvBenchmarkData) -> CsvBenchmarkData:
-        if isinstance(self._params.cluster_mapping, str):
-            return data.with_clusters(self._params.cluster_mapping, has_headers=True)
-        else:
+        cluster_gt = self._params.cluster_mapping
+        if isinstance(cluster_gt, str):
+            return data.with_clusters(cluster_gt, has_headers=True)
+        elif cluster_gt is not None and isinstance(
+            cluster_gt, ClusterGroundTruthConfig
+        ):
             return data.with_clusters(
-                self._params.cluster_mapping.file_name,
-                self._params.cluster_mapping.id_col,
-                self._params.cluster_mapping.source_col,
-                self._params.cluster_mapping.label_col,
-                self._params.cluster_mapping.has_header,
+                cluster_gt.file_name,
+                cluster_gt.id_col,
+                cluster_gt.source_col,
+                cluster_gt.label_col,
+                cluster_gt.has_header,
             )
+        else:
+            return data.with_clusters()
