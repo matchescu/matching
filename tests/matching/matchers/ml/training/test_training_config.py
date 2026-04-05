@@ -9,9 +9,10 @@ def config_file(data_dir) -> str:
 
 
 @pytest.fixture
-def config(config_file) -> TrainingConfig:
+def config(config_file, data_dir) -> TrainingConfig:
     return TrainingConfig.load_json(
         config_file,
+        data_dir=data_dir,
         discovery_packages=["matchescu.matching.matchers.ml.ditto.training"],
     )
 
@@ -73,4 +74,4 @@ def test_fodors_zagat(config):
 
 
 def test_dataset_configs(config):
-    assert len(config.dataset_factories) == 3
+    assert len(config.data_builders) == 3

@@ -1,24 +1,24 @@
 from matchescu.matching.evaluation.data.benchmark._base import (
     BenchmarkData,
-    BenchmarkDataFactory,
+    BenchmarkDataBuilder,
 )
 from matchescu.matching.evaluation.data.benchmark._csv import (
     CsvBenchmarkData,
-    CsvBenchmarkDataFactory,
+    CsvBenchmarkDataBuilder,
 )
 from matchescu.matching.evaluation.data.benchmark._magellan import (
     MagellanTraits,
     MagellanBenchmarkData,
-    MagellanBenchmarkDataFactory,
+    MagellanBenchmarkDataBuilder,
 )
 
 
 __all__ = [
     "BenchmarkData",
-    "BenchmarkDataFactory",
+    "BenchmarkDataBuilder",
     "CsvBenchmarkData",
-    "CsvBenchmarkDataFactory",
+    "CsvBenchmarkDataBuilder",
     "MagellanTraits",
     "MagellanBenchmarkData",
-    "MagellanBenchmarkDataFactory",
+    "MagellanBenchmarkDataBuilder",
 ]

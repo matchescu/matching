@@ -5,6 +5,8 @@ from matchescu.matching.config._dataset_config import (
     MagellanBenchmarkDataConfig,
     AnyDatasetConfig,
     TraitConfig,
+    PairwiseGroundTruthConfig,
+    ClusterGroundTruthConfig,
 )
 from matchescu.matching.config._record_linkage import AttrCmpConfig, RecordLinkageConfig
 
@@ -18,4 +20,6 @@ __all__ = [
     "AttrCmpConfig",
     "RecordLinkageConfig",
     "TraitConfig",
+    "PairwiseGroundTruthConfig",
+    "ClusterGroundTruthConfig",
 ]

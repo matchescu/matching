@@ -1,13 +1,14 @@
 import itertools
 from os import PathLike
 from pathlib import Path
+from typing import cast
 
 import polars as pl
+
 from matchescu.extraction import Traits
 from matchescu.extraction.csv import CsvRecordExtraction
-
 from matchescu.matching.config import MagellanBenchmarkDataConfig, TraitConfig
-from matchescu.matching.evaluation.data.benchmark import BenchmarkDataFactory
+from matchescu.matching.evaluation.data.benchmark import BenchmarkDataBuilder
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 from matchescu.matching.evaluation.data.benchmark._config_adapters import get_traits
 from matchescu.matching.evaluation.data.splits._split import Split
@@ -20,8 +21,10 @@ class MagellanBenchmarkData(BenchmarkData):
     def __init__(self, folder_path: str | PathLike) -> None:
         super().__init__()
         self.__dataset_dir = Path(folder_path)
+        if not self.__dataset_dir.exists():
+            raise FileNotFoundError(self.__dataset_dir)
         if not self.__dataset_dir.is_dir():
-            raise ValueError(f"'{self.__dataset_dir}' is not a directory")
+            raise NotADirectoryError(self.__dataset_dir)
         self.__left_table_path = self.__dataset_dir / "tableA.csv"
         self.__left_source = self.__left_table_path.stem
         self.__right_table_path = self.__dataset_dir / "tableB.csv"
@@ -155,28 +158,19 @@ class MagellanTraits:
         return self.__TRAIT_DICT[key]
 
 
-class MagellanBenchmarkDataFactory(BenchmarkDataFactory[MagellanBenchmarkData]):
+class MagellanBenchmarkDataBuilder(BenchmarkDataBuilder[MagellanBenchmarkData]):
     """Initialize fully loaded ``MagellanBenchmarkData`` from config."""
 
     _MAGELLAN_TRAITS = MagellanTraits()
 
-    def __init__(self, params: MagellanBenchmarkDataConfig) -> None:
-        self._params = params
+    def __init__(
+        self, params: MagellanBenchmarkDataConfig, data_dir: Path | None = None
+    ) -> None:
+        super().__init__(params, data_dir)
+        self._params = cast(MagellanBenchmarkDataConfig, self._params)
 
-    def create(self, root_data_dir: Path | None = None) -> MagellanBenchmarkData:
-        data_dir = Path(self._params.directory)
-        if not data_dir.is_absolute() and root_data_dir is not None:
-            data_dir = root_data_dir / data_dir
-        data = MagellanBenchmarkData(data_dir)
-        left_traits = self._resolve_traits(self._params.left_traits)
-        right_traits = (
-            self._resolve_traits(self._params.right_traits)
-            if self._params.right_traits is not None
-            else left_traits
-        )
-
-        data.load_left(left_traits).load_right(right_traits).load_splits()
-        return data
+    def _create_instance(self) -> MagellanBenchmarkData:
+        return MagellanBenchmarkData(self._data_dir)
 
     @classmethod
     def _resolve_traits(cls, trait_configs: str | list[TraitConfig]):
@@ -185,3 +179,17 @@ class MagellanBenchmarkDataFactory(BenchmarkDataFactory[MagellanBenchmarkData]):
         if isinstance(trait_configs, str):
             return cls._MAGELLAN_TRAITS[trait_configs]
         return get_traits(trait_configs)
+
+    def load_data(self) -> BenchmarkDataBuilder[MagellanBenchmarkData]:
+        left_traits = self._resolve_traits(self._params.left_traits)
+        right_traits = (
+            self._resolve_traits(self._params.right_traits)
+            if self._params.right_traits is not None
+            else left_traits
+        )
+        self._instance.load_left(left_traits).load_right(right_traits)
+        return self
+
+    def load_splits(self) -> BenchmarkDataBuilder[MagellanBenchmarkData]:
+        self._instance.load_splits()
+        return self

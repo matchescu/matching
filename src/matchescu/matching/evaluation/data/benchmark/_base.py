@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterable, TypeVar, Generic
 
+from matchescu.matching.config import BenchmarkDataConfig
+from matchescu.matching.evaluation.data.splits import Split
 from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
 from matchescu.typing import EntityReferenceIdentifier as RefId
 
@@ -18,6 +20,10 @@ class BenchmarkData(ABC):
     @property
     def id_table(self) -> IdTable:
         return self._id_table
+
+    @property
+    def splits(self) -> dict[str, Split]:
+        return self._splits
 
     @property
     @abstractmethod
@@ -60,7 +66,25 @@ class BenchmarkData(ABC):
 T = TypeVar("T", bound=BenchmarkData)
 
 
-class BenchmarkDataFactory(Generic[T], ABC):
+class BenchmarkDataBuilder(Generic[T], ABC):
+    def __init__(self, params: BenchmarkDataConfig, data_dir: Path | None) -> None:
+        self._data_dir = Path(params.directory)
+        if not self._data_dir.is_absolute() and data_dir is not None:
+            self._data_dir = data_dir / self._data_dir
+        self._params = params
+        self._instance = self._create_instance()
+
     @abstractmethod
-    def create(self, root_data_dir: Path | None = None) -> T:
+    def _create_instance(self) -> T:
         raise NotImplementedError
+
+    @abstractmethod
+    def load_data(self) -> "BenchmarkDataBuilder[T]":
+        raise NotImplementedError
+
+    @abstractmethod
+    def load_splits(self) -> "BenchmarkDataBuilder[T]":
+        raise NotImplementedError
+
+    def create(self) -> T:
+        return self._instance

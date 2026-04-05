@@ -133,6 +133,7 @@ def run_training(
     root_data_dir = Path(root_data_dir)
     config = TrainingConfig.load_json(
         config_path,
+        data_dir=root_data_dir,
         discovery_packages=[
             f"{MATCHERS_ML_PACKAGE}.ditto.training",
             f"{MATCHERS_ML_PACKAGE}.deepmatcher.training",
@@ -141,9 +142,8 @@ def run_training(
     with warnings.catch_warnings(action="ignore"):
         for dataset_name in config.included_datasets:
             ds_model_dir = root_model_dir / dataset_name
-            benchmark_data = config.dataset_factories[dataset_name].create(
-                root_data_dir
-            )
+            data_builder = config.data_builders[dataset_name]
+            benchmark_data = data_builder.load_data().load_splits().create()
 
             for model_name in config.model_names:
                 train_params = config.get(model=model_name, dataset=dataset_name)

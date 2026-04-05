@@ -1,19 +1,26 @@
 from pathlib import Path
-from typing import Iterable, Mapping, Union
+from typing import Iterable, Mapping, Union, cast
 
+from matchescu.comparison_space.persistence import (
+    CsvPersistence,
+    CsvComparisonSpaceFileParams,
+)
 from matchescu.extraction import Traits
 from matchescu.extraction.csv import CsvRecordExtraction
-from matchescu.matching.config._dataset_config import ClusterGroundTruthConfig
 from matchescu.reference_store.id_table import InMemoryIdTable
-from matchescu.matching.config import CsvBenchmarkDataConfig
-from matchescu.matching.evaluation.data.splits import SplitGenerator
+from matchescu.matching.config import (
+    CsvBenchmarkDataConfig,
+    ClusterGroundTruthConfig,
+    PairwiseGroundTruthConfig,
+)
+from matchescu.matching.evaluation.data.splits import SplitGenerator, Split
 from matchescu.matching.evaluation.ground_truth import (
     read_pairwise_mapping_csv,
     read_clusters_csv,
     EquivalenceClassPartitioner,
 )
 
-from ._base import BenchmarkData, BenchmarkDataFactory
+from ._base import BenchmarkData, BenchmarkDataBuilder
 from ._config_adapters import get_traits
 
 
@@ -200,17 +207,21 @@ class CsvBenchmarkData(BenchmarkData):
         return {p: param[p.name] for p in self._paths}
 
 
-class CsvBenchmarkDataFactory(BenchmarkDataFactory[CsvBenchmarkData]):
-    """Create fully loaded ``CsvBenchmarkData`` from config params."""
+class CsvBenchmarkDataBuilder(BenchmarkDataBuilder[CsvBenchmarkData]):
+    """Create ``CsvBenchmarkData`` from config params."""
 
-    def __init__(self, params: CsvBenchmarkDataConfig) -> None:
-        self._params = params
+    def __init__(
+        self, params: CsvBenchmarkDataConfig, data_dir: Path | None = None
+    ) -> None:
+        super().__init__(params, data_dir)
+        self._params = cast(CsvBenchmarkDataConfig, self._params)
 
-    def create(self, root_data_dir: Path | None = None) -> CsvBenchmarkData:
-        data_dir = Path(self._params.directory)
-        if not data_dir.is_absolute() and root_data_dir is not None:
-            data_dir = root_data_dir / data_dir
-        data = CsvBenchmarkData(data_dir, [fp.file_name for fp in self._params.sources])
+    def _create_instance(self) -> CsvBenchmarkData:
+        return CsvBenchmarkData(
+            self._data_dir, [fp.file_name for fp in self._params.sources]
+        )
+
+    def load_data(self) -> BenchmarkDataBuilder[CsvBenchmarkData]:
         traits_map = {
             fp.file_name: get_traits(fp.traits) for fp in self._params.sources
         }
@@ -219,30 +230,37 @@ class CsvBenchmarkDataFactory(BenchmarkDataFactory[CsvBenchmarkData]):
         source_cols = {fp.file_name: fp.source_col for fp in self._params.sources}
         has_headers = {fp.file_name: fp.has_header for fp in self._params.sources}
 
-        data.load_data(
+        self._instance.load_data(
             traits=traits_map,
             id_cols=id_cols,
             source_cols=source_cols,
             headers=has_headers,
         )
-        data = self._load_ideal_mapping(data)
-        data = self._load_clusters(data)
-        # TODO: transform this class and all others like it into a builder
-        # rationale: benchmark data is useful with or without splits
-        # data = self._perform_split(data)
+        self._instance = self._load_ideal_mapping(self._instance)
+        self._instance = self._load_clusters(self._instance)
 
-        return data
+        return self
 
-    def _load_existing_splits(self, data: CsvBenchmarkData) -> CsvBenchmarkData:
-        # todo load splits from files
-        return data
-
-    def _perform_split(self, data: CsvBenchmarkData) -> CsvBenchmarkData:
-        if (split_config := self._params.splits) is not None:
-            if self._params.splits.files is not None:
-                return self._load_existing_splits(data)
+    def _all_split_files_exist(
+        self, files: dict[str, str | PairwiseGroundTruthConfig]
+    ) -> bool:
+        for file in files.values():
+            if isinstance(file, str):
+                path = self._data_dir / file
             else:
-                return data.split(
+                path = self._data_dir / file.file_name
+            if not path.exists():
+                return False
+        return True
+
+    def load_splits(self) -> "BenchmarkDataBuilder[CsvBenchmarkData]":
+        if (split_config := self._params.splits) is not None:
+            if (self._params.splits.files is not None) and self._all_split_files_exist(
+                self._params.splits.files
+            ):
+                self._load_existing_splits(self._params.splits.files)
+            else:
+                self._instance.split(
                     split_config.ratios,
                     split_config.neg_pos_ratio,
                     split_config.match_bridge_ratio,
@@ -250,7 +268,51 @@ class CsvBenchmarkDataFactory(BenchmarkDataFactory[CsvBenchmarkData]):
                     save=True,
                 )
         else:
-            return data.split(save=True)
+            self._instance.split(save=True)
+        return self
+
+    def _load_existing_splits(
+        self, split_files: dict[str, str | PairwiseGroundTruthConfig]
+    ) -> None:
+        full_partition = self._instance.compute_clusters()
+        for split_name, file in split_files.items():
+            if isinstance(file, str):
+                file_path = self._data_dir / file
+                params = CsvComparisonSpaceFileParams()
+            else:
+                file_path = self._data_dir / file.file_name
+                params = CsvComparisonSpaceFileParams(
+                    has_header=file.has_header,
+                    source_fallback=self._instance.name,
+                    left_id_column=file.left_id_col,
+                    left_source_column=file.left_source_col,
+                    right_id_column=file.right_id_col,
+                    right_source_column=file.right_source_col,
+                )
+            comparison_space = CsvPersistence(file_path).read(params)
+            compared_ids = set(ref_id for cmp in comparison_space for ref_id in cmp)
+            matcher_labels = {
+                cmp: self._instance.true_matches[cmp]
+                for cmp in comparison_space
+                if cmp in self._instance.true_matches
+            }
+
+            split_clusters = []
+            for cluster in full_partition:
+                split_cluster = set(
+                    ref_id for ref_id in cluster if ref_id in compared_ids
+                )
+                if len(split_cluster) < 2:
+                    continue
+                split_clusters.append(split_cluster)
+            self._instance._splits[split_name] = Split(
+                comparison_space=comparison_space,
+                matcher_labels=matcher_labels,
+                gt_clusters={
+                    cluster_no: cluster
+                    for cluster_no, cluster in enumerate(split_clusters, start=1)
+                },
+            )
 
     def _load_ideal_mapping(self, data: CsvBenchmarkData) -> CsvBenchmarkData:
         pwm = self._params.pairwise_mapping

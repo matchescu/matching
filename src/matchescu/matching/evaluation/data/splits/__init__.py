@@ -1,4 +1,5 @@
-from matchescu.matching.evaluation.data.splits._split_generator import SplitGenerator
+from ._split import Split
+from ._split_generator import SplitGenerator
 
 
-__all__ = ["SplitGenerator"]
+__all__ = ["Split", "SplitGenerator"]

@@ -17,7 +17,7 @@ from typing import Any, Type
 from pydantic import TypeAdapter
 from pydantic.alias_generators import to_camel
 
-from matchescu.matching.evaluation.data.benchmark._base import BenchmarkDataFactory
+from matchescu.matching.evaluation.data.benchmark._base import BenchmarkDataBuilder
 from matchescu.matching.matchers.ml.core import ModelTrainingParams
 from matchescu.matching.config import (
     AnyDatasetConfig,
@@ -25,9 +25,9 @@ from matchescu.matching.config import (
     CsvBenchmarkDataConfig,
 )
 from matchescu.matching.evaluation.data.benchmark._magellan import (
-    MagellanBenchmarkDataFactory,
+    MagellanBenchmarkDataBuilder,
 )
-from matchescu.matching.evaluation.data.benchmark._csv import CsvBenchmarkDataFactory
+from matchescu.matching.evaluation.data.benchmark._csv import CsvBenchmarkDataBuilder
 from ._evaluator import BaseEvaluator
 from ._exceptions import ConfigurationError
 from ._registry import CapabilityRegistry
@@ -97,7 +97,7 @@ class TrainingConfig:
         self._dataset_hp: dict[str, dict[str, Any]] = {}
         self._ds_hp_objs: dict[str, Any] = {}
         self._dataset_model_hp: dict[str, dict[str, dict[str, Any]]] = {}
-        self._dataset_factories: dict[str, BenchmarkDataFactory] = {}
+        self._data_builders: dict[str, BenchmarkDataBuilder] = {}
         self.included_datasets: list[str] = []
         self.included_models: list[str] = []
 
@@ -106,6 +106,7 @@ class TrainingConfig:
         cls,
         config_file: str | PathLike,
         *,
+        data_dir: Path | None = None,
         discovery_packages: list[str] | None = None,
         default_evaluator: Type[BaseEvaluator] | None = None,
     ) -> TrainingConfig:
@@ -166,18 +167,20 @@ class TrainingConfig:
 
         for ds_name, ds_raw in raw.get("datasets", {}).items():
             params = cfg._ds_adapter.validate_python(ds_raw)
-            cfg._dataset_factories[ds_name] = cfg.create_benchmark_data_factory(params)
+            cfg._data_builders[ds_name] = cfg.new_data_builder(params, data_dir)
 
         return cfg
 
     @staticmethod
-    def create_benchmark_data_factory(params: AnyDatasetConfig) -> BenchmarkDataFactory:
+    def new_data_builder(
+        params: AnyDatasetConfig, data_dir: Path | None = None
+    ) -> BenchmarkDataBuilder:
         """Given a validated dataset params object, return the right factory."""
         match params:
             case MagellanBenchmarkDataConfig():
-                return MagellanBenchmarkDataFactory(params)
+                return MagellanBenchmarkDataBuilder(params, data_dir)
             case CsvBenchmarkDataConfig():
-                return CsvBenchmarkDataFactory(params)
+                return CsvBenchmarkDataBuilder(params, data_dir)
             case _:
                 raise ValueError(f"Unsupported dataset params type: {type(params)}")
 
@@ -243,8 +246,8 @@ class TrainingConfig:
         return local_obj
 
     @property
-    def dataset_factories(self) -> dict[str, BenchmarkDataFactory]:
-        return self._dataset_factories
+    def data_builders(self) -> dict[str, BenchmarkDataBuilder]:
+        return self._data_builders
 
     @property
     def model_names(self) -> list[str]:
