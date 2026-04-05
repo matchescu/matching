@@ -4,12 +4,12 @@ from typing import Hashable, Callable
 
 import pytest
 
-from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import (
     Traits,
     RecordExtraction,
     single_record,
 )
+from matchescu.extraction.csv import CsvFile
 from matchescu.reference_store.id_table._in_memory import InMemoryIdTable
 from matchescu.typing import (
     Record,
@@ -31,12 +31,12 @@ def buy_traits():
 
 @pytest.fixture(scope="session")
 def abt(data_dir, abt_traits) -> DataSource[Record]:
-    return CsvDataSource(data_dir / "abt-buy" / "Abt.csv", abt_traits).read()
+    return CsvFile(data_dir / "abt-buy" / "Abt.csv", abt_traits)
 
 
 @pytest.fixture(scope="session")
 def buy(data_dir, buy_traits) -> DataSource[Record]:
-    return CsvDataSource(data_dir / "abt-buy" / "Buy.csv", buy_traits).read()
+    return CsvFile(data_dir / "abt-buy" / "Buy.csv", buy_traits)
 
 
 @pytest.fixture(scope="session")

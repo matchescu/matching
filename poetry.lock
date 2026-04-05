@@ -1805,14 +1805,14 @@ networkx = ">=3.6.1,<4.0.0"
 
 [[package]]
 name = "matchescu-comparison-space-generation"
-version = "0.8.2"
+version = "0.8.3"
 description = ""
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_comparison_space_generation-0.8.2-py3-none-any.whl", hash = "sha256:bd25c70bec51c75b60ef7f78d1d8861328dd6e381b08d2082d95b0cac1f48469"},
-    {file = "matchescu_comparison_space_generation-0.8.2.tar.gz", hash = "sha256:f0382935417aed29cd3fa264ddd1b2adbeb9269f9b6e94e584b79dab9b2bbe42"},
+    {file = "matchescu_comparison_space_generation-0.8.3-py3-none-any.whl", hash = "sha256:a991057842f90b2fad95749e4a829c06427ffba05b984f1287b2fa79319256e4"},
+    {file = "matchescu_comparison_space_generation-0.8.3.tar.gz", hash = "sha256:34a0bb570617521caf1758da6b68531408e95d854da02aa27b7a52d34825b6ae"},
 ]
 
 [package.dependencies]
@@ -1826,14 +1826,14 @@ stopwords = ">=1.0.2,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-extraction"
-version = "0.8.1"
+version = "0.9.0"
 description = "Extract references from a multitude of data sources"
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_extraction-0.8.1-py3-none-any.whl", hash = "sha256:ee60469c7fb28779cbf1690a3a2841805d5072a60ac50c30ebf4569306d4aeb4"},
-    {file = "matchescu_reference_extraction-0.8.1.tar.gz", hash = "sha256:8d0a0e2792eec4de86e7c90c66d6e64b6e8643e8a094b63308dfd8c2d216b5d1"},
+    {file = "matchescu_reference_extraction-0.9.0-py3-none-any.whl", hash = "sha256:33dcfcc2ccc253d4482f49907802b4b77c10badbccf263e3007d0b9eaf614454"},
+    {file = "matchescu_reference_extraction-0.9.0.tar.gz", hash = "sha256:7bc8fd96293a67ced56cd912c3f1547f600dd4f93b86a0bd9878df5fd563efbd"},
 ]
 
 [package.dependencies]
@@ -4914,4 +4914,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "!=3.14.1,>=3.13,<3.15"
-content-hash = "8c96d3d2daaf0b99da1347551fcd271f05d43d031262d736d1bc6eff70809132"
+content-hash = "3aa8417dc582a176d161564f671335776c3d9124db0be2822530b9db8a994745"

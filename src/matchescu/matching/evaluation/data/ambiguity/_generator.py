@@ -10,8 +10,8 @@ import networkx as nx
 import polars as pl
 
 from matchescu.data import Record
-from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import Traits, RecordExtraction, single_record
+from matchescu.extraction.csv import CsvFile
 from matchescu.matching.evaluation.data.splits import SplitGenerator
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.typing import (
@@ -69,7 +69,7 @@ class AmbiguityGenerator:
 
     def __init__(
         self,
-        data_sources: list[CsvDataSource],
+        data_sources: list[CsvFile],
         mapping_gt: dict[ComparisonData, int],
         ambiguity_target_properties: list[str] = None,
         string_degradation_patterns: list[str] = None,
@@ -89,7 +89,7 @@ class AmbiguityGenerator:
         return RefId(label=dominant_record[self._id_col], source=source)
 
     def __ingest_all(
-        self, id_table: InMemoryIdTable, data_source: CsvDataSource
+        self, id_table: InMemoryIdTable, data_source: CsvFile
     ) -> InMemoryIdTable:
         id_factory = partial(self.__new_ref_id, source=data_source.name)
         extract_entity_references = RecordExtraction(
@@ -525,8 +525,7 @@ class AmbiguityGenerator:
 
 
 def load_data(datadir, rec_fname, traits, mapping_fname):
-    ds = CsvDataSource(datadir / rec_fname, traits, has_header=True)
-    ds.read()
+    ds = CsvFile(datadir / rec_fname, traits, has_header=True)
     df = pl.read_csv(
         datadir / mapping_fname,
         has_header=False,

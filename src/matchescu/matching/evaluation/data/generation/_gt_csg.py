@@ -2,7 +2,7 @@ import logging
 import math
 import random
 from os import PathLike
-from typing import Optional, Counter
+from typing import Optional, Counter, Iterable
 
 import numpy as np
 import polars as pl
@@ -26,6 +26,7 @@ class GroundTruthComparisonSpaceGenerator(object):
         id_table: IdTable,
         matcher_gt: dict[tuple[RefId, RefId], int],
         cluster_gt: frozenset[frozenset[RefId]] | None = None,
+        excluded: Iterable[tuple[RefId, RefId]] | None = None,
         neg_pos_ratio: float = 5.0,
         match_bridge_ratio: float = 2.0,
         max_total_samples: Optional[int] = None,
@@ -60,6 +61,7 @@ class GroundTruthComparisonSpaceGenerator(object):
         self.match_bridge_ratio = match_bridge_ratio
         self.max_total_samples = max_total_samples
         self.random_state = seed
+        self._excluded = set(excluded) if excluded is not None else set()
         self._rng = np.random.RandomState(seed)
         self._log = log or logging.getLogger(self.__class__.__name__)
         self._id_table = id_table
@@ -168,7 +170,8 @@ class GroundTruthComparisonSpaceGenerator(object):
                 continue
             class_pool = random.sample(by[c], k=n) if n < raw_targets[c] else by[c]
             samples.update({c: class_pool})
-        samples.update({0: self._generate_negatives(targets[0], set(self._matcher_gt))})
+        exclude = self._excluded.union(set(self._matcher_gt))
+        samples.update({0: self._generate_negatives(targets[0], exclude)})
 
         comparison_space = InMemoryComparisonSpace()
         for label, items in samples.items():
@@ -301,8 +304,12 @@ class GroundTruthComparisonSpaceGenerator(object):
 
         freq: Counter = Counter()
         for left_id, right_id in pool:
-            freq[left_id] += 1
-            freq[right_id] += 1
+            if (left_id, right_id) in self._excluded:
+                freq[left_id] = -1
+                freq[right_id] = -1
+            else:
+                freq[left_id] += 1
+                freq[right_id] += 1
 
         scores = np.array(
             [freq[left_id] + freq[right_id] for left_id, right_id in pool],

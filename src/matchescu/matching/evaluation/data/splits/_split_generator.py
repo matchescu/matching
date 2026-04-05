@@ -10,8 +10,8 @@ from typing import Optional
 import numpy as np
 import polars as pl
 
-from matchescu.data_sources import CsvDataSource
 from matchescu.extraction import Traits, single_record, RecordExtraction
+from matchescu.extraction.csv import CsvFile
 from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
@@ -505,7 +505,7 @@ Output (in --output-dir): train.csv, test.csv, dev.csv, optionally prefixed.
     a = ap.parse_args()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     traits = list(Traits().string(["affil1"]))
-    ds = CsvDataSource(a.data_source, traits, has_header=True).read()
+    ds = CsvFile(a.data_source, traits, has_header=True).read()
 
     def _ref_id(records):
         rec = next(iter(records))

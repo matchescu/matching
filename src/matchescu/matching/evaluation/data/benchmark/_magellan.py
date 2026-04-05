@@ -4,14 +4,12 @@ from pathlib import Path
 
 import polars as pl
 from matchescu.extraction import Traits
+from matchescu.extraction.csv import CsvRecordExtraction
 
 from matchescu.matching.config import MagellanBenchmarkDataConfig, TraitConfig
 from matchescu.matching.evaluation.data.benchmark import BenchmarkDataFactory
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 from matchescu.matching.evaluation.data.benchmark._config_adapters import get_traits
-from matchescu.matching.evaluation.data.extraction._record_extraction import (
-    CsvRecordExtraction,
-)
 from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.evaluation.ground_truth import EquivalenceClassPartitioner
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace

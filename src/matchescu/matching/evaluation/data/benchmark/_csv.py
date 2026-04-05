@@ -2,10 +2,10 @@ from pathlib import Path
 from typing import Iterable, Mapping, Union
 
 from matchescu.extraction import Traits
+from matchescu.extraction.csv import CsvRecordExtraction
 from matchescu.matching.config._dataset_config import ClusterGroundTruthConfig
 from matchescu.reference_store.id_table import InMemoryIdTable
 from matchescu.matching.config import CsvBenchmarkDataConfig
-from matchescu.matching.evaluation.data.extraction import CsvRecordExtraction
 from matchescu.matching.evaluation.data.splits import SplitGenerator
 from matchescu.matching.evaluation.ground_truth import (
     read_pairwise_mapping_csv,
@@ -227,7 +227,9 @@ class CsvBenchmarkDataFactory(BenchmarkDataFactory[CsvBenchmarkData]):
         )
         data = self._load_ideal_mapping(data)
         data = self._load_clusters(data)
-        data = self._perform_split(data)
+        # TODO: transform this class and all others like it into a builder
+        # rationale: benchmark data is useful with or without splits
+        # data = self._perform_split(data)
 
         return data
 
