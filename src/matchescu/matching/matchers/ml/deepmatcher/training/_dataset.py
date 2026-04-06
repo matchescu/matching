@@ -55,9 +55,12 @@ class DeepMatcherDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         left, right = self.__pairs[idx]
-        return to_deepmatcher_repr(
-            left, right, self.__tokenizer, self.__attr_map, self.__max_len
-        )
+        return {
+            "label": torch.tensor(self.__labels[idx], dtype=torch.float),
+            **to_deepmatcher_repr(
+                left, right, self.__tokenizer, self.__attr_map, self.__max_len
+            ),
+        }
 
     @staticmethod
     def __dl_collate_fn(dataset_record):

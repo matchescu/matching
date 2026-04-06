@@ -59,7 +59,12 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
         attr_map = ensure_attr_map(a, b, self._attrs, self._excluded)
 
         with torch.no_grad():
-            tokens = to_deepmatcher_repr(a, b, self._tokenizer, attr_map, self._max_len)
+            tokens = {
+                k: v.unsqueeze(0)
+                for k, v in to_deepmatcher_repr(
+                    a, b, self._tokenizer, attr_map, self._max_len
+                ).items()
+            }
             result = self._model(**tokens)
             prediction = torch.argmax(result).item()
 

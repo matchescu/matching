@@ -305,7 +305,7 @@ class CsvBenchmarkDataBuilder(BenchmarkDataBuilder[CsvBenchmarkData]):
                 if len(split_cluster) < 2:
                     continue
                 split_clusters.append(split_cluster)
-            self._instance._splits[split_name] = Split(
+            self._instance._splits[f"{split_name}_split"] = Split(
                 comparison_space=comparison_space,
                 matcher_labels=matcher_labels,
                 gt_clusters={
