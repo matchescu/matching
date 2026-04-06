@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Iterable
 
 import torch
+from torch.distributions.utils import logits_to_probs
 from transformers import PreTrainedTokenizerBase
 
 from matchescu.matching.matchers.ml.core import AdditionalModelInfo
@@ -65,7 +66,7 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
                     a, b, self._tokenizer, attr_map, self._max_len
                 ).items()
             }
-            result = self._model(**tokens)
+            result = self._model(**tokens).squeeze(0)
             prediction = torch.argmax(result).item()
-
-        return MatchResult(prediction, result)
+        label_weights = logits_to_probs(result).tolist()
+        return MatchResult(prediction, label_weights)
