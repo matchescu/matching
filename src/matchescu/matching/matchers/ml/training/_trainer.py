@@ -72,7 +72,8 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         return model
 
     def _create_scheduler(self, dataset: TDataset, optimizer: Optimizer):
-        total_batches = len(dataset) // self._params.batch_size
+        remainder = int(len(dataset) % self._params.batch_size > 0)
+        total_batches = len(dataset) // self._params.batch_size + remainder
         num_steps = total_batches * self._params.epochs
 
         return OneCycleLR(
