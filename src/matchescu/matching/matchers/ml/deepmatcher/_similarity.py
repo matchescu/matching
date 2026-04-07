@@ -47,6 +47,7 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
             DeepMatcherModelTrainingParams
         ].model_validate(additional_info)
         self._model = DeepMatcherModule(additional_info.hyperparameters)
+        self._model.load_state_dict(model_dict["model"], strict=True)
         return self
 
     def _compute_similarity(
