@@ -345,6 +345,8 @@ class GroundTruthComparisonSpaceGenerator(object):
         # handle clusters
         clusters: dict[int, set[RefId]] = {}
         for tpl in comparison_space:
+            if tpl not in self.true_matches:
+                continue
             for ref_id in tpl:
                 if (cluster_no := self._ref_id_cluster_map.get(ref_id)) is None:
                     continue
