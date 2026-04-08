@@ -45,21 +45,29 @@ class DittoSimilarity(Similarity[MatchResult]):
 
     def load_from_file(self, path: str | PathLike) -> "DittoSimilarity":
         path = Path(path)
+
         if not path.exists():
             raise FileNotFoundError(path)
         model_dict = torch.load(path)
+
         if (additional_info := model_dict.get("additional_info")) is None:
             raise ValueError("expected hyperparameters to be bundled with model")
-
         additional_info = AdditionalModelInfo[DittoModelTrainingParams].model_validate(
             additional_info
         )
+
+        if TrainingEvaluator.THRESHOLD_KEY not in additional_info.best_config:
+            raise ValueError("expected best threshold to be bundled with model")
+        self.__threshold = float(
+            additional_info.best_config[TrainingEvaluator.THRESHOLD_KEY]
+        )
+
         with suppress_transformer_modeling_utils_warnings():
             self.__model = DittoModel(additional_info.hyperparameters)
             self.__model.load_state_dict(model_dict["model"], strict=True)
-        self.__threshold = float(
-            additional_info.best_config.get(TrainingEvaluator.THRESHOLD_KEY, 0.5)
-        )
+            self.__model.training = False
+            self.__model.train(False)
+            self.__model.eval()
         return self
 
     def _compute_similarity(

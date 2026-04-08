@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "matchescu-matching"
-version = "0.20.5"
+version = "0.20.6"
 description = "Common types and algorithms used for matching two information"
 authors = ["Andrei Olar <andrei.olar@ubbcluj.ro>"]
 license = "MIT"

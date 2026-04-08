@@ -15,13 +15,11 @@ class DittoModel(nn.Module):
         self._bert_name = params.model_name or "roberta-base"
         self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
         hidden_size = self._bert.config.hidden_size
-        self._dropout = nn.Dropout(p=params.dropout_p)
-
         self._classifier = torch.nn.Linear(hidden_size, 1, dtype=self._bert.dtype)
+        self._device = None
 
     def forward(self, x1, x2=None):
         enc = self._bert_encode(x1, x2)
-        enc = self._dropout(enc)
         return self._classifier(enc).squeeze(1)
 
     def _bert_encode(self, x1, x2=None):
@@ -42,12 +40,11 @@ class DittoModel(nn.Module):
     def with_frozen_bert_layers(self, frozen_layer_count: int = 6) -> "DittoModel":
         if frozen_layer_count < 1:
             return self
+
         for param in self._bert.embeddings.parameters():
             param.requires_grad = False
-
-        for layer in self._bert.encoder.layer[
-            :frozen_layer_count
-        ]:  # Freeze encoder layers
+        # Freeze encoder layers
+        for layer in self._bert.encoder.layer[:frozen_layer_count]:
             for param in layer.parameters():
                 param.requires_grad = False
         return self
@@ -55,23 +52,26 @@ class DittoModel(nn.Module):
     def eval(self):
         self.to(torch.device("cpu"))
         self._bert.eval()
-        self._dropout.eval()
         self._classifier.eval()
 
     def to(self, device: str | torch.device) -> None:
         self._bert = self._bert.to(device)
-        self._dropout = self._dropout.to(device)
         self._classifier = self._classifier.to(device)
+        self._device = (
+            device if isinstance(device, torch.device) else torch.device(device)
+        )
 
     def train(self, mode: bool = True) -> "DittoModel":
         if mode:
             self._bert.train(True)
-            self._dropout.train(True)
             self._classifier.train(True)
         else:
             self._classifier.train(False)
-            self._dropout.train(False)
             self._bert.train(False)
-            torch.mps.empty_cache()
-            torch.cuda.empty_cache()
+            if self._device is not None:
+                match self._device.type:
+                    case "mps":
+                        torch.mps.empty_cache()
+                    case "cuda":
+                        torch.cuda.empty_cache()
         return self
