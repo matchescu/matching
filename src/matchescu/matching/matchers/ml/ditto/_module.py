@@ -15,11 +15,13 @@ class DittoModel(nn.Module):
         self._bert_name = params.model_name or "roberta-base"
         self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
         hidden_size = self._bert.config.hidden_size
+        self._dropout = nn.Dropout(p=params.dropout_p)
 
         self._classifier = torch.nn.Linear(hidden_size, 1, dtype=self._bert.dtype)
 
     def forward(self, x1, x2=None):
         enc = self._bert_encode(x1, x2)
+        enc = self._dropout(enc)
         return self._classifier(enc).squeeze(1)
 
     def _bert_encode(self, x1, x2=None):
@@ -37,7 +39,7 @@ class DittoModel(nn.Module):
             enc = self._bert(x1)[0][:, 0, :]
         return enc
 
-    def with_frozen_bert_layers(self, frozen_layer_count: int = 0) -> "DittoModel":
+    def with_frozen_bert_layers(self, frozen_layer_count: int = 6) -> "DittoModel":
         if frozen_layer_count < 1:
             return self
         for param in self._bert.embeddings.parameters():
@@ -53,20 +55,22 @@ class DittoModel(nn.Module):
     def eval(self):
         self.to(torch.device("cpu"))
         self._bert.eval()
+        self._dropout.eval()
         self._classifier.eval()
 
     def to(self, device: str | torch.device) -> None:
         self._bert = self._bert.to(device)
+        self._dropout = self._dropout.to(device)
         self._classifier = self._classifier.to(device)
 
     def train(self, mode: bool = True) -> "DittoModel":
         if mode:
             self._bert.train(True)
-            self._bert.gradient_checkpointing_enable()
+            self._dropout.train(True)
             self._classifier.train(True)
         else:
             self._classifier.train(False)
-            self._bert.gradient_checkpointing_disable()
+            self._dropout.train(False)
             self._bert.train(False)
             torch.mps.empty_cache()
             torch.cuda.empty_cache()

@@ -71,6 +71,9 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     def _setup_model(self, model: TModel) -> TModel:
         return model
 
+    def _create_optimizer(self, model: TModel):
+        return torch.optim.AdamW(model.parameters(), lr=self._params.learning_rate)
+
     def _create_scheduler(self, dataset: TDataset, optimizer: Optimizer):
         remainder = int(len(dataset) % self._params.batch_size > 0)
         total_batches = len(dataset) // self._params.batch_size + remainder
@@ -144,7 +147,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     ):
         device = self._get_device()
         model = self._setup_model(model)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=self._params.learning_rate)
+        optimizer = self._create_optimizer(model)
         scheduler = self._create_scheduler(training_data.dataset, optimizer)
 
         for epoch in range(1, self._params.epochs + 1):

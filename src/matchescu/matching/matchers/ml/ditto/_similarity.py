@@ -56,27 +56,26 @@ class DittoSimilarity(Similarity[MatchResult]):
         )
         with suppress_transformer_modeling_utils_warnings():
             self.__model = DittoModel(additional_info.hyperparameters)
+            self.__model.load_state_dict(model_dict["model"], strict=True)
         self.__threshold = float(
             additional_info.best_config.get(TrainingEvaluator.THRESHOLD_KEY, 0.5)
         )
-        self.__model.load_state_dict(model_dict["model"])
         return self
 
     def _compute_similarity(
         self, a: EntityReference, b: EntityReference
     ) -> MatchResult:
         with torch.no_grad():
+            text_a = to_ditto_text(a, self.__left_cols)
+            text_b = to_ditto_text(b, self.__right_cols)
             encoded_text = torch.LongTensor(
                 self.__tokenizer.encode(
-                    text=to_ditto_text(a, self.__left_cols),
-                    text_pair=to_ditto_text(b, self.__right_cols),
+                    text=text_a,
+                    text_pair=text_b,
                     max_length=self.__max_len,
                     truncation=True,
                 )
             ).unsqueeze(0)
             weight = torch.sigmoid(self.__model(encoded_text)).item()
         prediction = 1 if weight > self.__threshold else 0
-        weights = [0, 0]
-        weights[prediction] = weight
-        weights[1 - prediction] = 1 - weight
-        return MatchResult(prediction, weights)
+        return MatchResult(prediction, [1 - weight, weight])

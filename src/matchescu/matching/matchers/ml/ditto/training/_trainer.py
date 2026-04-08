@@ -41,6 +41,29 @@ class DittoTrainer(
     def _setup_model(self, model: DittoModel) -> DittoModel:
         return model.with_frozen_bert_layers(self._params.frozen_layer_count)
 
+    def _create_optimizer(self, model: DittoModel):
+        no_decay = {"bias", "LayerNorm.weight", "LayerNorm.bias"}
+
+        param_groups = [
+            {
+                "params": [
+                    p
+                    for n, p in model.named_parameters()
+                    if not any(nd in n for nd in no_decay) and p.requires_grad
+                ],
+                "weight_decay": self._params.weight_decay,
+            },
+            {
+                "params": [
+                    p
+                    for n, p in model.named_parameters()
+                    if any(nd in n for nd in no_decay) and p.requires_grad
+                ],
+                "weight_decay": 0.0,
+            },
+        ]
+        return torch.optim.AdamW(param_groups, lr=self._params.learning_rate)
+
     def _create_scheduler(self, dataset: DittoDataset, optimizer: Optimizer):
         total_batches = len(dataset) // self._params.batch_size
         num_steps = total_batches * self._params.epochs
