@@ -13,11 +13,13 @@ from matchescu.matching.matchers.ml.training import BaseTrainer
 from .._module import MultiClassModule
 from .._params import MultiClassTrainingParams
 from ._config import CAPABILITY
-from ._datasets import DittoDataset
+from ._datasets import AsymmetricMultiClassDataset
 
 
 class MultiClassTrainer(
-    BaseTrainer[MultiClassModule, MultiClassTrainingParams, DittoDataset],
+    BaseTrainer[
+        MultiClassModule, MultiClassTrainingParams, AsymmetricMultiClassDataset
+    ],
     capability=CAPABILITY,
 ):
     hyperparams_schema = MultiClassTrainingParams
@@ -112,7 +114,9 @@ class MultiClassTrainer(
 
         return torch.optim.AdamW(param_groups)
 
-    def _create_scheduler(self, dataset: DittoDataset, optimizer: Optimizer):
+    def _create_scheduler(
+        self, dataset: AsymmetricMultiClassDataset, optimizer: Optimizer
+    ):
         total_batches = len(dataset) // self._params.batch_size
         num_steps = total_batches * self._params.epochs
 

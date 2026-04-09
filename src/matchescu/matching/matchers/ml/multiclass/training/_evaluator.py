@@ -9,17 +9,17 @@ from matchescu.matching.matchers.ml.training import BaseEvaluator
 
 from .._module import MultiClassModule
 from ._config import CAPABILITY
-from ._datasets import DittoDataset
+from ._datasets import AsymmetricMultiClassDataset
 
 
 class TrainingEvaluator(
-    BaseEvaluator[MultiClassModule, DittoDataset], capability=CAPABILITY
+    BaseEvaluator[MultiClassModule, AsymmetricMultiClassDataset], capability=CAPABILITY
 ):
     def __init__(
         self,
         task_name: str,
-        xv_data: DataLoader[DittoDataset],
-        test_data: DataLoader[DittoDataset],
+        xv_data: DataLoader[AsymmetricMultiClassDataset],
+        test_data: DataLoader[AsymmetricMultiClassDataset],
         tb_log_dir: Path,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -30,7 +30,7 @@ class TrainingEvaluator(
     def _run_model(
         self,
         model: MultiClassModule,
-        data_loader: DataLoader[DittoDataset],
+        data_loader: DataLoader[AsymmetricMultiClassDataset],
         best_config: dict | None = None,
     ) -> tuple[bool, dict]:
         batch_results = map(

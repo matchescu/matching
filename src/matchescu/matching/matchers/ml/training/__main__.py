@@ -20,7 +20,10 @@ from matchescu.matching.matchers.ml.deepmatcher.training import (
 from matchescu.matching.matchers.ml.ditto import DittoModel
 from matchescu.matching.matchers.ml.ditto.training import DittoDataset, DittoTrainer
 from matchescu.matching.matchers.ml.multiclass import MultiClassModule
-from matchescu.matching.matchers.ml.multiclass.training import MultiClassTrainer
+from matchescu.matching.matchers.ml.multiclass.training import (
+    MultiClassTrainer,
+    AsymmetricMultiClassDataset,
+)
 from matchescu.matching.matchers.ml.training import BaseTrainer, BaseEvaluator
 
 from matchescu.matching.matchers.ml.training._config import (
@@ -39,7 +42,7 @@ _MODEL_TOKENIZERS = {
 _TRAINER_MAPPINGS: dict[type, tuple[type, type]] = {
     DeepMatcherTrainer: (DeepMatcherModule, DeepMatcherDataset),
     DittoTrainer: (DittoModel, DittoDataset),
-    MultiClassTrainer: (MultiClassModule, DittoDataset),
+    MultiClassTrainer: (MultiClassModule, AsymmetricMultiClassDataset),
 }
 
 
@@ -60,14 +63,19 @@ def get_benchmark_data_loaders(
     tokenizer: PreTrainedTokenizerFast,
     train_params: ModelTrainingParams,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
+
+    def _create_ds(split_name, split):
+        if ds_cls == AsymmetricMultiClassDataset and not split_name.startswith("train"):
+            return AsymmetricMultiClassDataset(
+                benchmark_data.id_table, split, tokenizer, augmentation_probability=0
+            )
+        return ds_cls(benchmark_data.id_table, split, tokenizer)
+
     train_ds, xv_ds, test_ds = [
-        ds_cls(benchmark_data.id_table, split, tokenizer)
-        for split in [
-            benchmark_data.train_split,
-            benchmark_data.valid_split,
-            benchmark_data.test_split,
-        ]
+        _create_ds(split_name, split)
+        for split_name, split in benchmark_data.splits.items()
     ]
+
     return (
         train_ds.get_data_loader(train_params.batch_size, shuffle=True),
         xv_ds.get_data_loader(train_params.batch_size * 16),

@@ -1,6 +1,6 @@
-from ._datasets import DittoDataset
+from ._datasets import AsymmetricMultiClassDataset
 from ._evaluator import TrainingEvaluator as MccEvaluator
 from ._trainer import MultiClassTrainer
 
 
-__all__ = ["DittoDataset", "MultiClassTrainer", "MccEvaluator"]
+__all__ = ["AsymmetricMultiClassDataset", "MultiClassTrainer", "MccEvaluator"]
