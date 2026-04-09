@@ -73,6 +73,7 @@ class MultiClassSimilarity(Similarity[MatchResult]):
                     truncation=True,
                 )
             ).unsqueeze(0)
-            prediction = torch.argmax(encoded_text).item()
-            weights = logits_to_probs(encoded_text).tolist()
+            output = self.__model(encoded_text).squeeze(0)
+            prediction = torch.argmax(output).item()
+            weights = logits_to_probs(output).tolist()
         return MatchResult(prediction, weights)
