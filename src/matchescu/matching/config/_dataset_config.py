@@ -52,7 +52,7 @@ class SplitConfig(ConfigModel):
     files: dict[str, str | PairwiseGroundTruthConfig] | None = None
     ratios: dict[str, float] | None = None
     max_total_sample_count: int | None = None
-    neg_pos_ratio: float = 8.0
+    neg_pos_ratio: float = 4.0
     match_bridge_ratio: float = 2.0
 
 
