@@ -15,8 +15,8 @@ from matchescu.matching.matchers.ml.core import (
     ModelTrainingParams,
     TModel,
     TParams,
-    TDataset,
 )
+from ._dataset import TDataset
 from ._evaluator import BaseEvaluator
 from ._registry import CapabilityRegistry
 
@@ -89,7 +89,9 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
 
     @classmethod
     @abstractmethod
-    def _forward_pass(cls, model: TModel, batch: Any, device: torch.device) -> tuple:
+    def _forward_pass(
+        cls, model: TModel, batch: Any, device: torch.device
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         raise NotImplementedError
 
     def _train_one_epoch(
@@ -111,9 +113,8 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
             batch_loss = 0.0
             for i, batch in enumerate(train_iter):
                 optimizer.zero_grad()
-                prediction, y = self._forward_pass(model, batch, device)
-
-                loss = loss_fn(prediction, y.to(device).float())
+                result = self._forward_pass(model, batch, device)
+                loss = loss_fn(*(x.to(device) for x in result))
 
                 loss.backward()
                 optimizer.step()

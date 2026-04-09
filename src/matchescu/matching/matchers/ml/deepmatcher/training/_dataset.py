@@ -1,22 +1,21 @@
-"""Dataset and data loading utilities for entity matching"""
-
 import torch
-from torch.utils.data import Dataset, DataLoader
 from typing import Dict, Iterable
 
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from matchescu.data import Record
 from matchescu.matching.evaluation.data.splits._split import Split
+from matchescu.matching.matchers.ml.training import MatchescuDataset
+from matchescu.reference_store.id_table import IdTable
+from matchescu.typing import EntityReferenceIdentifier
+
 from matchescu.matching.matchers.ml.deepmatcher._encoder import (
     to_deepmatcher_repr,
     ensure_attr_map,
 )
-from matchescu.reference_store.id_table import IdTable
-from matchescu.typing import EntityReferenceIdentifier
 
 
-class DeepMatcherDataset(Dataset):
+class DeepMatcherDataset(MatchescuDataset):
     """Dataset for entity matching with multiple attributes"""
 
     __DEFAULT_TOKENIZER_NAME = "google-bert/bert-base-uncased"
@@ -30,13 +29,12 @@ class DeepMatcherDataset(Dataset):
         exclude_from_comparison: Iterable[str | int] = None,
         max_len: int = 30,
     ):
-        self.__id_table = id_table
-        self.__pairs, self.__labels = split.to_comparison_labels(self.__id_table)
+        super().__init__(id_table, split)
         self.__tokenizer = tokenizer or AutoTokenizer.from_pretrained(
             DeepMatcherDataset.__DEFAULT_TOKENIZER_NAME,
         )
         self.__max_len = max_len
-        left, right = next(iter(self.__pairs))
+        left, right = next(iter(self._pairs))
         self.__attr_map = ensure_attr_map(
             left, right, attr_map, exclude_from_comparison
         )
@@ -51,19 +49,18 @@ class DeepMatcherDataset(Dataset):
         return self.__max_len
 
     def __len__(self) -> int:
-        return len(self.__labels)
+        return len(self._labels)
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        left, right = self.__pairs[idx]
+        left, right = self._pairs[idx]
         return {
-            "label": torch.tensor(self.__labels[idx], dtype=torch.float),
+            "label": torch.tensor(self._labels[idx], dtype=torch.float),
             **to_deepmatcher_repr(
                 left, right, self.__tokenizer, self.__attr_map, self.__max_len
             ),
         }
 
-    @staticmethod
-    def __dl_collate_fn(dataset_record):
+    def _collate(self, dataset_record):
         return {
             "left_attrs": torch.stack([item["left_attrs"] for item in dataset_record]),
             "right_attrs": torch.stack(
@@ -72,19 +69,14 @@ class DeepMatcherDataset(Dataset):
             "label": torch.tensor([item["label"] for item in dataset_record]),
         }
 
-    def get_data_loader(self, batch_size=32, shuffle=True):
-        return DataLoader(
-            self,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            collate_fn=self.__dl_collate_fn,
-        )
-
 
 if __name__ == "__main__":
-    from matchescu.matching.evaluation.data import MagellanBenchmarkData, MagellanTraits
+    from matchescu.matching.evaluation.data.benchmark import (
+        MagellanBenchmarkData,
+        MagellanTraits,
+    )
 
-    traits = MagellanTraits().beer
+    traits = MagellanTraits()["beer"]
 
     ds = MagellanBenchmarkData("data/magellan/beer")
 
@@ -94,7 +86,6 @@ if __name__ == "__main__":
     ds.load_left(traits)
     ds.load_right(traits)
     ds.load_splits()
-
     dmds = DeepMatcherDataset(ds.id_table, ds.train_split)
     for item in dmds.get_data_loader():
         print(item)

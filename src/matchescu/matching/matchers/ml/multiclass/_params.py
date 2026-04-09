@@ -9,4 +9,4 @@ class MultiClassTrainingParams(ModelTrainingParams):
     dropout_p: float = 0.2
     weight_decay: float = 0.01
     output_size: int = 4
-    label_smoothing: float = 0.1
+    decay_factor: float = 0.95

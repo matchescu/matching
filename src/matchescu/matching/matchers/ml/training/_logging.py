@@ -8,7 +8,7 @@ def new_training_logger():
         level=logging.INFO,
         format="%(name)s(%(thread)d)[%(levelname)s] %(asctime)s » %(message)s",
     )
-    return logging.root.getChild("ditto-training")
+    return logging.root.getChild("training")
 
 
 log = new_training_logger()

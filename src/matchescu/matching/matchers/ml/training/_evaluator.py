@@ -8,7 +8,9 @@ from typing import ClassVar, Any, Generic
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from matchescu.matching.matchers.ml.core import TModel, TDataset
+from matchescu.matching.matchers.ml.core import TModel
+
+from ._dataset import TDataset
 from ._registry import CapabilityRegistry
 
 

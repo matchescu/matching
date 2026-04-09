@@ -1,3 +1,4 @@
+from ._dataset import MatchescuDataset, TDataset
 from ._trainer import BaseTrainer
 from ._evaluator import BaseEvaluator
 from ._config import TrainingConfig
@@ -9,4 +10,6 @@ __all__ = [
     "BaseEvaluator",
     "CapabilityRegistry",
     "TrainingConfig",
+    "MatchescuDataset",
+    "TDataset",
 ]

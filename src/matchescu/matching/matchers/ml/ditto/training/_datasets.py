@@ -5,11 +5,11 @@ from collections.abc import Sequence, Generator
 from typing import Callable
 
 import torch
-from torch.utils.data import Dataset, DataLoader
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.matchers.ml.ditto._encoder import to_ditto_text
+from matchescu.matching.matchers.ml.training import MatchescuDataset
 from matchescu.reference_store.id_table import IdTable
 
 
@@ -283,7 +283,7 @@ class Augmenter(object):
         return random.choice(candidates) if len(candidates) > 0 else -1
 
 
-class DittoDataset(Dataset):
+class DittoDataset(MatchescuDataset):
     """EM dataset"""
 
     def __init__(
@@ -297,8 +297,7 @@ class DittoDataset(Dataset):
         left_cols: tuple | None = None,
         right_cols: tuple | None = None,
     ):
-        self.__id_table = id_table
-        self.__pairs, self.__labels = split.to_comparison_labels(self.__id_table)
+        super().__init__(id_table, split)
         self.__tokenizer = tokenizer
         self.__max_len = max_len
         self.__size = size
@@ -309,10 +308,6 @@ class DittoDataset(Dataset):
             self.augmenter = Augmenter()
         else:
             self.augmenter = None
-
-    def __len__(self):
-        """Return the size of the dataset."""
-        return len(self.__pairs)
 
     def __getitem__(self, idx):
         """Return a tokenized item of the dataset.
@@ -325,7 +320,7 @@ class DittoDataset(Dataset):
             List of int: token ID's of the two entities augmented (if da is set)
             int: the label of the pair (0: unmatch, 1: match)
         """
-        left, right = self.__pairs[idx]
+        left, right = self._pairs[idx]
         left_text = to_ditto_text(left, self.__left_cols)
         right_text = to_ditto_text(right, self.__right_cols)
         x = self.__tokenizer.encode(
@@ -347,9 +342,9 @@ class DittoDataset(Dataset):
                 max_length=self.__max_len,
                 truncation=True,
             )
-            return x, x_aug, self.__labels[idx]
+            return x, x_aug, self._labels[idx]
         else:
-            return x, self.__labels[idx]
+            return x, self._labels[idx]
 
     @staticmethod
     def __pad(x: Sequence, total_length: int) -> torch.LongTensor:
@@ -365,8 +360,7 @@ class DittoDataset(Dataset):
         )
         return torch.LongTensor(tensor_data)
 
-    @staticmethod
-    def __zero_padded(batch: list[tuple]) -> tuple[torch.LongTensor, ...]:
+    def _collate(self, batch: list[tuple]) -> tuple[torch.LongTensor, ...]:
         if len(batch[0]) == 3:
             x1, x2, y = zip(*batch)
 
@@ -379,14 +373,3 @@ class DittoDataset(Dataset):
             n = max(map(len, x))
             x = DittoDataset.__pad(x, n)
             return x, torch.LongTensor(y)
-
-    def get_data_loader(
-        self, batch_size: int = 32, shuffle: bool = False
-    ) -> DataLoader:
-        return DataLoader(
-            self,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=0,
-            collate_fn=DittoDataset.__zero_padded,
-        )

@@ -4,14 +4,14 @@ from contextlib import contextmanager
 from datetime import timedelta
 from functools import partial
 from pathlib import Path
-from typing import Sized, Union
 
 import click
 import humanize
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, PreTrainedTokenizerFast, DebertaV2TokenizerFast
 
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
+from matchescu.matching.matchers.ml.core import ModelTrainingParams
 from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
 from matchescu.matching.matchers.ml.deepmatcher.training import (
     DeepMatcherDataset,
@@ -29,6 +29,7 @@ from matchescu.matching.matchers.ml.training._config import (
     DEFAULT_MODEL_DIR,
     MATCHERS_ML_PACKAGE,
 )
+from matchescu.matching.matchers.ml.training._dataset import TDataset
 from matchescu.matching.matchers.ml.training._logging import log
 
 
@@ -54,10 +55,10 @@ def timer(start_message: str):
 
 @timer(start_message="serialize+tokenize")
 def get_benchmark_data_loaders(
-    ds_cls: type[Union[Dataset, Sized]],
+    ds_cls: type[TDataset],
     benchmark_data: BenchmarkData,
     tokenizer: PreTrainedTokenizerFast,
-    batch_size: int = 32,
+    train_params: ModelTrainingParams,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     train_ds, xv_ds, test_ds = [
         ds_cls(benchmark_data.id_table, split, tokenizer)
@@ -68,9 +69,9 @@ def get_benchmark_data_loaders(
         ]
     ]
     return (
-        train_ds.get_data_loader(batch_size, shuffle=True),
-        xv_ds.get_data_loader(batch_size * 16),
-        test_ds.get_data_loader(batch_size * 16),
+        train_ds.get_data_loader(train_params.batch_size, shuffle=True),
+        xv_ds.get_data_loader(train_params.batch_size * 16),
+        test_ds.get_data_loader(train_params.batch_size * 16),
     )
 
 
@@ -88,7 +89,7 @@ def train_on_benchmark_data[TParams](
         raise RuntimeError(f"unsupported trainer: {trainer_cls.__qualname__}")
     model_cls, ds_cls = model_and_ds
     train, xv, test = get_benchmark_data_loaders(
-        ds_cls, benchmark_data, tokenizer, train_params.batch_size
+        ds_cls, benchmark_data, tokenizer, train_params
     )
     matcher_model = model_cls(train_params)
     dataset_logger = log.getChild(benchmark_data.name)

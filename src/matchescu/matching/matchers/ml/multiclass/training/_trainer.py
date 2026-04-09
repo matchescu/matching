@@ -40,16 +40,13 @@ class MultiClassTrainer(
             ]
         )
         inv_counts = 1.0 / counts
-        weights = inv_counts / sum(inv_counts)
+        weights = inv_counts / inv_counts.sum()
 
         super().__init__(
             task_name,
             hyperparams,
             model_dir or Path(__file__).parent,
-            loss_fn
-            or CrossEntropyLoss(
-                weight=weights, label_smoothing=hyperparams.label_smoothing
-            ),
+            loss_fn or CrossEntropyLoss(weight=weights),
             **kwargs,
         )
 
@@ -87,8 +84,8 @@ class MultiClassTrainer(
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
-        decay_factor = 0.95
-        weight_decay = 0.01
+        decay_factor = self._params.decay_factor
+        weight_decay = self._params.weight_decay
 
         num_layers = len(model.encoder_layers)
         param_groups = []
