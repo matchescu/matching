@@ -31,8 +31,7 @@ class GroundTruthComparisonSpaceGenerator(object):
         match_bridge_ratio: float = 2.0,
         max_total_samples: Optional[int] = None,
         seed: int = 42,
-        save_comparisons: bool = True,
-        save_clusters: bool = True,
+        save: bool = True,
         log: Optional[logging.Logger] = None,
     ) -> None:
         """Initialize `GroundTruthComparisonSpaceGenerator`.
@@ -66,9 +65,8 @@ class GroundTruthComparisonSpaceGenerator(object):
         self._log = log or logging.getLogger(self.__class__.__name__)
         self._id_table = id_table
         self._matcher_gt = matcher_gt
-        self._save_comparisons = save_comparisons
+        self._save = save
         self._cluster_gt = self.__init_cluster_gt(id_table, matcher_gt, cluster_gt)
-        self._save_clusters = save_clusters
         self._ref_id_cluster_map = {
             ref_id: cluster_no
             for cluster_no, cluster in enumerate(self._cluster_gt, start=1)
@@ -179,7 +177,6 @@ class GroundTruthComparisonSpaceGenerator(object):
                 comparison_space.put(left_id, right_id)
 
         self._write_comparisons_csv(comparison_space, output_path)
-        self._write_clusters_csv(comparison_space, clusters_output_path)
 
         return comparison_space
 
@@ -334,51 +331,12 @@ class GroundTruthComparisonSpaceGenerator(object):
             GroundTruthComparisonSpaceGenerator.MIN_PER_CLASS, min(target, available)
         )
 
-    def _write_clusters_csv(
-        self,
-        comparison_space: InMemoryComparisonSpace,
-        clusters_output_path: str | PathLike | None,
-    ) -> pl.DataFrame:
-        if not self._save_clusters:
-            return pl.DataFrame()
-
-        # handle clusters
-        clusters: dict[int, set[RefId]] = {}
-        for tpl in comparison_space:
-            if tpl not in self.true_matches:
-                continue
-            for ref_id in tpl:
-                if (cluster_no := self._ref_id_cluster_map.get(ref_id)) is None:
-                    continue
-                clusters.setdefault(cluster_no, set()).add(ref_id)
-        cluster_data = []
-        for (
-            cluster_no,
-            cluster,
-        ) in enumerate(  # renumber the clusters (maybe not such a good idea?)
-            (c for c in clusters.values() if len(c) > 1), start=1  # skip singletons
-        ):
-            for ref_id in cluster:
-                cluster_data.append(
-                    {
-                        "id": ref_id.label,
-                        "source": ref_id.source,
-                        "cluster_id": cluster_no,
-                    }
-                )
-        clusters_df = pl.DataFrame(cluster_data).sort(by="cluster_id")
-        self._log.info(
-            "saving clusters: %d clusters", clusters_df.n_unique(subset=["cluster_id"])
-        )
-        clusters_df.write_csv(clusters_output_path, include_header=True)
-        return clusters_df
-
     def _write_comparisons_csv(
         self,
         comparison_space: InMemoryComparisonSpace,
         output_path: str | PathLike | None,
     ) -> pl.DataFrame:
-        if not self._save_comparisons:
+        if not self._save:
             return pl.DataFrame()
 
         # handle comparisons and match labels

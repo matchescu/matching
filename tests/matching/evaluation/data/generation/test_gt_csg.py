@@ -86,8 +86,7 @@ def csg_binary(id_table, undirected_ground_truth, cluster_gt):
         cluster_gt=cluster_gt,
         neg_pos_ratio=2.0,
         seed=42,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
 
 
@@ -110,8 +109,7 @@ def csg_multiclass(id_table, multiclass_matcher_gt, cluster_gt):
         neg_pos_ratio=3.0,
         match_bridge_ratio=2.0,
         seed=123,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
 
 
@@ -129,8 +127,7 @@ def test_init_with_explicit_cluster_gt(id_table, undirected_ground_truth, cluste
         undirected_ground_truth,
         cluster_gt=cluster_gt,
         seed=0,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
     assert csg.true_clusters is cluster_gt
     assert csg.true_matches is undirected_ground_truth
@@ -141,8 +138,7 @@ def test_init_stores_default_ratios(id_table, undirected_ground_truth, cluster_g
         id_table,
         undirected_ground_truth,
         cluster_gt=cluster_gt,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
     assert csg.neg_pos_ratio == 5.0
     assert csg.match_bridge_ratio == 2.0
@@ -169,8 +165,7 @@ def test_init_raises_on_multiclass_without_cluster_gt(id_table):
             id_table,
             gt,
             cluster_gt=None,
-            save_comparisons=False,
-            save_clusters=False,
+            save=False,
         )
 
 
@@ -333,8 +328,7 @@ def test_generate_negatives_raises_on_tiny_pool(cluster_gt):
         gt,
         cluster_gt=frozenset(),
         seed=0,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
     with pytest.raises(ValueError, match="< 2 entries"):
         csg._generate_negatives(5, set())
@@ -385,8 +379,7 @@ def test_call_with_max_total_samples(id_table, undirected_ground_truth, cluster_
         neg_pos_ratio=5.0,
         max_total_samples=cap,
         seed=42,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
 
     cs = csg()
@@ -402,8 +395,7 @@ def test_write_comparisons_csv(id_table, undirected_ground_truth, cluster_gt, tm
         cluster_gt=cluster_gt,
         neg_pos_ratio=2.0,
         seed=42,
-        save_comparisons=True,
-        save_clusters=False,
+        save=True,
     )
     csg(output_path=out)
     assert out.exists()
@@ -418,37 +410,13 @@ def test_write_comparisons_csv(id_table, undirected_ground_truth, cluster_gt, tm
     assert len(df) > 0
 
 
-def test_write_clusters_csv(id_table, undirected_ground_truth, cluster_gt, tmp_path):
-    clusters_out = tmp_path / "clusters.csv"
-    csg = GroundTruthComparisonSpaceGenerator(
-        id_table,
-        undirected_ground_truth,
-        cluster_gt=cluster_gt,
-        neg_pos_ratio=2.0,
-        seed=42,
-        save_comparisons=False,
-        save_clusters=True,
-    )
-    csg(clusters_output_path=clusters_out)
-
-    assert clusters_out.exists()
-    import polars as pl
-
-    df = pl.read_csv(clusters_out)
-    assert "cluster_id" in df.columns
-    assert "id" in df.columns
-    assert "source" in df.columns
-
-
 def test_save_disabled_returns_empty_df(csg_binary):
     from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
     import polars as pl
 
     cs = InMemoryComparisonSpace()
     df_cmp = csg_binary._write_comparisons_csv(cs, None)
-    df_cls = csg_binary._write_clusters_csv(cs, None)
     assert isinstance(df_cmp, pl.DataFrame) and len(df_cmp) == 0
-    assert isinstance(df_cls, pl.DataFrame) and len(df_cls) == 0
 
 
 def test_true_clusters_property(csg_binary, cluster_gt):
@@ -460,15 +428,13 @@ def test_true_matches_property(csg_binary, undirected_ground_truth):
 
 
 def test_reproducibility_with_same_seed(id_table, undirected_ground_truth, cluster_gt):
-    """Two generators with the same seed should produce identical comparison spaces."""
     kwargs = dict(
         id_table=id_table,
         matcher_gt=undirected_ground_truth,
         cluster_gt=cluster_gt,
         neg_pos_ratio=2.0,
         seed=99,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
     cs1 = list(GroundTruthComparisonSpaceGenerator(**kwargs)())
     cs2 = list(GroundTruthComparisonSpaceGenerator(**kwargs)())
@@ -483,8 +449,7 @@ def test_different_seeds_produce_different_negatives(
         matcher_gt=undirected_ground_truth,
         cluster_gt=cluster_gt,
         neg_pos_ratio=2.0,
-        save_comparisons=False,
-        save_clusters=False,
+        save=False,
     )
     cs1 = set(GroundTruthComparisonSpaceGenerator(seed=1, **kwargs)())
     cs2 = set(GroundTruthComparisonSpaceGenerator(seed=999, **kwargs)())
