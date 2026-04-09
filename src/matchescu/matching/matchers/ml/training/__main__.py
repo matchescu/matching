@@ -19,6 +19,8 @@ from matchescu.matching.matchers.ml.deepmatcher.training import (
 )
 from matchescu.matching.matchers.ml.ditto import DittoModel
 from matchescu.matching.matchers.ml.ditto.training import DittoDataset, DittoTrainer
+from matchescu.matching.matchers.ml.multiclass import MultiClassModule
+from matchescu.matching.matchers.ml.multiclass.training import MultiClassTrainer
 from matchescu.matching.matchers.ml.training import BaseTrainer, BaseEvaluator
 
 from matchescu.matching.matchers.ml.training._config import (
@@ -36,6 +38,7 @@ _MODEL_TOKENIZERS = {
 _TRAINER_MAPPINGS: dict[type, tuple[type, type]] = {
     DeepMatcherTrainer: (DeepMatcherModule, DeepMatcherDataset),
     DittoTrainer: (DittoModel, DittoDataset),
+    MultiClassTrainer: (MultiClassModule, DittoDataset),
 }
 
 
@@ -137,6 +140,7 @@ def run_training(
         discovery_packages=[
             f"{MATCHERS_ML_PACKAGE}.ditto.training",
             f"{MATCHERS_ML_PACKAGE}.deepmatcher.training",
+            f"{MATCHERS_ML_PACKAGE}.multiclass.training",
         ],
     )
     with warnings.catch_warnings(action="ignore"):

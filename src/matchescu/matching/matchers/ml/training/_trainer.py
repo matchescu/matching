@@ -71,7 +71,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     def _setup_model(self, model: TModel) -> TModel:
         return model
 
-    def _create_optimizer(self, model: TModel):
+    def _create_optimizer(self, model: TModel) -> Optimizer:
         return torch.optim.AdamW(model.parameters(), lr=self._params.learning_rate)
 
     def _create_scheduler(self, dataset: TDataset, optimizer: Optimizer):

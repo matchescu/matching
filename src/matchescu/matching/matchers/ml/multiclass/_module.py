@@ -6,6 +6,7 @@ import torch.nn as nn
 from transformers import AutoModel, BertModel
 
 from ._params import MultiClassTrainingParams
+from ._resnet import ResidualHead
 
 
 class MultiClassModule(nn.Module):
@@ -15,16 +16,26 @@ class MultiClassModule(nn.Module):
         self._bert_name = params.model_name or "roberta-base"
         self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
         hidden_size = self._bert.config.hidden_size
-        self._dropout = torch.nn.Dropout(params.dropout_p)
-        self._classifier = torch.nn.Linear(
-            hidden_size, params.output_size, dtype=self._bert.dtype
+        self._classifier = ResidualHead(
+            hidden_size, params.output_size, params.dropout_p, dtype=self._bert.dtype
         )
         self._device = None
 
+    @property
+    def encoder_layers(self) -> nn.ModuleList:
+        return self._bert.encoder.layer
+
+    @property
+    def embeddings_layer(self) -> nn.Module:
+        return self._bert.embeddings
+
+    @property
+    def classifier(self) -> nn.Module:
+        return self._classifier
+
     def forward(self, x1, x2=None):
         enc = self._bert_encode(x1, x2)
-        enc = self._dropout(enc)
-        return self._classifier(enc).squeeze(1)
+        return self._classifier(enc)
 
     def _bert_encode(self, x1, x2=None):
         if x2 is not None:

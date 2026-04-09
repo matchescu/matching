@@ -33,7 +33,9 @@ class TrainingEvaluator(
         data_loader: DataLoader[DittoDataset],
         best_config: dict | None = None,
     ) -> tuple[bool, dict]:
-        batch_results = map(lambda b: (torch.argmax(model(b[0])), b[1]), data_loader)
+        batch_results = map(
+            lambda b: (torch.argmax(model(b[0]), dim=1), b[1]), data_loader
+        )
         y_pred, y_true = zip(*batch_results)
         y_pred = torch.cat(y_pred).detach().cpu().numpy()
         y_true = torch.cat(y_true).detach().cpu().numpy()
