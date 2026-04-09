@@ -1,5 +1,6 @@
 import itertools
 import random
+from collections import Counter
 from collections.abc import Sequence
 
 import torch
@@ -32,7 +33,20 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         self.__max_len = max_len
         self.__left_cols = left_cols
         self.__right_cols = right_cols
+        self.__label_counts = Counter(self._labels)
         random.seed(random_seed)
+
+    @property
+    def label_counts(self) -> dict[int, int]:
+        weighted_sum = (1 - self.__aug_prob) * self.__label_counts[
+            2
+        ] + self.__aug_prob * self.__label_counts[3]
+        return {
+            0: self.__label_counts[0],
+            1: self.__label_counts[1],
+            2: weighted_sum // 2,
+            3: weighted_sum // 2,
+        }
 
     def __getitem__(self, idx):
         """Return a tokenized item of the dataset.

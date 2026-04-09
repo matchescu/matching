@@ -34,17 +34,11 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     hyperparams_schema: ClassVar[Type[ModelTrainingParams]] = ModelTrainingParams
 
     def __init__(
-        self,
-        task: str,
-        hyper_params: TParams,
-        model_dir: str | PathLike,
-        loss_fn: _Loss | None = None,
-        **kwargs: Any,
+        self, task: str, hyper_params: TParams, model_dir: str | PathLike, **kwargs: Any
     ) -> None:
         self._task = task
         self._params = hyper_params
         self._model_dir = Path(model_dir)
-        self._loss = loss_fn
         self._log = cast(
             Logger, kwargs.get("logger", getLogger(self.__class__.__name__))
         ).getChild(self._task)
@@ -89,6 +83,11 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
 
     @classmethod
     @abstractmethod
+    def _create_loss(cls, data_loader: DataLoader[TDataset]) -> _Loss:
+        raise NotImplementedError
+
+    @classmethod
+    @abstractmethod
     def _forward_pass(
         cls, model: TModel, batch: Any, device: torch.device
     ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -107,7 +106,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         batch_no = 0
 
         try:
-            loss_fn = self._loss.to(device)
+            loss_fn = self._create_loss(train_iter).to(device)
             model.to(device)
             model.train(True)
             batch_loss = 0.0

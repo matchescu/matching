@@ -1,11 +1,12 @@
 from os import PathLike
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, cast
 
 import torch
-from torch.nn import Module, CrossEntropyLoss, Parameter
+from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
+from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 
 from matchescu.matching.matchers.ml.training import BaseTrainer
@@ -29,27 +30,11 @@ class MultiClassTrainer(
         task_name: str,
         hyperparams: MultiClassTrainingParams,
         model_dir: str | PathLike | None = None,
-        loss_fn: _Loss | None = None,
-        **kwargs: Any,
+        **kwargs: Any
     ) -> None:
 
-        counts = torch.tensor(
-            [
-                hyperparams.neg_pos_ratio * (hyperparams.match_bridge_ratio + 2),
-                hyperparams.match_bridge_ratio,
-                1,
-                1,
-            ]
-        )
-        inv_counts = 1.0 / counts
-        weights = inv_counts / inv_counts.sum()
-
         super().__init__(
-            task_name,
-            hyperparams,
-            model_dir or Path(__file__).parent,
-            loss_fn or CrossEntropyLoss(weight=weights),
-            **kwargs,
+            task_name, hyperparams, model_dir or Path(__file__).parent, **kwargs
         )
 
     def _setup_model(self, model: MultiClassModule) -> MultiClassModule:
@@ -84,9 +69,18 @@ class MultiClassTrainer(
             "weight_decay": 0.0,
         }
 
+    @classmethod
+    def _create_loss(
+        cls, data_loader: DataLoader[AsymmetricMultiClassDataset]
+    ) -> _Loss:
+        ds = cast(AsymmetricMultiClassDataset, data_loader.dataset)
+        inv_counts = torch.tensor([1.0 / ds.label_counts[c] for c in ds.label_counts])
+        weights = inv_counts / inv_counts.sum()
+        return torch.nn.CrossEntropyLoss(weight=weights)
+
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
-        decay_factor = self._params.decay_factor
+        decay_factor = self._params.lr_decay_factor
         weight_decay = self._params.weight_decay
 
         num_layers = len(model.encoder_layers)

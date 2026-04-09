@@ -2,11 +2,10 @@ from os import PathLike
 from typing import Any
 
 import torch
-from torch import nn
 from torch.nn.modules.loss import _Loss
+from torch.utils.data import DataLoader
 
-from matchescu.matching.matchers.ml.training import BaseTrainer
-
+from matchescu.matching.matchers.ml.training import BaseTrainer, TDataset
 from .._module import DeepMatcherModule
 from .._params import DeepMatcherModelTrainingParams
 from ._dataset import DeepMatcherDataset
@@ -23,16 +22,13 @@ class DeepMatcherTrainer(
         task_name: str,
         hyperparams: DeepMatcherModelTrainingParams,
         model_dir: str | PathLike | None = None,
-        loss_fn: _Loss | None = None,
-        **kwargs: Any,
+        **kwargs: Any
     ) -> None:
-        super().__init__(
-            task_name,
-            hyperparams,
-            model_dir,
-            loss_fn or nn.CrossEntropyLoss(),
-            **kwargs,
-        )
+        super().__init__(task_name, hyperparams, model_dir, **kwargs)
+
+    @classmethod
+    def _create_loss(cls, _: DataLoader[TDataset]) -> _Loss:
+        return torch.nn.CrossEntropyLoss()
 
     @classmethod
     def _forward_pass(

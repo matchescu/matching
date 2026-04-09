@@ -6,9 +6,10 @@ import torch
 from torch.nn import BCEWithLogitsLoss, Module
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
+from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 
-from matchescu.matching.matchers.ml.training import BaseTrainer
+from matchescu.matching.matchers.ml.training import BaseTrainer, TDataset
 
 from .._module import DittoModel
 from .._params import DittoModelTrainingParams
@@ -27,15 +28,10 @@ class DittoTrainer(
         task_name: str,
         hyperparams: DittoModelTrainingParams,
         model_dir: str | PathLike | None = None,
-        loss_fn: _Loss | None = None,
-        **kwargs: Any,
+        **kwargs: Any
     ) -> None:
         super().__init__(
-            task_name,
-            hyperparams,
-            model_dir or Path(__file__).parent,
-            loss_fn or BCEWithLogitsLoss(),
-            **kwargs,
+            task_name, hyperparams, model_dir or Path(__file__).parent, **kwargs
         )
 
     def _setup_model(self, model: DittoModel) -> DittoModel:
@@ -71,6 +67,10 @@ class DittoTrainer(
         return get_linear_schedule_with_warmup(
             optimizer, num_warmup_steps=0, num_training_steps=num_steps
         )
+
+    @classmethod
+    def _create_loss(cls, _: DataLoader[TDataset]) -> _Loss:
+        return BCEWithLogitsLoss()
 
     @classmethod
     def _forward_pass(cls, model: Module, batch: tuple, device: torch.device) -> tuple:
