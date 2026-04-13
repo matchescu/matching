@@ -13,12 +13,11 @@ from matchescu.matching.matchers.ml.ditto.training._evaluator import TrainingEva
 from matchescu.matching.matchers.ml.transformers import (
     suppress_transformer_modeling_utils_warnings,
 )
-from matchescu.matching.similarity import Similarity
 from matchescu.similarity import MatchResult
 from matchescu.typing import EntityReference
 
 
-class DittoSimilarity(Similarity[MatchResult]):
+class DittoSimilarity:
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerFast,
@@ -28,8 +27,6 @@ class DittoSimilarity(Similarity[MatchResult]):
         left_cols: Iterable[str] | None = None,
         right_cols: Iterable[str] | None = None,
     ) -> None:
-        non_match = MatchResult(0, [1, 0])
-        super().__init__(non_match, non_match)
         model_dir = model_dir or curdir
         self.__tokenizer = tokenizer
         self.__max_len = max_len
@@ -70,9 +67,7 @@ class DittoSimilarity(Similarity[MatchResult]):
             self.__model.eval()
         return self
 
-    def _compute_similarity(
-        self, a: EntityReference, b: EntityReference
-    ) -> MatchResult:
+    def __call__(self, a: EntityReference, b: EntityReference) -> MatchResult:
         with torch.no_grad():
             text_a = to_ditto_text(a, self.__left_cols)
             text_b = to_ditto_text(b, self.__right_cols)
@@ -86,4 +81,4 @@ class DittoSimilarity(Similarity[MatchResult]):
             ).unsqueeze(0)
             weight = torch.sigmoid(self.__model(encoded_text)).item()
         prediction = 1 if weight > self.__threshold else 0
-        return MatchResult(prediction, [1 - weight, weight])
+        return MatchResult(a.id, b.id, prediction, [1 - weight, weight])

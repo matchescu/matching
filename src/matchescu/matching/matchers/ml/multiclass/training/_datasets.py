@@ -1,10 +1,8 @@
-import itertools
 import random
-from collections import Counter
-from collections.abc import Sequence
 
+import numpy as np
 import torch
-from transformers import PreTrainedTokenizerFast
+from transformers import PreTrainedTokenizerFast, BatchEncoding
 
 from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.reference_store.id_table import IdTable
@@ -22,31 +20,21 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         split: Split,
         tokenizer: PreTrainedTokenizerFast,
         max_len: int = 256,
-        augmentation_probability: float = 0.5,
         left_cols: tuple | None = None,
         right_cols: tuple | None = None,
         random_seed: int = 42,
     ):
         super().__init__(id_table, split)
         self.__tokenizer = tokenizer
-        self.__aug_prob = augmentation_probability
         self.__max_len = max_len
         self.__left_cols = left_cols
         self.__right_cols = right_cols
-        self.__label_counts = Counter(self._labels)
+        self.__label_counts = np.bincount(self._labels)
         random.seed(random_seed)
 
     @property
-    def label_counts(self) -> dict[int, int]:
-        weighted_sum = (1 - self.__aug_prob) * self.__label_counts[
-            2
-        ] + self.__aug_prob * self.__label_counts[3]
-        return {
-            0: self.__label_counts[0],
-            1: self.__label_counts[1],
-            2: weighted_sum // 2,
-            3: weighted_sum // 2,
-        }
+    def label_counts(self) -> np.ndarray:
+        return self.__label_counts
 
     def __getitem__(self, idx):
         """Return a tokenized item of the dataset.
@@ -55,50 +43,51 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
             idx (int): the index of the item
 
         Returns:
-            List of int: token ID's of the two entities
-            List of int: token ID's of the two entities augmented (if da is set)
-            int: the label of the pair (0: unmatch, 1: match)
+            encodings, attention masks and token type ids for both normal
+            and reversed input orders.
         """
         left, right = self._pairs[idx]
+        left_text = to_ditto_text(left)
+        right_text = to_ditto_text(right)
+
         y = self._labels[idx]
-        if random.random() < self.__aug_prob:
-            left, right = right, left
-            y = self._LABEL_SWAP[y]
 
-        left_text = to_ditto_text(left, self.__left_cols)
-        right_text = to_ditto_text(right, self.__right_cols)
-        x = self.__tokenizer.encode(
-            text=left_text,
-            text_pair=right_text,
-            max_length=self.__max_len,
-            truncation=True,
-        )
-        return x, y
+        x_fwd = {
+            k: v.squeeze(0)
+            for k, v in self.__tokenizer(
+                text=left_text,
+                text_pair=right_text,
+                max_length=self.__max_len,
+                truncation=True,
+                return_tensors="pt",
+            ).items()
+        }
+        x_rev = {
+            k: v.squeeze(0)
+            for k, v in self.__tokenizer(
+                text=right_text,
+                text_pair=left_text,
+                max_length=self.__max_len,
+                truncation=True,
+                return_tensors="pt",
+            ).items()
+        }
 
-    @staticmethod
-    def __pad(x: Sequence, total_length: int) -> torch.LongTensor:
-        tensor_data = list(
-            map(
-                lambda vec: list(
-                    itertools.chain(
-                        vec, itertools.repeat(0, max(total_length - len(vec), 0))
-                    )
-                ),
-                x,
-            )
-        )
-        return torch.LongTensor(tensor_data)
+        return x_fwd, x_rev, y
 
-    def _collate(self, batch: list[tuple]) -> tuple[torch.LongTensor, ...]:
-        if len(batch[0]) == 3:
-            x1, x2, y = zip(*batch)
+    def _pad(self, batch: BatchEncoding) -> dict[str, torch.LongTensor]:
+        return {
+            k: v
+            for k, v in self.__tokenizer.pad(
+                batch,
+                max_length=self.__max_len,
+                padding=True,
+                return_tensors="pt",
+            ).items()
+        }
 
-            n = max(map(len, x1 + x2))
-            x1 = AsymmetricMultiClassDataset.__pad(x1, n)
-            x2 = AsymmetricMultiClassDataset.__pad(x2, n)
-            return x1, x2, torch.LongTensor(y)
-        else:
-            x, y = zip(*batch)
-            n = max(map(len, x))
-            x = AsymmetricMultiClassDataset.__pad(x, n)
-            return x, torch.LongTensor(y)
+    def _collate(self, batch: list[tuple]) -> tuple[dict, dict, torch.LongTensor]:
+        x_fwd_list, x_rev_list, y = zip(*batch)
+        x_fwd_padded = self._pad(x_fwd_list)
+        x_rev_padded = self._pad(x_rev_list)
+        return x_fwd_padded, x_rev_padded, torch.LongTensor(y)

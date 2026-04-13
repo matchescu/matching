@@ -1,7 +1,8 @@
 from abc import abstractmethod
 from typing import Sized, TypeVar
 
-from torch.utils.data import Dataset, DataLoader, Sampler
+import numpy as np
+from torch.utils.data import Dataset, DataLoader, Sampler, WeightedRandomSampler
 
 from matchescu.matching.evaluation.data.splits import Split
 from matchescu.reference_store.id_table import IdTable
@@ -18,6 +19,13 @@ class MatchescuDataset(Dataset, Sized):
     @abstractmethod
     def _collate(self, record):
         raise NotImplementedError
+
+    def get_weighted_sampler(self) -> WeightedRandomSampler:
+        class_counts = np.bincount(self._labels)
+        sample_weights = 1.0 / class_counts[self._labels]
+        return WeightedRandomSampler(
+            weights=sample_weights, num_samples=len(self), replacement=True
+        )
 
     def get_data_loader(
         self, batch_size: int = 32, shuffle: bool = True, sampler: Sampler | None = None

@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from logging import Logger, getLogger
 from os import PathLike
 from pathlib import Path
-from typing import ClassVar, Type, Any, Generic, cast
+from typing import ClassVar, Type, Any, Generic, cast, Iterable
 
 import torch
+from torch import Tensor
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler, OneCycleLR
@@ -90,7 +91,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     @abstractmethod
     def _forward_pass(
         cls, model: TModel, batch: Any, device: torch.device
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, ...]:
         raise NotImplementedError
 
     def _train_one_epoch(
@@ -113,7 +114,9 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
             for i, batch in enumerate(train_iter):
                 optimizer.zero_grad()
                 result = self._forward_pass(model, batch, device)
-                loss = loss_fn(*(x.to(device) for x in result))
+                loss = self._compute_loss(
+                    epoch, loss_fn, (x.to(device) for x in result)
+                )
 
                 loss.backward()
                 optimizer.step()
@@ -137,6 +140,11 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         avg_loss = total_loss / batch_no if batch_no > 0 else 0
         self._log.info("epoch %d: avg loss=%.4f", epoch, avg_loss)
         return {"average_loss": avg_loss}
+
+    def _compute_loss(
+        self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
+    ) -> Any:
+        return loss_fn(*map(lambda x: x.float(), tensors))
 
     def run_training(
         self,

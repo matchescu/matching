@@ -1790,14 +1790,14 @@ files = [
 
 [[package]]
 name = "matchescu-base"
-version = "0.26.0"
+version = "0.27.0"
 description = "Base abstract data types for Entity Resolution"
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.11"
 groups = ["main"]
 files = [
-    {file = "matchescu_base-0.26.0-py3-none-any.whl", hash = "sha256:4d02984fd41b80fca4ba07b7b6968aa902c38dbd9d62f4b75fc007cc0176ce6a"},
-    {file = "matchescu_base-0.26.0.tar.gz", hash = "sha256:ec42648ec1e8e0857c54a8ff03b5f52f10942aa92b6900d18c8cf4787d29c3a0"},
+    {file = "matchescu_base-0.27.0-py3-none-any.whl", hash = "sha256:2edd35b45f59e5f7ddda34fb50ed0857ff9640ac15902b4f30539b15381c22f0"},
+    {file = "matchescu_base-0.27.0.tar.gz", hash = "sha256:e9bbe77ef4458ab23becbd14a927b7837e332164c3798250ccf1b9d088773685"},
 ]
 
 [package.dependencies]
@@ -1805,20 +1805,20 @@ networkx = ">=3.6.1,<4.0.0"
 
 [[package]]
 name = "matchescu-comparison-space-generation"
-version = "0.8.4"
+version = "0.8.5"
 description = ""
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_comparison_space_generation-0.8.4-py3-none-any.whl", hash = "sha256:e92ec384047de3abd034a24c77f713ae975d100eb3ab6c431e203580829c8735"},
-    {file = "matchescu_comparison_space_generation-0.8.4.tar.gz", hash = "sha256:e423cf4a68266203fdfb2c750b80b6f9f9be4ee2ed165d8674db97fa4cb9f72f"},
+    {file = "matchescu_comparison_space_generation-0.8.5-py3-none-any.whl", hash = "sha256:574a2c189623594fe4785311c3ac968668ddedcbb6a67ce3b686c934d9778f05"},
+    {file = "matchescu_comparison_space_generation-0.8.5.tar.gz", hash = "sha256:f8817d30e00dab4ea1cab775b45e95c7292bb63187ed6553f4d75337f0556d12"},
 ]
 
 [package.dependencies]
 datasketch = ">=1.9.0,<2.0.0"
-matchescu-base = ">=0.26.0,<0.27.0"
-matchescu-reference-store = ">=0.9.2,<0.10.0"
+matchescu-base = ">=0.27.0,<0.28.0"
+matchescu-reference-store = ">=0.9.3,<0.10.0"
 numpy = ">=2.4.2,<3.0.0"
 polars = ">=1.39.3,<2.0.0"
 scikit-learn = ">=1.8.0,<2.0.0"
@@ -1826,34 +1826,34 @@ stopwords = ">=1.0.2,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-extraction"
-version = "0.9.1"
+version = "0.9.2"
 description = "Extract references from a multitude of data sources"
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_extraction-0.9.1-py3-none-any.whl", hash = "sha256:f597218a18aa46fd7b1681adada7eef87a7fd661acbfb1828c35ee2db23b6470"},
-    {file = "matchescu_reference_extraction-0.9.1.tar.gz", hash = "sha256:f716538b8ee93d965316b13ae3ffc2cd263753a102992ac0d0f4e8cf313ecc49"},
+    {file = "matchescu_reference_extraction-0.9.2-py3-none-any.whl", hash = "sha256:3a318e82034579249764f78710ac1a478dc88014e3fa2a92ecbbcf3c335bada9"},
+    {file = "matchescu_reference_extraction-0.9.2.tar.gz", hash = "sha256:d69eaae859990c3ca9398aa07f3c99890f7b9b32908223ae6cc2a88511a96974"},
 ]
 
 [package.dependencies]
-matchescu-base = ">=0.26.0,<0.27.0"
+matchescu-base = ">=0.27.0,<0.28.0"
 polars = ">=1.38.1,<2.0.0"
 
 [[package]]
 name = "matchescu-reference-store"
-version = "0.9.2"
+version = "0.9.3"
 description = "Entity reference storage data types and APIs"
 optional = false
 python-versions = "!=2.7.*,!=3.0.*,!=3.1.*,!=3.10.*,!=3.11.*,!=3.12.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,!=3.7.*,!=3.8.*,!=3.9.*,>=3.13"
 groups = ["main"]
 files = [
-    {file = "matchescu_reference_store-0.9.2-py3-none-any.whl", hash = "sha256:003a9858eb71e967c4717bb5f2d916010fcdc38b51637948c5db2afc022ac17a"},
-    {file = "matchescu_reference_store-0.9.2.tar.gz", hash = "sha256:242e5942ef21b1f396c5cb76c4ea4274158d88f92ea07e373afa1cec3b5ee2ef"},
+    {file = "matchescu_reference_store-0.9.3-py3-none-any.whl", hash = "sha256:5ef5a6e862756e125a274ef1c607b8c3d2d5de48b4f468acd93c37d80a8d374f"},
+    {file = "matchescu_reference_store-0.9.3.tar.gz", hash = "sha256:5b8c795d26b6114824501463aad2a5748da63e8d2d98530426ec38eeef555c2b"},
 ]
 
 [package.dependencies]
-matchescu-base = ">=0.26.0,<0.27.0"
+matchescu-base = ">=0.27.0,<0.28.0"
 
 [[package]]
 name = "matplotlib-inline"
@@ -4914,4 +4914,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "!=3.14.1,>=3.13,<3.15"
-content-hash = "007282d01f9c07d99a27f2ad8292db93611b053e948e5c48aa44a3c41fe04ea1"
+content-hash = "85a323e06b5695d735e3c4a0500b18ade2fc345b5ed833e4522a8743fd525f13"

@@ -7,4 +7,4 @@ class MultiClassTrainingParams(ModelTrainingParams):
     dropout_p: float = 0.2
     lr_decay_factor: float = 0.95
     weight_decay: float = 0.01
-    output_size: int = 4
+    consistency_loss_weight: float = 1.0  # 0.5 -> 2.0

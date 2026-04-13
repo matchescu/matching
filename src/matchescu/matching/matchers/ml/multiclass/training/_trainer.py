@@ -3,8 +3,10 @@ from pathlib import Path
 from typing import Any, Iterable, cast
 
 import torch
+from torch import Tensor
 from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
+from torch.functional import F
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
@@ -12,6 +14,7 @@ from transformers import get_linear_schedule_with_warmup
 from matchescu.matching.matchers.ml.training import BaseTrainer
 
 from .._module import MultiClassModule
+from .._loss import FocalLoss
 from .._params import MultiClassTrainingParams
 from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset
@@ -73,10 +76,17 @@ class MultiClassTrainer(
     def _create_loss(
         cls, data_loader: DataLoader[AsymmetricMultiClassDataset]
     ) -> _Loss:
-        ds = cast(AsymmetricMultiClassDataset, data_loader.dataset)
-        inv_counts = torch.tensor([1.0 / ds.label_counts[c] for c in ds.label_counts])
-        weights = inv_counts / inv_counts.sum()
-        return torch.nn.CrossEntropyLoss(weight=weights)
+        label_counts = cast(
+            AsymmetricMultiClassDataset, data_loader.dataset
+        ).label_counts
+        total_count = label_counts.sum()
+        n_classes = len(label_counts)
+        weights = torch.tensor(
+            total_count / (label_counts * n_classes), dtype=torch.float32
+        )
+        weights = torch.sqrt(weights)  # dampening
+        weights = weights / weights[0]
+        return FocalLoss(weights)
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
@@ -119,12 +129,32 @@ class MultiClassTrainer(
         )
 
     @classmethod
-    def _forward_pass(cls, model: Module, batch: tuple, device: torch.device) -> tuple:
-        device_batch = tuple(item.to(device) for item in batch)
-        if len(device_batch) == 2:
-            x, y = device_batch
-            prediction = model(x.to(device))
-        else:
-            x1, x2, y = device_batch
-            prediction = model(x1.to(device), x2.to(device))
-        return prediction, y
+    def _forward_pass(
+        cls,
+        model: Module,
+        batch: tuple[dict, dict, torch.LongTensor],
+        device: torch.device,
+    ) -> tuple:
+        x_fwd, x_rev, y = batch
+        x_fwd = {k: v.to(device) for k, v in x_fwd.items()}
+        x_rev = {k: v.to(device) for k, v in x_rev.items()}
+        y = y.to(device)
+        y_rev = y.clone()
+        y_rev[y == 2] = (
+            0  # when reversing the pairs, all data labeled initially with 2 is a non-match
+        )
+        cls_logits = model(**x_fwd)
+        cls_logits_rev = model(**x_rev)
+        return cls_logits, cls_logits_rev, y, y_rev
+
+    def _compute_loss(
+        self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
+    ) -> Any:
+        cls_logits, cls_logits_rev, y, y_rev = tensors
+        loss = loss_fn(cls_logits, y)
+
+        valid_mask = y_rev < 2  # Filter out invalid targets (though none exist here)
+        loss_rev = F.cross_entropy(cls_logits_rev[valid_mask], y_rev[valid_mask])
+        class_2_penalty = F.softmax(cls_logits_rev, dim=1)[:, 2].mean()
+        loss_rev += 2.0 * class_2_penalty  # Adjust weight (10.0) as needed
+        return loss + loss_rev

@@ -11,7 +11,6 @@ from matchescu.matching.matchers.ml.deepmatcher._encoder import (
     to_deepmatcher_repr,
     ensure_attr_map,
 )
-from matchescu.matching.similarity import Similarity
 from matchescu.similarity import MatchResult
 from matchescu.typing import EntityReference
 
@@ -19,7 +18,7 @@ from ._module import DeepMatcherModule
 from ._params import DeepMatcherModelTrainingParams
 
 
-class DeepMatcherSimilarity(Similarity[MatchResult]):
+class DeepMatcherSimilarity:
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerBase,
@@ -27,8 +26,6 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
         max_len: int = 30,
         excluded_attrs: Iterable[str | int] | None = None,
     ) -> None:
-        non_match = MatchResult(0, [1, 0])
-        super().__init__(non_match, non_match)
         self._model = None
         self._tokenizer = tokenizer
         self._attrs = attr_map
@@ -50,9 +47,7 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
         self._model.load_state_dict(model_dict["model"], strict=True)
         return self
 
-    def _compute_similarity(
-        self, a: EntityReference, b: EntityReference
-    ) -> MatchResult:
+    def __call__(self, a: EntityReference, b: EntityReference) -> MatchResult:
         if self._model is None:
             raise RuntimeError("load model before calling")
         if not all(isinstance(r, EntityReference) for r in (a, b)):
@@ -70,4 +65,4 @@ class DeepMatcherSimilarity(Similarity[MatchResult]):
             result = self._model(**tokens).squeeze(0)
             prediction = torch.argmax(result).item()
         label_weights = logits_to_probs(result).tolist()
-        return MatchResult(prediction, label_weights)
+        return MatchResult(a.id, b.id, prediction, label_weights)

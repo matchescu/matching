@@ -10,7 +10,6 @@ from matchescu.matching.matchers.ml.core import AdditionalModelInfo
 from matchescu.matching.matchers.ml.transformers import (
     suppress_transformer_modeling_utils_warnings,
 )
-from matchescu.matching.similarity import Similarity
 from matchescu.similarity import MatchResult
 from matchescu.typing import EntityReference
 
@@ -19,7 +18,7 @@ from ._module import MultiClassModule
 from ._params import MultiClassTrainingParams
 
 
-class MultiClassSimilarity(Similarity[MatchResult]):
+class MultiClassSimilarity:
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerFast,
@@ -28,8 +27,6 @@ class MultiClassSimilarity(Similarity[MatchResult]):
         left_cols: Iterable[str] | None = None,
         right_cols: Iterable[str] | None = None,
     ) -> None:
-        non_match = MatchResult(0, [1, 0])
-        super().__init__(non_match, non_match)
         model_dir = model_dir or curdir
         self.__tokenizer = tokenizer
         self.__max_len = max_len
@@ -59,21 +56,18 @@ class MultiClassSimilarity(Similarity[MatchResult]):
             self.__model.eval()
         return self
 
-    def _compute_similarity(
-        self, a: EntityReference, b: EntityReference
-    ) -> MatchResult:
+    def __call__(self, a: EntityReference, b: EntityReference) -> MatchResult:
         with torch.no_grad():
             text_a = to_ditto_text(a, self.__left_cols)
             text_b = to_ditto_text(b, self.__right_cols)
-            encoded_text = torch.LongTensor(
-                self.__tokenizer.encode(
-                    text=text_a,
-                    text_pair=text_b,
-                    max_length=self.__max_len,
-                    truncation=True,
-                )
-            ).unsqueeze(0)
-            output = self.__model(encoded_text).squeeze(0)
-            prediction = torch.argmax(output).item()
-            weights = logits_to_probs(output).tolist()
-        return MatchResult(prediction, weights)
+            encoding = self.__tokenizer(
+                text=text_a,
+                text_pair=text_b,
+                max_length=self.__max_len,
+                truncation=True,
+                return_tensors="pt",
+            )
+            cls_logits = self.__model(**encoding).squeeze(0)
+            prediction: int = torch.argmax(cls_logits, dim=-1).int().item()
+            cls_weights = logits_to_probs(cls_logits).tolist()
+        return MatchResult(a.id, b.id, prediction, cls_weights)

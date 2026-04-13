@@ -1,23 +1,28 @@
 from typing import cast
 
-import numpy as np
 import torch
 import torch.nn as nn
 from transformers import AutoModel, BertModel
 
 from ._params import MultiClassTrainingParams
-from ._resnet import ResidualHead
+from ._classifier import ClassificationHead
 
 
 class MultiClassModule(nn.Module):
+    _CLASSIFIER_OUTPUT_SIZE = 3
+    _DEFAULT_MODEL = "bert-base-uncased"
+
     def __init__(self, params: MultiClassTrainingParams):
         super().__init__()
-        self._alpha_aug = params.alpha_aug
-        self._bert_name = params.model_name or "roberta-base"
+        self._bert_name = params.model_name or self._DEFAULT_MODEL
         self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
         hidden_size = self._bert.config.hidden_size
-        self._classifier = ResidualHead(
-            hidden_size, params.output_size, params.dropout_p, dtype=self._bert.dtype
+        self._classifier = ClassificationHead(
+            3 * hidden_size,
+            hidden_size,
+            self._CLASSIFIER_OUTPUT_SIZE,
+            params.dropout_p,
+            dtype=self._bert.dtype,
         )
         self._device = None
 
@@ -33,24 +38,36 @@ class MultiClassModule(nn.Module):
     def classifier(self) -> nn.Module:
         return self._classifier
 
-    def forward(self, x1, x2=None):
-        enc = self._bert_encode(x1, x2)
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        token_type_ids: torch.Tensor | None = None,
+    ):
+        enc = self._bert_encode(input_ids, attention_mask, token_type_ids)
         return self._classifier(enc)
 
-    def _bert_encode(self, x1, x2=None):
-        if x2 is not None:
-            # MixDA
-            x_concat = torch.cat((x1, x2))
-            enc = self._bert(x_concat)[0][:, 0, :]
-            batch_size = len(x1)
-            enc1 = enc[:batch_size]  # (batch_size, emb_size)
-            enc2 = enc[batch_size:]  # (batch_size, emb_size)
+    def _bert_encode(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        token_type_ids: torch.Tensor | None = None,
+    ):
+        out = self._bert(
+            input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
+        )
+        hidden = out[0]
+        mask = attention_mask.unsqueeze(-1).float()
 
-            aug_lam = np.random.beta(self._alpha_aug, self._alpha_aug)
-            enc = enc1 * aug_lam + enc2 * (1.0 - aug_lam)
-        else:
-            enc = self._bert(x1)[0][:, 0, :]
-        return enc
+        # separate segment A (lhs text) from segment B (rhs text)
+        mask_a = (token_type_ids == 0).unsqueeze(-1).float() * mask
+        mask_b = (token_type_ids == 1).unsqueeze(-1).float() * mask
+
+        enc_a = (hidden * mask_a).sum(1) / mask_a.sum(1).clamp(min=1e-9)
+        enc_b = (hidden * mask_b).sum(1) / mask_b.sum(1).clamp(min=1e-9)
+
+        # difference -> higher contrast based on input order
+        return torch.cat([enc_a, enc_b, enc_a - enc_b], dim=-1)
 
     def with_frozen_bert_layers(
         self, frozen_layer_count: int = 6

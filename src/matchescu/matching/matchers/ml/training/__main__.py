@@ -63,21 +63,20 @@ def get_benchmark_data_loaders(
     tokenizer: PreTrainedTokenizerFast,
     train_params: ModelTrainingParams,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
-
-    def _create_ds(split_name, split):
-        if ds_cls == AsymmetricMultiClassDataset and not split_name.startswith("train"):
-            return AsymmetricMultiClassDataset(
-                benchmark_data.id_table, split, tokenizer, augmentation_probability=0
-            )
-        return ds_cls(benchmark_data.id_table, split, tokenizer)
-
     train_ds, xv_ds, test_ds = [
-        _create_ds(split_name, split)
+        ds_cls(benchmark_data.id_table, split, tokenizer)
         for split_name, split in benchmark_data.splits.items()
     ]
-
+    sampler = (
+        train_ds.get_weighted_sampler()
+        if isinstance(train_ds, AsymmetricMultiClassDataset)
+        else None
+    )
+    shuffle_training_data = sampler is None
     return (
-        train_ds.get_data_loader(train_params.batch_size, shuffle=True),
+        train_ds.get_data_loader(
+            train_params.batch_size, shuffle_training_data, sampler
+        ),
         xv_ds.get_data_loader(train_params.batch_size * 16),
         test_ds.get_data_loader(train_params.batch_size * 16),
     )
