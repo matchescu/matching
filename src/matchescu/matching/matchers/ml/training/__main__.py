@@ -12,6 +12,8 @@ from transformers import AutoTokenizer, PreTrainedTokenizerFast, DebertaV2Tokeni
 
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 from matchescu.matching.matchers.ml.core import ModelTrainingParams
+from matchescu.matching.matchers.ml.deeper import DeepERModule
+from matchescu.matching.matchers.ml.deeper.training import DeepERTrainer, DeepERDataset
 from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
 from matchescu.matching.matchers.ml.deepmatcher.training import (
     DeepMatcherDataset,
@@ -42,6 +44,7 @@ _MODEL_TOKENIZERS = {
 _TRAINER_MAPPINGS: dict[type, tuple[type, type]] = {
     DeepMatcherTrainer: (DeepMatcherModule, DeepMatcherDataset),
     DittoTrainer: (DittoModel, DittoDataset),
+    DeepERTrainer: (DeepERModule, DeepERDataset),
     MultiClassTrainer: (MultiClassModule, AsymmetricMultiClassDataset),
 }
 
@@ -148,6 +151,7 @@ def run_training(
         discovery_packages=[
             f"{MATCHERS_ML_PACKAGE}.ditto.training",
             f"{MATCHERS_ML_PACKAGE}.deepmatcher.training",
+            f"{MATCHERS_ML_PACKAGE}.deeper.training",
             f"{MATCHERS_ML_PACKAGE}.multiclass.training",
         ],
     )
