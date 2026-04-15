@@ -68,7 +68,7 @@ def read_csv(
             if rsrc_col is not None
             else (sources[1] if len(sources) > 1 else lsource)
         )
-        return (RefId(r[lid_col], lsource), RefId(r[rid_col], rsource))
+        return RefId(r[lid_col], str(lsource)), RefId(r[rid_col], str(rsource))
 
     def _is_positive_label(r):
         if label_col is None:

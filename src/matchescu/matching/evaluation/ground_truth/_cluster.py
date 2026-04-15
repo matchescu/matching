@@ -27,6 +27,6 @@ def read_csv(
     for row in df.iter_rows(named=False):
         cluster_id = row[label_col]
         source = row[source_col] if source_col is not None else source_name
-        ref_id = RefId(label=row[id_col], source=source)
+        ref_id = RefId(label=row[id_col], source=str(source))
         clusters[cluster_id].add(ref_id)
     return clusters
