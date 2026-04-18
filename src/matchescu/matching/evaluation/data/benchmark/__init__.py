@@ -12,7 +12,6 @@ from matchescu.matching.evaluation.data.benchmark._magellan import (
     MagellanBenchmarkDataBuilder,
 )
 
-
 __all__ = [
     "BenchmarkData",
     "BenchmarkDataBuilder",

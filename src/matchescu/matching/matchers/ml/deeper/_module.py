@@ -78,8 +78,8 @@ class DeepERModule(nn.Module):
             raise ValueError("lhs and rhs must have the same number of attrs")
         similarities = []
         for lhs, rhs in zip(left_attrs, right_attrs):
-            h_l = self.__compose(**lhs)
-            h_r = self.__compose(**rhs)
+            h_l = self.__compose(lhs["input_ids"], lhs["attention_mask"])
+            h_r = self.__compose(rhs["input_ids"], rhs["attention_mask"])
             diff = torch.abs(h_l - h_r)  # (B, H)
             similarities.append(self._similarity(diff))  # (B, sim_dim)
 

@@ -3,7 +3,6 @@ from matchescu.matching.matchers.probabilistic._fellegi_sunter import FellegiSun
 from matchescu.matching.matchers.ml.ditto import DittoSimilarity
 from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherSimilarity
 
-
 __all__ = [
     "FellegiSunter",
     "PPJoin",

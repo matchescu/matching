@@ -10,7 +10,6 @@ from matchescu.matching.config._dataset_config import (
 )
 from matchescu.matching.config._record_linkage import AttrCmpConfig, RecordLinkageConfig
 
-
 __all__ = [
     "ConfigModel",
     "AnyDatasetConfig",

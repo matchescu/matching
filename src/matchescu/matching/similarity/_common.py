@@ -1,7 +1,6 @@
 from abc import abstractmethod, ABCMeta
 from typing import Any, TypeVar, Protocol, Generic
 
-
 T = TypeVar("T")
 
 

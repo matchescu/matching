@@ -32,7 +32,6 @@ from ._evaluator import BaseEvaluator
 from ._exceptions import ConfigurationError
 from ._registry import CapabilityRegistry
 
-
 # Consts, utilities and classes safe for internal use only
 _STRUCTURAL_KEYS = frozenset(
     {

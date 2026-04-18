@@ -37,7 +37,6 @@ from matchescu.matching.matchers.ml.training._config import (
 from matchescu.matching.matchers.ml.training._dataset import TDataset
 from matchescu.matching.matchers.ml.training._logging import log
 
-
 _MODEL_TOKENIZERS = {
     "microsoft/deberta-v3-base": DebertaV2TokenizerFast.from_pretrained,
 }

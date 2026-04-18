@@ -6,7 +6,6 @@ from matchescu.matching.evaluation.ground_truth._cluster import (
     read_csv as read_clusters_csv,
 )
 
-
 __all__ = [
     "EquivalenceClassPartitioner",
     "read_pairwise_mapping_csv",

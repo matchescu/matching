@@ -21,7 +21,6 @@ from matchescu.matching.similarity._string import (
     LevenshteinSimilarity,
 )
 
-
 __all__ = [
     "T",
     "BoundedNumericDifferenceSimilarity",

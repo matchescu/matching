@@ -1,6 +1,5 @@
 from typing import Generic, Iterable, TypeVar, Hashable
 
-
 T = TypeVar("T", bound=Hashable)
 
 
