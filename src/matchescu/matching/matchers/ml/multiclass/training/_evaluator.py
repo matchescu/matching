@@ -24,7 +24,7 @@ class TrainingEvaluator(
         logger: logging.Logger | None = None,
     ) -> None:
         super().__init__(task_name, xv_data, test_data, tb_log_dir, logger)
-        self._best_mcc = -1.0
+        self._best = -1.0
 
     def _interpret_result(
         self,
@@ -60,6 +60,7 @@ class TrainingEvaluator(
         y_true = torch.cat(y_true).detach().cpu().numpy()
         y_true_rev = y_true.copy()
         y_true_rev[y_true == 2] = 0
+        avg_loss = float(best_config.get("average_loss", 1))
 
         mcc_normal = metrics.matthews_corrcoef(y_true, y_pred)
         mcc_rev = metrics.matthews_corrcoef(y_true_rev, y_pred_rev)
@@ -70,7 +71,8 @@ class TrainingEvaluator(
             return True, best_config
         else:
             success = False
-            if mcc > self._best_mcc:
-                self._best_mcc = mcc
+            current = mcc / avg_loss
+            if current > self._best:
+                self._best = current
                 success = True
             return success, {"dev_mcc": mcc}
