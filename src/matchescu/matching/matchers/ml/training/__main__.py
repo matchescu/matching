@@ -79,8 +79,8 @@ def get_benchmark_data_loaders(
         train_ds.get_data_loader(
             train_params.batch_size, shuffle_training_data, sampler
         ),
-        xv_ds.get_data_loader(train_params.batch_size * 16),
-        test_ds.get_data_loader(train_params.batch_size * 16),
+        xv_ds.get_data_loader(train_params.batch_size * 4),
+        test_ds.get_data_loader(train_params.batch_size * 4),
     )
 
 
