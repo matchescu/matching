@@ -101,21 +101,23 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
             model.eval()
 
             self._log.info("tuning on dev")
-            found_new_best, best_config = self._run_model(model, self._xv_data)
-            if not found_new_best:
-                self._log.info("hyperparameter tuning: no improvements")
-                return found_new_best, best_config
-
-            self._log.info("evaluating on test")
-            best_config[self.__IS_EVAL_KWARG] = True
-            ok, best_config = self._run_model(model, self._test_data, best_config)
-            if not ok:
-                self._log.warning("failed to evaluate model on test")
-                return ok, best_config
-
+            found_new_best, best_config = self._run_model(
+                model, self._xv_data, training_metrics
+            )
             training_metrics.update(best_config)
+            if found_new_best:
+                self._log.info("evaluating on test")
+                best_config[self.__IS_EVAL_KWARG] = True
+                ok, best_config = self._run_model(model, self._test_data, best_config)
+                if ok:
+                    training_metrics.update(best_config)
+                else:
+                    self._log.warning("failed to evaluate model on test")
+                    found_new_best = False
+            else:
+                self._log.info("no improvements")
             self._summary_writer.add_scalars(self._task, training_metrics, epoch)
-            self._log.info("tuning succeeded: %s", self._repr_config(best_config))
+            self._log.info("tuning completed: %s", self._repr_config(best_config))
             return found_new_best, best_config
         finally:
             model.train(prev_training)
