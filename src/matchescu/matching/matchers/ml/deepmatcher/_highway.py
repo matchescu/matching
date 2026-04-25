@@ -37,7 +37,9 @@ class HighwayLayer(nn.Module):
             Transformed tensor of same shape
         """
         batch_size, seq_len, _ = x.shape
-        x_reshaped = x.view(-1, self.input_dim)
+
+        # FIX: Use .reshape() instead of .view() to handle non-contiguous tensors
+        x_reshaped = x.reshape(-1, self.input_dim)
 
         # Transform gate: determines how much of transformed input to use
         T = torch.sigmoid(self.W_T(x_reshaped) + self.b_T)
@@ -49,7 +51,8 @@ class HighwayLayer(nn.Module):
         # Carry connection: how much of original input to preserve
         output = H * T + x_reshaped * (1.0 - T)
 
-        return output.view(batch_size, seq_len, self.input_dim)
+        # FIX: Use .reshape() here as well for safety
+        return output.reshape(batch_size, seq_len, self.input_dim)
 
     def train(self, mode: bool = True) -> "HighwayLayer":
         self.W_T.train(mode)

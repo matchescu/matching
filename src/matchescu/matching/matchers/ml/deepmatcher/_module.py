@@ -1,15 +1,15 @@
-"""Hybrid attention entity matching model implementation"""
-
 import torch
 import torch.nn as nn
 
+from ._attention import HybridAttention
 from ._params import DeepMatcherModelTrainingParams
-from ._highway import HighwayNet
-from ._attention import SymmetricAttention
 
 
 class AttributeEncoder(nn.Module):
-    """Encodes a single attribute pair using bidirectional RNN and attention"""
+    """
+    Encodes a single attribute pair using Hybrid attention.
+    Processes the input in both directions.
+    """
 
     def __init__(
         self,
@@ -18,102 +18,86 @@ class AttributeEncoder(nn.Module):
         hidden_size: int = 100,
         dropout: float = 0.2,
     ):
-        """
-        Args:
-            vocab_size: Size of vocabulary
-            embedding_dim: Dimension of embedding vectors
-            hidden_size: Size of RNN hidden state (per direction)
-            dropout: Dropout probability
-        """
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
-        self.bi_gru = nn.GRU(
-            embedding_dim, hidden_size, bidirectional=True, batch_first=True
-        )
-        self.attention = SymmetricAttention(hidden_size)
-        self.highway = HighwayNet(16 * hidden_size, num_layers=2, dropout=dropout)
         self.dropout = nn.Dropout(dropout)
         self.hidden_size = hidden_size
+        self.rnn1 = nn.GRU(
+            embedding_dim, hidden_size, bidirectional=True, batch_first=True
+        )
+        self.rnn2 = nn.GRU(
+            embedding_dim, hidden_size, bidirectional=True, batch_first=True
+        )
+        # Attention modules for each direction
+        self.attn_lr = HybridAttention(self.rnn1, self.rnn2, hidden_size, dropout)
+        self.attn_rl = HybridAttention(self.rnn1, self.rnn2, hidden_size, dropout)
+        self._device = None
 
     def forward(
         self,
         left_tokens: torch.Tensor,
         right_tokens: torch.Tensor,
-        return_features: bool = False,
-    ) -> torch.Tensor:
-        """
-        Args:
-            left_tokens: Token indices for left entity (batch, seq_len)
-            right_tokens: Token indices for right entity (batch, seq_len)
-            return_features: If True, return intermediate features instead of score
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        left_emb = self.dropout(self.embedding(left_tokens))  # (batch, L, embed)
+        right_emb = self.dropout(self.embedding(right_tokens))  # (batch, R, embed)
 
-        Returns:
-            Match scores or intermediate features
-        """
-        # Embedding and encoding
-        left_emb = self.dropout(self.embedding(left_tokens))
-        right_emb = self.dropout(self.embedding(right_tokens))
+        # Both directions
+        s1 = self.attn_lr(left_emb, right_emb)  # (batch, 6h) — left as primary
+        s2 = self.attn_rl(right_emb, left_emb)  # (batch, 6h) — right as primary
 
-        left_encoded, _ = self.bi_gru(left_emb)  # (batch, L, 2*hidden)
-        right_encoded, _ = self.bi_gru(right_emb)  # (batch, R, 2*hidden)
-
-        # Create symmetric comparison features
-        comparison = self.attention(left_encoded, right_encoded)
-
-        # Transform with Highway Network
-        transformed = self.highway(comparison)
-
-        # Aggregate through max pooling
-        aggregated, _ = torch.max(transformed, dim=1)  # (batch, 16*hidden)
-
-        if return_features:
-            return aggregated
-
-        # Final classification (will be handled by MultiAttributeMatcher)
-        return aggregated
+        return s1, s2  # return separately for attribute comparison
 
     def train(self, mode: bool = True) -> "AttributeEncoder":
         self.embedding.train(mode)
-        self.bi_gru.train(mode)
-        self.attention.train(mode)
-        self.highway.train(mode)
         self.dropout.train(mode)
+        self.rnn1.train(mode)
+        self.rnn2.train(mode)
+        self.attn_lr.train(mode)
+        self.attn_rl.train(mode)
         return self
 
-    def eval(self):
+    def eval(self) -> "AttributeEncoder":
         self.to(torch.device("cpu"))
         self.embedding.eval()
-        self.bi_gru.eval()
-        self.attention.eval()
-        self.highway.eval()
         self.dropout.eval()
+        self.rnn1.eval()
+        self.rnn2.eval()
+        self.attn_lr.eval()
+        self.attn_rl.eval()
+        return self
 
-    def to(self, device: str | torch.device) -> None:
+    def to(self, device: str | torch.device) -> "AttributeEncoder":
         super().to(device)
-        self.embedding.to(device)
-        self.bi_gru.to(device)
-        self.attention.to(device)
-        self.highway.to(device)
-        self.dropout.to(device)
+        self._device = (
+            device if isinstance(device, torch.device) else torch.device(device)
+        )
+        self.embedding.to(self._device)
+        self.dropout.to(self._device)
+        self.rnn1.to(self._device)
+        self.rnn2.to(self._device)
+        self.attn_lr.to(self._device)
+        self.attn_rl.to(self._device)
+        return self
 
 
 class DeepMatcherModule(nn.Module):
-    """Main entity matching model supporting multiple attributes"""
+    """Main entity matching model supporting multiple attributes."""
 
     def __init__(self, params: DeepMatcherModelTrainingParams):
         super().__init__()
         self.num_attributes = params.num_attributes
+        rnn_out = 2 * params.hidden_size
+        summary_dim = 3 * rnn_out  # 6h per direction
 
-        # Shared encoder for all attributes (parameter sharing)
         self.attribute_encoder = AttributeEncoder(
             params.vocab_size, params.embedding_dim, params.hidden_size, params.dropout
         )
+        # Each attribute contributes 3 * summary_dim = 3 * 6h = 18h
+        attr_compare_dim = 3 * summary_dim  # per attribute
+        total_dim = params.num_attributes * attr_compare_dim
 
-        # Final attribute aggregator
         self.aggregator = nn.Sequential(
-            nn.Linear(
-                params.num_attributes * 16 * params.hidden_size, params.hidden_size
-            ),
+            nn.Linear(total_dim, params.hidden_size),
             nn.ReLU(),
             nn.Dropout(params.dropout),
             nn.Linear(params.hidden_size, 2),
@@ -123,37 +107,21 @@ class DeepMatcherModule(nn.Module):
     def forward(
         self, left_attrs: torch.Tensor, right_attrs: torch.Tensor
     ) -> torch.Tensor:
-        """
-        Args:
-            left_attrs: Left entity attributes (batch, num_attrs, seq_len)
-            right_attrs: Right entity attributes (batch, num_attrs, seq_len)
-
-        Returns:
-            Match scores (batch_size, 2)
-        """
         attr_features = []
 
-        # Process each attribute independently
         for i in range(self.num_attributes):
             left = left_attrs[:, i, :]
             right = right_attrs[:, i, :]
-            features = self.attribute_encoder(left, right, return_features=True)
-            attr_features.append(features)
+            s1, s2 = self.attribute_encoder(left, right)
+            diff = torch.abs(s1 - s2)
+            attr_features.append(torch.cat([s1, s2, diff], dim=1))
 
-        # Concatenate attribute representations
         combined = torch.cat(attr_features, dim=1)
-
-        # Final classification
-        return self.aggregator(combined).squeeze(-1)
+        return self.aggregator(combined)
 
     def train(self, mode: bool = True) -> "DeepMatcherModule":
         self.attribute_encoder.train(mode)
         self.aggregator.train(mode)
-        if not mode and self._device is not None:
-            if self._device.type == "mps":
-                torch.mps.empty_cache()
-            elif self._device.type == "cuda":
-                torch.cuda.empty_cache()
         return self
 
     def eval(self):
