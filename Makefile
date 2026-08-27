@@ -45,7 +45,7 @@ re-tag: check-deps
 bump-version: check-deps
 	@poetry version $(PART)
 	@VERSION=$$(poetry version -s); \
-	git add pyproject.toml; \
+	git add pyproject.toml poetry.lock; \
 	git commit -m "Bump version to $$VERSION";
 
 # Targets for different version increments
