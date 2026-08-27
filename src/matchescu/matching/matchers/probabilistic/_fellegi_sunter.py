@@ -10,18 +10,20 @@ class for details on how this is accomplished.
 from __future__ import annotations
 
 import pickle
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import partial
-from typing import Dict, Iterable, Any, Optional
+from typing import Any
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
-
-from matchescu.matching.config import RecordLinkageConfig
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable
-from matchescu.typing import EntityReferenceIdentifier as RefId, EntityReference
+from matchescu.typing import EntityReference
+from matchescu.typing import EntityReferenceIdentifier as RefId
+
+from matchescu.matching.config import RecordLinkageConfig
 
 
 @dataclass(frozen=True)
@@ -69,8 +71,8 @@ class FellegiSunter:
         config: RecordLinkageConfig,
         mu: float = 0.01,
         lambda_: float = 0.01,
-        parameters: Optional[FSParameters] = None,
-        thresholds: Optional[FSThresholds] = None,
+        parameters: FSParameters | None = None,
+        thresholds: FSThresholds | None = None,
     ):
         self._config = config
         self._cmp_config = self._config.col_comparison_config
@@ -106,7 +108,7 @@ class FellegiSunter:
         id_table: IdTable,
         ground_truth: set[tuple[RefId, RefId]],
         smooth: float = 1e-6,
-    ) -> "FellegiSunter":
+    ) -> FellegiSunter:
         """Compute the parameters and thresholds defined in the F-S model.
 
         :param comparison_space: a list of pairs of IDs to compare
@@ -307,7 +309,7 @@ class FellegiSunter:
 
         return pa.table(columnar_mapping)
 
-    def __compute_row_score(self, level_indices_in_row: Dict[str, int]) -> float:
+    def __compute_row_score(self, level_indices_in_row: dict[str, int]) -> float:
         s = 0.0
         for col_name, raw_level in level_indices_in_row.items():
             stats = self._params.comparison_stats[col_name]

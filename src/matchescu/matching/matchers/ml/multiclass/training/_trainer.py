@@ -1,20 +1,21 @@
+from collections.abc import Iterable
 from os import PathLike
 from pathlib import Path
-from typing import Any, Iterable, cast
+from typing import Any, cast
 
 import torch
 from torch import Tensor
+from torch.functional import F
 from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
-from torch.functional import F
 from torch.optim import Optimizer
 from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 
 from matchescu.matching.matchers.ml.training import BaseTrainer
 
-from .._module import MultiClassModule
 from .._loss import FocalLoss
+from .._module import MultiClassModule
 from .._params import MultiClassTrainingParams
 from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset

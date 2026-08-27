@@ -1,11 +1,11 @@
 from typing import cast
 
 import torch
-import torch.nn as nn
+from torch import nn
 from transformers import AutoModel, BertModel
 
-from ._params import MultiClassTrainingParams
 from ._classifier import ClassificationHead
+from ._params import MultiClassTrainingParams
 
 
 class MultiClassModule(nn.Module):

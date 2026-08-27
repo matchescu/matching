@@ -1,18 +1,19 @@
 import random
+from typing import ClassVar
 
 import numpy as np
 import torch
-from transformers import PreTrainedTokenizerFast, BatchEncoding
+from matchescu.reference_store.id_table import IdTable
+from transformers import BatchEncoding, PreTrainedTokenizerFast
 
 from matchescu.matching.evaluation.data.splits._split import Split
-from matchescu.reference_store.id_table import IdTable
 
-from .._encoder import to_ditto_text
 from ...training import MatchescuDataset
+from .._encoder import to_ditto_text
 
 
 class AsymmetricMultiClassDataset(MatchescuDataset):
-    _LABEL_SWAP = {0: 0, 1: 1, 2: 3, 3: 2}
+    _LABEL_SWAP: ClassVar[dict[int, int]] = {0: 0, 1: 1, 2: 3, 3: 2}
 
     def __init__(
         self,

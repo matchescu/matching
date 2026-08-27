@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from logging import Logger, getLogger
 from os import PathLike
 from pathlib import Path
-from typing import ClassVar, Type, Any, Generic, cast, Iterable
+from typing import Any, ClassVar, Generic, cast
 
 import torch
 from torch import Tensor
@@ -17,6 +18,7 @@ from matchescu.matching.matchers.ml.core import (
     TModel,
     TParams,
 )
+
 from ._dataset import TDataset
 from ._evaluator import BaseEvaluator
 from ._registry import CapabilityRegistry
@@ -32,7 +34,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     """
 
     capability: ClassVar[str] = ""
-    hyperparams_schema: ClassVar[Type[ModelTrainingParams]] = ModelTrainingParams
+    hyperparams_schema: ClassVar[type[ModelTrainingParams]] = ModelTrainingParams
 
     def __init__(
         self, task: str, hyper_params: TParams, model_dir: str | PathLike, **kwargs: Any
@@ -144,7 +146,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
     ) -> Any:
-        return loss_fn(*map(lambda x: x.float(), tensors))
+        return loss_fn(*(x.float() for x in tensors))
 
     def run_training(
         self,

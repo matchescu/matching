@@ -1,7 +1,7 @@
 """Hybrid attention entity matching model implementation"""
 
 import torch
-import torch.nn as nn
+from torch import nn
 from transformers import BertModel
 
 from ._params import DeepERParams

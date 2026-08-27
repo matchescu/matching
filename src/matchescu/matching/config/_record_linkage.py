@@ -2,7 +2,8 @@ from dataclasses import dataclass
 from typing import Generic
 
 from matchescu.extraction import Traits
-from matchescu.matching.similarity import T, Similarity
+
+from matchescu.matching.similarity import Similarity, T
 
 
 @dataclass

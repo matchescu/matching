@@ -5,17 +5,16 @@ import os
 import random
 import sys
 from collections import Counter, defaultdict
-from typing import Optional
 
 import numpy as np
 import polars as pl
-
-from matchescu.extraction import Traits, single_record, RecordExtraction
+from matchescu.extraction import RecordExtraction, Traits, single_record
 from matchescu.extraction.csv import CsvFile
-from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
-from matchescu.typing import EntityReferenceIdentifier, EntityReference
+from matchescu.typing import EntityReference, EntityReferenceIdentifier
+
+from matchescu.matching.evaluation.data.splits._split import Split
 
 DIRECTED_CLASSES: list[int] = [0, 1, 2, 3]
 UNDIRECTED_CLASSES: list[int] = [0, 1]
@@ -36,12 +35,12 @@ class SplitGenerator:
 
     def __init__(
         self,
-        split_ratio: dict[str, int] = None,
+        split_ratio: dict[str, int] | None = None,
         neg_pos_ratio: float = 5.0,
         match_bridge_ratio: float = 2.0,
-        max_total_samples: Optional[int] = None,
+        max_total_samples: int | None = None,
         seed: int = 42,
-        log: Optional[logging.Logger] = None,
+        log: logging.Logger | None = None,
     ) -> None:
         """Initialize `SplitGenerator`.
 
@@ -112,7 +111,7 @@ class SplitGenerator:
         self._log.info(
             "Known matching pairs (non-zero class): %d", len(self._matcher_gt)
         )
-        pos_classes = list(sorted(set(self._matcher_gt.values()) - {0}))
+        pos_classes = sorted(set(self._matcher_gt.values()) - {0})
         by: dict[int, list[tuple]] = defaultdict(list)
         for cmp, c in self._matcher_gt.items():
             by[c].append(cmp)
@@ -125,13 +124,13 @@ class SplitGenerator:
         if len(bridge_class_counts) > 0:
             bridge_max = max([1, *bridge_class_counts])
             n1_target = self._clamp(
-                int(round(self.match_bridge_ratio * bridge_max)), pos_class_counts[1]
+                round(self.match_bridge_ratio * bridge_max), pos_class_counts[1]
             )
         else:
             n1_target = pos_class_counts[1]
 
         total_pos = n1_target + sum(bridge_class_counts)
-        n0_target = max(MIN_PER_CLASS, int(round(self.neg_pos_ratio * total_pos)))
+        n0_target = max(MIN_PER_CLASS, round(self.neg_pos_ratio * total_pos))
 
         # ── apply max_total_samples cap ──
         raw_targets = {
@@ -147,9 +146,7 @@ class SplitGenerator:
                 case 1:
                     self._log.info("target class 1: %d (from %d)", n, raw_targets[1])
                 case _:
-                    self._log.info(
-                        "target class %d: %d (available %d)", c, n, raw_targets[c]
-                    )
+                    self._log.info("target class %d: %d (available %d)", c, n, n)
 
         samples = {1: self._select_diverse(by[1], targets[1])}
         for c, n in targets.items():

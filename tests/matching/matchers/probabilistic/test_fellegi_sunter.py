@@ -1,8 +1,8 @@
 import pytest
-
-from matchescu.matching.config import RecordLinkageConfig
-import matchescu.matching.matchers as m
 from matchescu.typing import EntityReferenceIdentifier
+
+import matchescu.matching.matchers as m
+from matchescu.matching.config import RecordLinkageConfig
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ def test_amazon_google(amazon_google, amazon_google_config):
     matching_ref_ids = set(map(_get_ref_ids, result))
     clerical_ref_ids = set(map(_get_ref_ids, fs.clerical_review))
 
-    from pyresolvemetrics import precision, recall, f1
+    from pyresolvemetrics import f1, precision, recall
 
     gt = set(amazon_google.test_split.matcher_labels) - clerical_ref_ids
     results = {

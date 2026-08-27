@@ -1,18 +1,17 @@
+from collections.abc import Iterable
+
 import torch
-from typing import Iterable
-
-from transformers import AutoTokenizer, PreTrainedTokenizerBase, BatchEncoding
-
 from matchescu.data import Record
-from matchescu.matching.evaluation.data.splits._split import Split
-from matchescu.matching.matchers.ml.training import MatchescuDataset
 from matchescu.reference_store.id_table import IdTable
 from matchescu.typing import EntityReferenceIdentifier
+from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizerBase
 
+from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.matchers.ml.deeper._encoder import (
-    to_deeper_repr,
     ensure_attr_map,
+    to_deeper_repr,
 )
+from matchescu.matching.matchers.ml.training import MatchescuDataset
 
 
 class DeepERDataset(MatchescuDataset):
@@ -25,8 +24,8 @@ class DeepERDataset(MatchescuDataset):
         id_table: IdTable,
         split: Split,
         tokenizer: PreTrainedTokenizerBase = None,
-        attr_map: dict[str, str] = None,
-        exclude_from_comparison: Iterable[str | int] = None,
+        attr_map: dict[str, str] | None = None,
+        exclude_from_comparison: Iterable[str | int] | None = None,
         max_len: int = 30,
     ):
         super().__init__(id_table, split)

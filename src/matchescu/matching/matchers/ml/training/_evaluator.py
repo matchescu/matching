@@ -3,10 +3,11 @@ from abc import abstractmethod
 from contextlib import AbstractContextManager
 from os import PathLike
 from pathlib import Path
-from typing import ClassVar, Any, Generic
+from typing import Any, ClassVar, Generic
 
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from typing_extensions import Self
 
 from matchescu.matching.matchers.ml.core import TModel
 
@@ -75,7 +76,6 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
 
         :return: a boolean and a dict containing the model's best configuration.
         """
-        pass
 
     @classmethod
     def _repr_config(cls, value: dict) -> str:
@@ -122,7 +122,7 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
         finally:
             model.train(prev_training)
 
-    def __enter__(self) -> "BaseEvaluator":
+    def __enter__(self) -> Self:
         if self._summary_writer is not None:
             return self
         self._summary_writer = SummaryWriter(log_dir=str(self._tb_log_dir))

@@ -1,5 +1,5 @@
 from os import PathLike
-from typing import Literal, Annotated, Union
+from typing import Annotated, Literal
 
 from pydantic import Field
 
@@ -65,6 +65,6 @@ class CsvBenchmarkDataConfig(BenchmarkDataConfig):
 
 
 AnyDatasetConfig = Annotated[
-    Union[MagellanBenchmarkDataConfig, CsvBenchmarkDataConfig],
+    MagellanBenchmarkDataConfig | CsvBenchmarkDataConfig,
     Field(discriminator="type"),
 ]

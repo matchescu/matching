@@ -1,13 +1,13 @@
-from abc import abstractmethod, ABCMeta
-from typing import Any, Optional, TypeVar, Generic
+from abc import ABCMeta, abstractmethod
+from typing import Any, Generic, TypeVar
 
 from matchescu.matching.attribute._match_result import (
-    TernaryResult,
     BinaryResult,
+    TernaryResult,
 )
 from matchescu.matching.similarity._common import Similarity
 
-TResult = TypeVar("TResult", contravariant=True)
+TResult = TypeVar("TResult", contravariant=True)  # noqa: PLC0105
 
 
 class SimilarityMatch(Generic[TResult]):
@@ -21,10 +21,9 @@ class SimilarityMatch(Generic[TResult]):
 
         Use the ``self.similarity`` property to access the computed similarity.
         """
-        pass
 
     @abstractmethod
-    def _handle_missing_data(self, a: Any, b: Any) -> Optional[TResult]:
+    def _handle_missing_data(self, a: Any, b: Any) -> TResult | None:
         """Provide a match result for missing data.
 
         If not applicable, simply return ``None``.
@@ -50,7 +49,7 @@ class BinarySimilarityMatch(SimilarityMatch[BinaryResult], metaclass=ABCMeta):
     work with binary valued features.
     """
 
-    def _handle_missing_data(self, a: Any, b: Any) -> Optional[BinaryResult]:
+    def _handle_missing_data(self, a: Any, b: Any) -> BinaryResult | None:
         if a is None and b is None:
             return BinaryResult.Negative
         return None
@@ -63,7 +62,7 @@ class TernarySimilarityMatch(SimilarityMatch[TernaryResult], metaclass=ABCMeta):
     it to handle the case when there's missing data.
     """
 
-    def _handle_missing_data(self, a: Any, b: Any) -> Optional[TResult]:
+    def _handle_missing_data(self, a: Any, b: Any) -> TResult | None:
         if a is None and b is None:
             return TernaryResult.NoComparisonData
         return None
@@ -126,5 +125,5 @@ class RawMatch(SimilarityMatch[float]):
     def _to_match_result(self) -> float:
         return self.similarity
 
-    def _handle_missing_data(self, a: Any, b: Any) -> Optional[float]:
+    def _handle_missing_data(self, a: Any, b: Any) -> float | None:
         return None  # defer handling to the similarity function

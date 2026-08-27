@@ -35,9 +35,7 @@ class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPA
         thresholds = np.arange(0.0, 1.0, 0.05)
         predictions = (probabilities[:, None] > thresholds).astype(int)
         f1_scores = np.fromiter(
-            itertools.starmap(
-                metrics.f1_score, zip(itertools.repeat(labels), predictions.T)
-            ),
+            map(metrics.f1_score, itertools.repeat(labels), predictions.T),
             dtype=np.float32,
         )
         best_idx = np.argmax(f1_scores)
@@ -51,7 +49,7 @@ class TrainingEvaluator(BaseEvaluator[DittoModel, DittoDataset], capability=CAPA
         best_config: dict | None = None,
     ) -> tuple[bool, dict]:
 
-        batch_results = map(lambda b: (torch.sigmoid(model(b[0])), b[1]), data_loader)
+        batch_results = ((torch.sigmoid(model(b[0])), b[1]) for b in data_loader)
         all_probs, all_y = zip(*batch_results)
         all_probs = torch.cat(all_probs).detach().cpu().numpy()
         all_y = torch.cat(all_y).detach().cpu().numpy()

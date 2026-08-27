@@ -1,10 +1,10 @@
-from typing import Callable, Optional
+from collections.abc import Callable
 
 try:
     from ppjoin import ppjoin
 except ImportError:
 
-    class ppjoin(object):
+    class ppjoin:
         @staticmethod
         def whitespace_tokenizer(_):
             return []
@@ -16,14 +16,14 @@ except ImportError:
 
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable
-from matchescu.typing import EntityReferenceIdentifier, EntityReference
+from matchescu.typing import EntityReference, EntityReferenceIdentifier
 
 
-class PPJoin(object):
+class PPJoin:
     def __init__(
         self,
         threshold: float,
-        ref_flattener: Optional[Callable[[EntityReference], str]] = None,
+        ref_flattener: Callable[[EntityReference], str] | None = None,
     ) -> None:
         if not isinstance(threshold, float) or 0 > threshold or threshold > 1:
             raise ValueError(f"'{threshold}' is not a valid Jaccard threshold")
@@ -43,16 +43,14 @@ class PPJoin(object):
         self, id_pairs: BinaryComparisonSpace, id_table: IdTable
     ) -> set[tuple[EntityReferenceIdentifier, EntityReferenceIdentifier]]:
         refs = list(map(id_table.get_all, id_pairs))
-        tokenized_refs = list(
-            (self._tokenizer(e1), self._tokenizer(e2)) for e1, e2 in refs
-        )
+        tokenized_refs = [(self._tokenizer(e1), self._tokenizer(e2)) for e1, e2 in refs]
         datasets = list(map(list, zip(*tokenized_refs)))
         ppjoin_result = ppjoin.join(datasets, self.__t)
         id_pairs_check = set(id_pairs)
-        result = set(
+        result = {
             id_pair
             for (l_src, l_id), (r_src, r_id) in ppjoin_result
             if (id_pair := (refs[l_id][l_src].id, refs[r_id][r_src].id))
             in id_pairs_check
-        )
+        }
         return result

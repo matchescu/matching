@@ -6,6 +6,7 @@ from torch.nn.modules.loss import _Loss
 from torch.utils.data import DataLoader
 
 from matchescu.matching.matchers.ml.training import BaseTrainer, TDataset
+
 from .._module import DeepMatcherModule
 from .._params import DeepMatcherModelTrainingParams
 from ._dataset import DeepMatcherDataset

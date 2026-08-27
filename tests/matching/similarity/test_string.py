@@ -1,9 +1,9 @@
 import pytest
 
 from matchescu.matching.similarity import (
+    Jaccard,
     Jaro,
     JaroWinkler,
-    Jaccard,
     LevenshteinSimilarity,
 )
 

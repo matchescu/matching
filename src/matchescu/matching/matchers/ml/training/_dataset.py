@@ -1,11 +1,12 @@
 from abc import abstractmethod
-from typing import Sized, TypeVar
+from collections.abc import Sized
+from typing import TypeVar
 
 import numpy as np
-from torch.utils.data import Dataset, DataLoader, Sampler, WeightedRandomSampler
+from matchescu.reference_store.id_table import IdTable
+from torch.utils.data import DataLoader, Dataset, Sampler, WeightedRandomSampler
 
 from matchescu.matching.evaluation.data.splits import Split
-from matchescu.reference_store.id_table import IdTable
 
 
 class MatchescuDataset(Dataset, Sized):

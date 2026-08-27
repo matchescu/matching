@@ -3,18 +3,18 @@ from os import PathLike, curdir
 from pathlib import Path
 
 import torch
+from matchescu.similarity import MatchResult
+from matchescu.typing import EntityReference
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.matchers.ml.core import AdditionalModelInfo
-from matchescu.matching.matchers.ml.ditto._module import DittoModel
 from matchescu.matching.matchers.ml.ditto._encoder import to_ditto_text
+from matchescu.matching.matchers.ml.ditto._module import DittoModel
 from matchescu.matching.matchers.ml.ditto._params import DittoModelTrainingParams
 from matchescu.matching.matchers.ml.ditto.training._evaluator import TrainingEvaluator
 from matchescu.matching.matchers.ml.transformers import (
     suppress_transformer_modeling_utils_warnings,
 )
-from matchescu.similarity import MatchResult
-from matchescu.typing import EntityReference
 
 
 class DittoSimilarity:

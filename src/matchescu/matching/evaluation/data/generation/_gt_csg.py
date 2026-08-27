@@ -1,13 +1,13 @@
 import logging
 import math
 import random
+from collections import Counter
+from collections.abc import Iterable
 from os import PathLike
-from typing import Optional, Counter, Iterable
+from typing import ClassVar
 
 import numpy as np
 import polars as pl
-
-from matchescu.matching.evaluation.ground_truth import EquivalenceClassPartitioner
 from matchescu.reference_store.comparison_space import (
     BinaryComparisonSpace,
     InMemoryComparisonSpace,
@@ -15,10 +15,12 @@ from matchescu.reference_store.comparison_space import (
 from matchescu.reference_store.id_table import IdTable
 from matchescu.typing import EntityReferenceIdentifier as RefId
 
+from matchescu.matching.evaluation.ground_truth import EquivalenceClassPartitioner
 
-class GroundTruthComparisonSpaceGenerator(object):
-    DIRECTED_CLASSES: list[int] = [0, 1, 2, 3]
-    UNDIRECTED_CLASSES: list[int] = [0, 1]
+
+class GroundTruthComparisonSpaceGenerator:
+    DIRECTED_CLASSES: ClassVar[list[int]] = [0, 1, 2, 3]
+    UNDIRECTED_CLASSES: ClassVar[list[int]] = [0, 1]
     MIN_PER_CLASS: int = 3
 
     def __init__(
@@ -29,10 +31,10 @@ class GroundTruthComparisonSpaceGenerator(object):
         excluded: Iterable[tuple[RefId, RefId]] | None = None,
         neg_pos_ratio: float = 5.0,
         match_bridge_ratio: float = 2.0,
-        max_total_samples: Optional[int] = None,
+        max_total_samples: int | None = None,
         seed: int = 42,
         save: bool = True,
-        log: Optional[logging.Logger] = None,
+        log: logging.Logger | None = None,
     ) -> None:
         """Initialize `GroundTruthComparisonSpaceGenerator`.
 
@@ -123,7 +125,7 @@ class GroundTruthComparisonSpaceGenerator(object):
         self._log.info(
             "Known matching pairs (non-zero class): %d", len(self._matcher_gt)
         )
-        pos_classes = list(sorted(set(self._matcher_gt.values()) - {0}))
+        pos_classes = sorted(set(self._matcher_gt.values()) - {0})
         by: dict[int, list[tuple]] = {}
         for cmp, c in self._matcher_gt.items():
             by.setdefault(c, []).append(cmp)
@@ -137,13 +139,13 @@ class GroundTruthComparisonSpaceGenerator(object):
         if len(bridge_class_counts) > 0:
             bridge_max = max([1, *bridge_class_counts])
             n1_target = self._clamp(
-                int(round(self.match_bridge_ratio * bridge_max)), pos_class_counts[1]
+                round(self.match_bridge_ratio * bridge_max), pos_class_counts[1]
             )
         else:
             n1_target = pos_class_counts[1]
 
         total_pos = n1_target + sum(bridge_class_counts)
-        n0_target = max(self.MIN_PER_CLASS, int(round(self.neg_pos_ratio * total_pos)))
+        n0_target = max(self.MIN_PER_CLASS, round(self.neg_pos_ratio * total_pos))
 
         # ── apply max_total_samples cap ──
         raw_targets = {
@@ -159,9 +161,7 @@ class GroundTruthComparisonSpaceGenerator(object):
                 case 1:
                     self._log.info("target class 1: %d (from %d)", n, raw_targets[1])
                 case _:
-                    self._log.info(
-                        "target class %d: %d (available %d)", c, n, raw_targets[c]
-                    )
+                    self._log.info("target class %d: %d (available %d)", c, n, n)
         samples = {1: self._select_diverse(by[1], targets[1])}
         for c, n in targets.items():
             if c < 2:
@@ -172,7 +172,7 @@ class GroundTruthComparisonSpaceGenerator(object):
         samples.update({0: self._generate_negatives(targets[0], exclude)})
 
         comparison_space = InMemoryComparisonSpace()
-        for label, items in samples.items():
+        for items in samples.values():
             for left_id, right_id in items:
                 comparison_space.put(left_id, right_id)
 

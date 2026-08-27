@@ -1,17 +1,17 @@
 import copy
 from dataclasses import dataclass, field
-from typing import Set
 
 from matchescu.reference_store.comparison_space import BinaryComparisonSpace
 from matchescu.reference_store.id_table import IdTable
-from matchescu.typing import EntityReferenceIdentifier as RefId, EntityReference as Ref
+from matchescu.typing import EntityReference as Ref
+from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
 @dataclass(eq=True, unsafe_hash=True)
 class Split:
     comparison_space: BinaryComparisonSpace
     matcher_labels: dict[tuple[RefId, RefId], int]
-    gt_clusters: dict[int, Set[RefId]]
+    gt_clusters: dict[int, set[RefId]]
     id_cluster_map: dict[RefId, int] = field(default_factory=dict, init=False)
 
     def __post_init__(self):

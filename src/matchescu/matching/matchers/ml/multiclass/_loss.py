@@ -1,8 +1,6 @@
-from typing import Optional
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
+from torch import Tensor, nn
 from torch.nn.modules.loss import _Loss
 
 
@@ -27,7 +25,7 @@ class FocalLoss(_Loss):
 
     def __init__(
         self,
-        alpha: Optional[Tensor] = None,
+        alpha: Tensor | None = None,
         gamma: float = 2.0,
         reduction: str = "mean",
         ignore_index: int = -100,

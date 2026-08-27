@@ -1,7 +1,6 @@
-from typing import Union
+from unittest.mock import MagicMock, call
 
 import pytest
-from unittest.mock import MagicMock, call
 
 from matchescu.matching.similarity._bucketed import BucketedSimilarity
 from matchescu.matching.similarity._common import Similarity
@@ -33,7 +32,7 @@ def buckets_list() -> list[float]:
 
 
 @pytest.fixture
-def mock_sim(request) -> Union[Similarity[float], MagicMock]:
+def mock_sim(request) -> Similarity[float] | MagicMock:
     return_value = 0.0
     if hasattr(request, "param"):
         return_value = float(request.param)

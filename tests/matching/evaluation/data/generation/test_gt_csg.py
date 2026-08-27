@@ -1,13 +1,12 @@
-import pytest
-
 import numpy as np
+import pytest
+from matchescu.reference_store.id_table import IdTable
+from matchescu.typing import EntityReferenceIdentifier as RefId
 
 from matchescu.matching.evaluation.data.benchmark import CsvBenchmarkData
 from matchescu.matching.evaluation.data.generation._gt_csg import (
     GroundTruthComparisonSpaceGenerator,
 )
-from matchescu.reference_store.id_table import IdTable
-from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
 @pytest.fixture
@@ -411,8 +410,8 @@ def test_write_comparisons_csv(id_table, undirected_ground_truth, cluster_gt, tm
 
 
 def test_save_disabled_returns_empty_df(csg_binary):
-    from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
     import polars as pl
+    from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 
     cs = InMemoryComparisonSpace()
     df_cmp = csg_binary._write_comparisons_csv(cs, None)
@@ -428,14 +427,14 @@ def test_true_matches_property(csg_binary, undirected_ground_truth):
 
 
 def test_reproducibility_with_same_seed(id_table, undirected_ground_truth, cluster_gt):
-    kwargs = dict(
-        id_table=id_table,
-        matcher_gt=undirected_ground_truth,
-        cluster_gt=cluster_gt,
-        neg_pos_ratio=2.0,
-        seed=99,
-        save=False,
-    )
+    kwargs = {
+        "id_table": id_table,
+        "matcher_gt": undirected_ground_truth,
+        "cluster_gt": cluster_gt,
+        "neg_pos_ratio": 2.0,
+        "seed": 99,
+        "save": False,
+    }
     cs1 = list(GroundTruthComparisonSpaceGenerator(**kwargs)())
     cs2 = list(GroundTruthComparisonSpaceGenerator(**kwargs)())
     assert cs1 == cs2
@@ -444,13 +443,13 @@ def test_reproducibility_with_same_seed(id_table, undirected_ground_truth, clust
 def test_different_seeds_produce_different_negatives(
     id_table, undirected_ground_truth, cluster_gt
 ):
-    kwargs = dict(
-        id_table=id_table,
-        matcher_gt=undirected_ground_truth,
-        cluster_gt=cluster_gt,
-        neg_pos_ratio=2.0,
-        save=False,
-    )
+    kwargs = {
+        "id_table": id_table,
+        "matcher_gt": undirected_ground_truth,
+        "cluster_gt": cluster_gt,
+        "neg_pos_ratio": 2.0,
+        "save": False,
+    }
     cs1 = set(GroundTruthComparisonSpaceGenerator(seed=1, **kwargs)())
     cs2 = set(GroundTruthComparisonSpaceGenerator(seed=999, **kwargs)())
     # The positive pairs overlap, but negatives should differ

@@ -1,20 +1,20 @@
 import itertools
 from os import PathLike
 from pathlib import Path
-from typing import cast
+from typing import ClassVar, cast
 
 import polars as pl
-
 from matchescu.extraction import Traits
 from matchescu.extraction.csv import CsvRecordExtraction
+from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
+from matchescu.typing import EntityReferenceIdentifier as RefId
+
 from matchescu.matching.config import MagellanBenchmarkDataConfig, TraitConfig
 from matchescu.matching.evaluation.data.benchmark import BenchmarkDataBuilder
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 from matchescu.matching.evaluation.data.benchmark._config_adapters import get_traits
 from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.evaluation.ground_truth import EquivalenceClassPartitioner
-from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
-from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
 class MagellanBenchmarkData(BenchmarkData):
@@ -125,7 +125,7 @@ class MagellanBenchmarkData(BenchmarkData):
 
 
 class MagellanTraits:
-    __TRAIT_DICT = {
+    __TRAIT_DICT: ClassVar[dict] = {
         "ABT-BUY": Traits().string(["name", "description"]).currency(["price"]),
         "AMAZON-GOOGLE": Traits().string(["title", "manufacturer"]).currency(["price"]),
         "BEER": Traits().string(["Beer_Name", "Brew_Factory_Name", "Style"]),

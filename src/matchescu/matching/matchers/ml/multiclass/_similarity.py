@@ -3,6 +3,8 @@ from os import PathLike, curdir
 from pathlib import Path
 
 import torch
+from matchescu.similarity import MatchResult
+from matchescu.typing import EntityReference
 from torch.distributions.utils import logits_to_probs
 from transformers import PreTrainedTokenizerFast
 
@@ -10,8 +12,6 @@ from matchescu.matching.matchers.ml.core import AdditionalModelInfo
 from matchescu.matching.matchers.ml.transformers import (
     suppress_transformer_modeling_utils_warnings,
 )
-from matchescu.similarity import MatchResult
-from matchescu.typing import EntityReference
 
 from ._encoder import to_ditto_text
 from ._module import MultiClassModule

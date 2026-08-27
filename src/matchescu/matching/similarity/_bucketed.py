@@ -1,6 +1,6 @@
 from bisect import bisect_left
-from collections.abc import Collection
-from typing import Union, Mapping, Iterable, Any
+from collections.abc import Collection, Iterable, Mapping
+from typing import Any
 
 from matchescu.matching.similarity._common import Similarity
 
@@ -29,7 +29,7 @@ class BucketedSimilarity(Similarity[float]):
     def __init__(
         self,
         wrapped: Similarity[float],
-        buckets: Union[Mapping[float, float], Iterable[float]],
+        buckets: Mapping[float, float] | Iterable[float],
         catch_all: float = 0.0,
         missing_both: float = -1.0,
         missing_either: float = -0.5,

@@ -4,9 +4,8 @@ a tokenizer of choice. Our implementation uses ``PreTrainedTokenizerBase`` from
 the ``transformers`` library.
 """
 
-from transformers import PreTrainedTokenizerBase, BatchEncoding
-
 from matchescu.typing import EntityReference
+from transformers import BatchEncoding, PreTrainedTokenizerBase
 
 
 def ensure_attr_map(

@@ -1,4 +1,5 @@
 from matchescu.extraction import Traits
+
 from matchescu.matching.config import TraitConfig
 
 

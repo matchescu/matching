@@ -1,18 +1,18 @@
+from collections.abc import Iterable
 from os import PathLike
 from pathlib import Path
-from typing import Iterable
 
 import torch
+from matchescu.similarity import MatchResult
+from matchescu.typing import EntityReference
 from torch.distributions.utils import logits_to_probs
 from transformers import PreTrainedTokenizerBase
 
 from matchescu.matching.matchers.ml.core import AdditionalModelInfo
 from matchescu.matching.matchers.ml.deepmatcher._encoder import (
-    to_deepmatcher_repr,
     ensure_attr_map,
+    to_deepmatcher_repr,
 )
-from matchescu.similarity import MatchResult
-from matchescu.typing import EntityReference
 
 from ._module import DeepMatcherModule
 from ._params import DeepMatcherModelTrainingParams

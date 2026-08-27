@@ -1,7 +1,7 @@
 from typing import Self
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class ClassificationHead(nn.Module):

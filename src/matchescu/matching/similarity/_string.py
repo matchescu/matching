@@ -1,5 +1,6 @@
 from abc import ABCMeta, abstractmethod
-from typing import Any, Union, Mapping, Iterable
+from collections.abc import Iterable, Mapping
+from typing import Any, ClassVar
 
 import numpy as np
 from jellyfish import (
@@ -8,8 +9,9 @@ from jellyfish import (
     jaro_winkler_similarity,
     levenshtein_distance,
 )
-from matchescu.matching.similarity._common import Similarity
+
 from matchescu.matching.similarity._bucketed import BucketedSimilarity
+from matchescu.matching.similarity._common import Similarity
 
 
 class StringSimilarity(Similarity[float], metaclass=ABCMeta):
@@ -39,7 +41,9 @@ class StringSimilarity(Similarity[float], metaclass=ABCMeta):
 
 class BucketedStringSimilarity(BucketedSimilarity):
     # the wrapped similarity is in [0, 1]
-    _BUCKETS = [round(float(x), 1) for x in np.linspace(0.0, 1.0, 11)]
+    _BUCKETS: ClassVar[list[float]] = [
+        round(float(x), 1) for x in np.linspace(0.0, 1.0, 11)
+    ]
     _CATCH_ALL = 0.0
     _MISSING_BOTH = -1.0
     _MISSING_EITHER = -0.5
@@ -47,7 +51,7 @@ class BucketedStringSimilarity(BucketedSimilarity):
     def __init__(
         self,
         sim: StringSimilarity,
-        buckets: Union[Mapping[float, float], Iterable[float]] | None = None,
+        buckets: Mapping[float, float] | Iterable[float] | None = None,
         catch_all: float | None = None,
         missing_both: float | None = None,
         missing_either: float | None = None,
@@ -69,7 +73,7 @@ class LevenshteinDistance(StringSimilarity):
 class BucketedLevenshteinDistance(BucketedStringSimilarity):
     def __init__(
         self,
-        buckets: Union[Mapping[float, float], Iterable[float]],
+        buckets: Mapping[float, float] | Iterable[float],
         ignore_case: bool = False,
     ) -> None:
         super().__init__(

@@ -1,10 +1,10 @@
 import pytest
-
 from matchescu.extraction import Traits
+from matchescu.typing import EntityReferenceIdentifier
+
 from matchescu.matching.config import AttrCmpConfig, RecordLinkageConfig
 from matchescu.matching.evaluation.data.benchmark import MagellanBenchmarkData
 from matchescu.matching.similarity import BucketedJaccard, BucketedNorm
-from matchescu.typing import EntityReferenceIdentifier
 
 
 @pytest.fixture

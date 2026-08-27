@@ -1,21 +1,20 @@
 import csv
+from collections.abc import Callable, Hashable
 from functools import partial
-from typing import Hashable, Callable
 
 import pytest
-
 from matchescu.extraction import (
-    Traits,
     RecordExtraction,
+    Traits,
     single_record,
 )
 from matchescu.extraction.csv import CsvFile
 from matchescu.reference_store.id_table._in_memory import InMemoryIdTable
 from matchescu.typing import (
-    Record,
     DataSource,
-    EntityReferenceIdentifier,
     EntityReference,
+    EntityReferenceIdentifier,
+    Record,
 )
 
 
@@ -47,13 +46,13 @@ def abt_buy_gt(
         reader = csv.reader(f)
         next(reader)
         ids = [tuple(map(int, values)) for values in reader]
-    return set(
+    return {
         (
             EntityReferenceIdentifier(abt_id, abt.name),
             EntityReferenceIdentifier(buy_id, buy.name),
         )
         for abt_id, buy_id in ids
-    )
+    }
 
 
 @pytest.fixture(scope="session")

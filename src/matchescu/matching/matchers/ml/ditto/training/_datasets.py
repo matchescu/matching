@@ -1,23 +1,22 @@
 import itertools
 import random
 import re
-from collections.abc import Sequence, Generator
-from typing import Callable
+from collections.abc import Callable, Generator, Sequence
 
 import torch
+from matchescu.reference_store.id_table import IdTable
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.matchers.ml.ditto._encoder import to_ditto_text
 from matchescu.matching.matchers.ml.training import MatchescuDataset
-from matchescu.reference_store.id_table import IdTable
 
 
 def alphanumeric(token):
     return "".join([ch if ch.isalnum() else " " for ch in token])
 
 
-class Augmenter(object):
+class Augmenter:
     """Data augmentation operator.
 
     Support both span and attribute level augmentation operators.
@@ -132,8 +131,8 @@ class Augmenter(object):
 
     @staticmethod
     def _drop_same(labels, tokens):
-        left_token = set([])
-        right_token = set([])
+        left_token = set()
+        right_token = set()
         left = True
         for token, label in zip(tokens, labels):
             if label == "O":
@@ -237,9 +236,9 @@ class Augmenter(object):
         if op == "all":
             # RandAugment: https://arxiv.org/pdf/1909.13719.pdf
             N = 3
-            ops = ["del", "swap", "drop_col", "append_col"]
-            for op in random.choices(ops, k=N):
-                tokens, labels = self.augment(tokens, labels, op=op)
+            op_choices = ["del", "swap", "drop_col", "append_col"]
+            for op_choice in random.choices(op_choices, k=N):
+                tokens, labels = self.augment(tokens, labels, op=op_choice)
         else:
             tokens, labels = self.augment(tokens, labels, op=op)
         results = " ".join(tokens)
@@ -253,8 +252,8 @@ class Augmenter(object):
         if span_end - 1 >= len(labels):
             return
         span_text = "".join(labels[idx:span_end])
-        pattern = "^O{%d}$" % span_len
-        if not re.match(pattern, span_text, re.S):
+        pattern = "^O{%d}$" % span_len  # noqa: UP031
+        if not re.match(pattern, span_text, re.DOTALL):
             return
         yield idx, span_end - 1
 
@@ -277,9 +276,7 @@ class Augmenter(object):
 
     @staticmethod
     def sample_position(labels):
-        candidates = list(
-            map(lambda x: x[0], filter(lambda x: x[1] == "O", enumerate(labels)))
-        )
+        candidates = [x[0] for x in filter(lambda x: x[1] == "O", enumerate(labels))]
         return random.choice(candidates) if len(candidates) > 0 else -1
 
 
@@ -348,16 +345,14 @@ class DittoDataset(MatchescuDataset):
 
     @staticmethod
     def __pad(x: Sequence, total_length: int) -> torch.LongTensor:
-        tensor_data = list(
-            map(
-                lambda vec: list(
-                    itertools.chain(
-                        vec, itertools.repeat(0, max(total_length - len(vec), 0))
-                    )
-                ),
-                x,
+        tensor_data = [
+            list(
+                itertools.chain(
+                    vec, itertools.repeat(0, max(total_length - len(vec), 0))
+                )
             )
-        )
+            for vec in x
+        ]
         return torch.LongTensor(tensor_data)
 
     def _collate(self, batch: list[tuple]) -> tuple[torch.LongTensor, ...]:

@@ -1,24 +1,24 @@
 from matchescu.matching.config._config_model import ConfigModel
 from matchescu.matching.config._dataset_config import (
+    AnyDatasetConfig,
     BenchmarkDataConfig,
+    ClusterGroundTruthConfig,
     CsvBenchmarkDataConfig,
     MagellanBenchmarkDataConfig,
-    AnyDatasetConfig,
-    TraitConfig,
     PairwiseGroundTruthConfig,
-    ClusterGroundTruthConfig,
+    TraitConfig,
 )
 from matchescu.matching.config._record_linkage import AttrCmpConfig, RecordLinkageConfig
 
 __all__ = [
-    "ConfigModel",
     "AnyDatasetConfig",
+    "AttrCmpConfig",
     "BenchmarkDataConfig",
+    "ClusterGroundTruthConfig",
+    "ConfigModel",
     "CsvBenchmarkDataConfig",
     "MagellanBenchmarkDataConfig",
-    "AttrCmpConfig",
+    "PairwiseGroundTruthConfig",
     "RecordLinkageConfig",
     "TraitConfig",
-    "PairwiseGroundTruthConfig",
-    "ClusterGroundTruthConfig",
 ]

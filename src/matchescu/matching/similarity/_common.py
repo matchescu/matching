@@ -1,5 +1,5 @@
-from abc import abstractmethod, ABCMeta
-from typing import Any, TypeVar, Protocol, Generic
+from abc import ABCMeta, abstractmethod
+from typing import Any, Generic, Protocol, TypeVar
 
 T = TypeVar("T")
 
@@ -9,7 +9,7 @@ class SimilarityFunction(Protocol[T]):
         pass
 
 
-class Similarity(Generic[T], SimilarityFunction[T], metaclass=ABCMeta):
+class Similarity(SimilarityFunction[T], Generic[T], metaclass=ABCMeta):
     def __init__(self, both_missing: T, either_missing: T):
         self._miss_both = both_missing
         self._miss_either = either_missing

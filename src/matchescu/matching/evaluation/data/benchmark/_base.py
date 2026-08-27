@@ -1,15 +1,17 @@
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, TypeVar, Generic
+from typing import ClassVar, Generic, TypeVar
+
+from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
+from matchescu.typing import EntityReferenceIdentifier as RefId
 
 from matchescu.matching.config import BenchmarkDataConfig
 from matchescu.matching.evaluation.data.splits import Split
-from matchescu.reference_store.id_table import InMemoryIdTable, IdTable
-from matchescu.typing import EntityReferenceIdentifier as RefId
 
 
 class BenchmarkData(ABC):
-    _SPLIT_NAMES = ["train", "valid", "test"]
+    _SPLIT_NAMES: ClassVar[list[str]] = ["train", "valid", "test"]
 
     def __init__(self):
         self._splits = {}
@@ -66,7 +68,7 @@ class BenchmarkData(ABC):
 T = TypeVar("T", bound=BenchmarkData)
 
 
-class BenchmarkDataBuilder(Generic[T], ABC):
+class BenchmarkDataBuilder(ABC, Generic[T]):
     def __init__(self, params: BenchmarkDataConfig, data_dir: Path | None) -> None:
         self._data_dir = Path(params.directory)
         if not self._data_dir.is_absolute() and data_dir is not None:

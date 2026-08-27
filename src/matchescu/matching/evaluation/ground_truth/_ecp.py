@@ -1,4 +1,5 @@
-from typing import Generic, Iterable, TypeVar, Hashable
+from collections.abc import Hashable, Iterable
+from typing import Generic, TypeVar
 
 T = TypeVar("T", bound=Hashable)
 
@@ -45,7 +46,7 @@ class EquivalenceClassPartitioner(Generic[T]):
         self._init_rank_and_path_compression()
         for x, y in pairs:
             self._union(x, y)
-        classes = {item: dict() for item in self._items}
+        classes = {item: {} for item in self._items}
         for item in self._items:
             classes[self._find(item)][item] = None
         return frozenset(

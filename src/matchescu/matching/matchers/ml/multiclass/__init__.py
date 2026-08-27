@@ -1,4 +1,4 @@
-from ._similarity import MultiClassSimilarity
 from ._module import MultiClassModule
+from ._similarity import MultiClassSimilarity
 
-__all__ = ["MultiClassSimilarity", "MultiClassModule"]
+__all__ = ["MultiClassModule", "MultiClassSimilarity"]

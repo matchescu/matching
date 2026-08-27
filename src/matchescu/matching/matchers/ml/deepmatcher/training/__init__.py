@@ -1,5 +1,5 @@
 from ._dataset import DeepMatcherDataset
-from ._trainer import DeepMatcherTrainer
 from ._evaluator import TrainingEvaluator as DeepMatcherEvaluator
+from ._trainer import DeepMatcherTrainer
 
-__all__ = ["DeepMatcherDataset", "DeepMatcherTrainer", "DeepMatcherEvaluator"]
+__all__ = ["DeepMatcherDataset", "DeepMatcherEvaluator", "DeepMatcherTrainer"]

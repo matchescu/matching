@@ -1,10 +1,10 @@
 import pytest
 
 from matchescu.matching.attribute import (
+    BinaryResult,
+    BinarySimilarityMatchOnThreshold,
     TernaryResult,
     TernarySimilarityMatchOnThreshold,
-    BinarySimilarityMatchOnThreshold,
-    BinaryResult,
 )
 
 

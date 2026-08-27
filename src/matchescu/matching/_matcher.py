@@ -1,7 +1,7 @@
 from typing import Protocol, TypeVar
 
-from matchescu.typing import EntityReference
 from matchescu.similarity import MatchResult
+from matchescu.typing import EntityReference
 
 TRef = TypeVar("TRef", bound=EntityReference)
 

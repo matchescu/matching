@@ -2,7 +2,7 @@ from typing import cast
 
 import numpy as np
 import torch
-import torch.nn as nn
+from torch import nn
 from transformers import AutoModel, BertModel
 
 from ._params import DittoModelTrainingParams

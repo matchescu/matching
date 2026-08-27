@@ -1,6 +1,6 @@
 import itertools
 import math
-from typing import Iterable
+from collections.abc import Iterable
 
 import numpy as np
 
@@ -10,8 +10,8 @@ from matchescu.matching.similarity._string import StringSimilarity
 class LevenshteinLearner(StringSimilarity):
     def __init__(self):
         super().__init__()
-        self._underlying_alphabet = dict()
-        self._surface_alphabet = dict()
+        self._underlying_alphabet = {}
+        self._surface_alphabet = {}
         self._deltas = np.zeros((0, 0))
         self._delta_sharp = 1
         self._gamma = np.zeros((0, 0))

@@ -12,22 +12,23 @@ from __future__ import annotations
 import json
 from os import PathLike
 from pathlib import Path
-from typing import Any, Type
+from typing import Any
 
 from pydantic import TypeAdapter
 from pydantic.alias_generators import to_camel
 
-from matchescu.matching.evaluation.data.benchmark._base import BenchmarkDataBuilder
-from matchescu.matching.matchers.ml.core import ModelTrainingParams
 from matchescu.matching.config import (
     AnyDatasetConfig,
-    MagellanBenchmarkDataConfig,
     CsvBenchmarkDataConfig,
+    MagellanBenchmarkDataConfig,
 )
+from matchescu.matching.evaluation.data.benchmark._base import BenchmarkDataBuilder
+from matchescu.matching.evaluation.data.benchmark._csv import CsvBenchmarkDataBuilder
 from matchescu.matching.evaluation.data.benchmark._magellan import (
     MagellanBenchmarkDataBuilder,
 )
-from matchescu.matching.evaluation.data.benchmark._csv import CsvBenchmarkDataBuilder
+from matchescu.matching.matchers.ml.core import ModelTrainingParams
+
 from ._evaluator import BaseEvaluator
 from ._exceptions import ConfigurationError
 from ._registry import CapabilityRegistry
@@ -57,17 +58,17 @@ def _extract_hyper_params(raw: dict[str, Any]) -> dict[str, Any]:
 
 class _ResolvedVariant:
     __slots__ = (
-        "trainer_cls",
         "evaluator_cls",
         "hyperparams_schema",
         "overrides",
+        "trainer_cls",
     )
 
     def __init__(
         self,
         trainer_cls: type,
         evaluator_cls: type,
-        hyperparams_schema: Type[ModelTrainingParams],
+        hyperparams_schema: type[ModelTrainingParams],
         overrides: dict[str, Any],
     ) -> None:
         self.trainer_cls = trainer_cls
@@ -107,7 +108,7 @@ class TrainingConfig:
         *,
         data_dir: Path | None = None,
         discovery_packages: list[str] | None = None,
-        default_evaluator: Type[BaseEvaluator] | None = None,
+        default_evaluator: type[BaseEvaluator] | None = None,
     ) -> TrainingConfig:
         if discovery_packages:
             CapabilityRegistry.discover(*discovery_packages)
@@ -261,7 +262,7 @@ class TrainingConfig:
         return self._model_hp_objs
 
     def __dir__(self):
-        return list(sorted(self._global_hp.keys()))
+        return sorted(self._global_hp.keys())
 
     def __getattr__(self, item):
         key = to_camel(item)
@@ -286,6 +287,6 @@ class TrainingConfig:
     def get_evaluator(self, model: str) -> type:
         return self.__get_variant(model).evaluator_cls
 
-    def get_schema(self, model: str) -> Type[ModelTrainingParams]:
+    def get_schema(self, model: str) -> type[ModelTrainingParams]:
         v = self._variants.get(model)
         return v.hyperparams_schema if v else ModelTrainingParams

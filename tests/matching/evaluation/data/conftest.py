@@ -1,5 +1,4 @@
 import pytest
-
 from matchescu.extraction import Traits
 from matchescu.typing import EntityReferenceIdentifier as RefId
 

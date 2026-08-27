@@ -1,18 +1,17 @@
+from collections.abc import Iterable
+
 import torch
-from typing import Dict, Iterable
-
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
-
 from matchescu.data import Record
-from matchescu.matching.evaluation.data.splits._split import Split
-from matchescu.matching.matchers.ml.training import MatchescuDataset
 from matchescu.reference_store.id_table import IdTable
 from matchescu.typing import EntityReferenceIdentifier
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
+from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.matchers.ml.deepmatcher._encoder import (
-    to_deepmatcher_repr,
     ensure_attr_map,
+    to_deepmatcher_repr,
 )
+from matchescu.matching.matchers.ml.training import MatchescuDataset
 
 
 class DeepMatcherDataset(MatchescuDataset):
@@ -25,8 +24,8 @@ class DeepMatcherDataset(MatchescuDataset):
         id_table: IdTable,
         split: Split,
         tokenizer: PreTrainedTokenizerBase = None,
-        attr_map: dict[str, str] = None,
-        exclude_from_comparison: Iterable[str | int] = None,
+        attr_map: dict[str, str] | None = None,
+        exclude_from_comparison: Iterable[str | int] | None = None,
         max_len: int = 30,
     ):
         super().__init__(id_table, split)
@@ -51,7 +50,7 @@ class DeepMatcherDataset(MatchescuDataset):
     def __len__(self) -> int:
         return len(self._labels)
 
-    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         left, right = self._pairs[idx]
         return {
             "label": torch.tensor(self._labels[idx], dtype=torch.float),

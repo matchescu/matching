@@ -1,8 +1,8 @@
 import logging
 from pathlib import Path
 
-from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score
+from torch.utils.data import DataLoader
 
 from matchescu.matching.matchers.ml.training import BaseEvaluator
 

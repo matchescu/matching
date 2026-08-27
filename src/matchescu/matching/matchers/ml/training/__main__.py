@@ -8,12 +8,12 @@ from pathlib import Path
 import click
 import humanize
 from torch.utils.data import DataLoader
-from transformers import AutoTokenizer, PreTrainedTokenizerFast, DebertaV2TokenizerFast
+from transformers import AutoTokenizer, DebertaV2TokenizerFast, PreTrainedTokenizerFast
 
 from matchescu.matching.evaluation.data.benchmark._base import BenchmarkData
 from matchescu.matching.matchers.ml.core import ModelTrainingParams
 from matchescu.matching.matchers.ml.deeper import DeepERModule
-from matchescu.matching.matchers.ml.deeper.training import DeepERTrainer, DeepERDataset
+from matchescu.matching.matchers.ml.deeper.training import DeepERDataset, DeepERTrainer
 from matchescu.matching.matchers.ml.deepmatcher import DeepMatcherModule
 from matchescu.matching.matchers.ml.deepmatcher.training import (
     DeepMatcherDataset,
@@ -23,16 +23,15 @@ from matchescu.matching.matchers.ml.ditto import DittoModel
 from matchescu.matching.matchers.ml.ditto.training import DittoDataset, DittoTrainer
 from matchescu.matching.matchers.ml.multiclass import MultiClassModule
 from matchescu.matching.matchers.ml.multiclass.training import (
-    MultiClassTrainer,
     AsymmetricMultiClassDataset,
+    MultiClassTrainer,
 )
-from matchescu.matching.matchers.ml.training import BaseTrainer, BaseEvaluator
-
+from matchescu.matching.matchers.ml.training import BaseEvaluator, BaseTrainer
 from matchescu.matching.matchers.ml.training._config import (
-    TrainingConfig,
     DEFAULT_DATA_DIR,
     DEFAULT_MODEL_DIR,
     MATCHERS_ML_PACKAGE,
+    TrainingConfig,
 )
 from matchescu.matching.matchers.ml.training._dataset import TDataset
 from matchescu.matching.matchers.ml.training._logging import log

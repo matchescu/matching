@@ -5,9 +5,8 @@ the ``transformers`` library.
 """
 
 import torch
-from transformers import PreTrainedTokenizerBase
-
 from matchescu.typing import EntityReference
+from transformers import PreTrainedTokenizerBase
 
 
 def ensure_attr_map(

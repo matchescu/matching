@@ -7,9 +7,9 @@ from matchescu.matching.evaluation.data.benchmark._csv import (
     CsvBenchmarkDataBuilder,
 )
 from matchescu.matching.evaluation.data.benchmark._magellan import (
-    MagellanTraits,
     MagellanBenchmarkData,
     MagellanBenchmarkDataBuilder,
+    MagellanTraits,
 )
 
 __all__ = [
@@ -17,7 +17,7 @@ __all__ = [
     "BenchmarkDataBuilder",
     "CsvBenchmarkData",
     "CsvBenchmarkDataBuilder",
-    "MagellanTraits",
     "MagellanBenchmarkData",
     "MagellanBenchmarkDataBuilder",
+    "MagellanTraits",
 ]

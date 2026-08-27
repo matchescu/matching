@@ -1,11 +1,12 @@
 from abc import ABCMeta, abstractmethod
+from collections.abc import Iterable, Mapping
 from decimal import Decimal
-from typing import Any, Iterable, Mapping, Union
+from typing import Any
 
 import numpy as np
 
-from matchescu.matching.similarity._common import Similarity
 from matchescu.matching.similarity._bucketed import BucketedSimilarity
+from matchescu.matching.similarity._common import Similarity
 
 
 class NumericSimilarity(Similarity[float], metaclass=ABCMeta):
@@ -45,7 +46,7 @@ class BoundedNumericDifferenceSimilarity(NumericSimilarity):
         # Proximity in [0, 1]: 1.0 means identical, 0.0 means at/beyond max_diff
         proximity = 1.0 - (diff / self.__max_diff)
         n = len(self.__steps)
-        idx = int(round(proximity * (n - 1)))
+        idx = round(proximity * (n - 1))
         idx = max(0, min(n - 1, idx))
         return self.__steps[idx]
 
@@ -55,7 +56,7 @@ class BucketedNorm(BucketedSimilarity):
 
     def __init__(
         self,
-        buckets: Union[Mapping[float, float], Iterable[float]],
+        buckets: Mapping[float, float] | Iterable[float],
         catch_all: float = 0.0,
         missing_both: float = -1.0,
         missing_either: float = -0.5,

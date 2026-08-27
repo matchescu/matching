@@ -1,23 +1,25 @@
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Iterable, Mapping, Union, cast
+from typing import ClassVar, cast
 
 from matchescu.comparison_space.persistence import (
-    CsvPersistence,
     CsvComparisonSpaceFileParams,
+    CsvPersistence,
 )
 from matchescu.extraction import Traits
 from matchescu.extraction.csv import CsvRecordExtraction
 from matchescu.reference_store.id_table import InMemoryIdTable
+
 from matchescu.matching.config import (
-    CsvBenchmarkDataConfig,
     ClusterGroundTruthConfig,
+    CsvBenchmarkDataConfig,
     PairwiseGroundTruthConfig,
 )
-from matchescu.matching.evaluation.data.splits import SplitGenerator, Split
+from matchescu.matching.evaluation.data.splits import Split, SplitGenerator
 from matchescu.matching.evaluation.ground_truth import (
-    read_pairwise_mapping_csv,
-    read_clusters_csv,
     EquivalenceClassPartitioner,
+    read_clusters_csv,
+    read_pairwise_mapping_csv,
 )
 
 from ._base import BenchmarkData, BenchmarkDataBuilder
@@ -25,7 +27,7 @@ from ._config_adapters import get_traits
 
 
 class CsvBenchmarkData(BenchmarkData):
-    __DEFAULT_SPLIT_RATIOS = {"train": 3, "valid": 1, "test": 1}
+    __DEFAULT_SPLIT_RATIOS: ClassVar[dict] = {"train": 3, "valid": 1, "test": 1}
 
     def __init__(self, data_dir: Path, source_files: list[str]):
         super().__init__()
@@ -49,10 +51,10 @@ class CsvBenchmarkData(BenchmarkData):
         file_traits = self._get_file_params(traits, Traits)
         file_id_cols = {p: None for p in self._paths}
         if id_cols is not None:
-            file_id_cols = self._get_file_params(id_cols, Union[str, int])
+            file_id_cols = self._get_file_params(id_cols, str | int)
         file_source_cols = {p: None for p in self._paths}
         if source_cols is not None:
-            file_source_cols = self._get_file_params(source_cols, Union[str, int])
+            file_source_cols = self._get_file_params(source_cols, str | int)
         file_headers = {p: True for p in self._paths}
         if headers is not None:
             file_headers = self._get_file_params(headers, bool)
@@ -62,8 +64,8 @@ class CsvBenchmarkData(BenchmarkData):
     def with_ideal_mapping(
         self,
         mapping_file: str,
-        id_cols: tuple[str | int, str | int] = None,
-        source_cols: tuple[str | int, str | int] = None,
+        id_cols: tuple[str | int, str | int] | None = None,
+        source_cols: tuple[str | int, str | int] | None = None,
         label_col: str | int | None = None,
         has_header: bool = False,
     ) -> "CsvBenchmarkData":
@@ -182,7 +184,7 @@ class CsvBenchmarkData(BenchmarkData):
         elif isinstance(params, Iterable):
             return self._get_file_param_from_iterable(params, item_type)
         else:
-            raise ValueError(f"unsupported traits input type: {type(params)}")
+            raise TypeError(f"unsupported traits input type: {type(params)}")
 
     def _get_file_param_from_iterable[T](
         self, param: Iterable[T], item_type: type[T]
@@ -290,7 +292,7 @@ class CsvBenchmarkDataBuilder(BenchmarkDataBuilder[CsvBenchmarkData]):
                     right_source_column=file.right_source_col,
                 )
             comparison_space = CsvPersistence(file_path).read(params)
-            compared_ids = set(ref_id for cmp in comparison_space for ref_id in cmp)
+            compared_ids = {ref_id for cmp in comparison_space for ref_id in cmp}
             matcher_labels = {
                 cmp: self._instance.true_matches[cmp]
                 for cmp in comparison_space
@@ -299,9 +301,7 @@ class CsvBenchmarkDataBuilder(BenchmarkDataBuilder[CsvBenchmarkData]):
 
             split_clusters = []
             for cluster in full_partition:
-                split_cluster = set(
-                    ref_id for ref_id in cluster if ref_id in compared_ids
-                )
+                split_cluster = {ref_id for ref_id in cluster if ref_id in compared_ids}
                 if len(split_cluster) < 2:
                     continue
                 split_clusters.append(split_cluster)

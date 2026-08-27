@@ -1,5 +1,6 @@
 from abc import abstractmethod
-from typing import Any, Type, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from matchescu.matching.attribute import (
     BinarySimilarityMatchOnThreshold,
@@ -11,13 +12,13 @@ from matchescu.matching.entity_reference._attr_spec import AttrComparisonSpec
 from matchescu.matching.similarity import (
     BoundedNumericDifferenceSimilarity,
     ExactMatch,
-    Jaro,
     Jaccard,
+    Jaro,
     JaroWinkler,
-    LevenshteinSimilarity,
-    Similarity,
     LevenshteinDistance,
+    LevenshteinSimilarity,
     Norm,
+    Similarity,
 )
 
 
@@ -35,7 +36,7 @@ class EntityReferenceComparisonConfig:
     @classmethod
     def _new_spec(
         cls,
-        similarity_type: Type,
+        similarity_type: type,
         label: str,
         left_key: int | str,
         right_key: int | str,
