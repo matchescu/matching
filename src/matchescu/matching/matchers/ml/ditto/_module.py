@@ -13,7 +13,10 @@ class DittoModel(nn.Module):
         super().__init__()
         self._alpha_aug = params.alpha_aug
         self._bert_name = params.model_name or "roberta-base"
-        self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
+        self._bert = cast(
+            BertModel,
+            AutoModel.from_pretrained(self._bert_name, attn_implementation="eager"),
+        )
         hidden_size = self._bert.config.hidden_size
         self._classifier = torch.nn.Linear(hidden_size, 1, dtype=self._bert.dtype)
         self._device = None
