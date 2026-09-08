@@ -58,3 +58,30 @@ def test_multiclass_dataset_labels_are_long(benchmark, tokenizer):
     loader = ds.get_data_loader(batch_size=4)
     *_, labels = _first_batch(loader)
     assert labels.dtype == torch.int64
+
+
+def test_multiclass_dataset_item_has_col_positions(benchmark, tokenizer):
+    ds = AsymmetricMultiClassDataset(
+        benchmark.id_table, benchmark.train_split, tokenizer
+    )
+    x_fwd, x_rev, _ = ds[0]
+    assert "col_positions" in x_fwd
+    assert "col_positions" in x_rev
+    assert x_fwd["col_positions"].dtype == torch.long
+    assert x_rev["col_positions"].dtype == torch.long
+
+
+def test_multiclass_dataset_batch_has_padded_col_positions(benchmark, tokenizer):
+    ds = AsymmetricMultiClassDataset(
+        benchmark.id_table, benchmark.train_split, tokenizer
+    )
+    loader = ds.get_data_loader(batch_size=4)
+    x_fwd, x_rev, _ = _first_batch(loader)
+    assert "col_positions" in x_fwd
+    assert "col_positions" in x_rev
+    batch_size = x_fwd["col_positions"].shape[0]
+    assert batch_size == 4
+    # padded dimension should be >= 1
+    assert x_fwd["col_positions"].shape[1] >= 1
+    # padding value is -1
+    assert (x_fwd["col_positions"] >= -1).all()

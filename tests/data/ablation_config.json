@@ -1,0 +1,26 @@
+{
+  "kind": "multiclass",
+  "learningRate": 2e-5,
+  "batchSize": 32,
+  "epochs": 15,
+  "dropoutP": 0.1,
+  "models": ["bert-base-uncased"],
+  "datasets": {
+    "amazon-google": {
+      "type": "magellan",
+      "directory": "amazon_google_exp_data",
+      "leftTraits": "amazon-google"
+    }
+  },
+  "datasetConfig": {},
+  "modelConfig": {
+    "bert-base-uncased": {
+      "modelName": "bert-base-uncased",
+      "frozenLayerCount": 8,
+      "headType": "none",
+      "architecture": "bert",
+      "lossType": "weighted_ce",
+      "reversePenaltyWeight": 0.0
+    }
+  }
+}

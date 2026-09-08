@@ -1,0 +1,3 @@
+HIDDEN = 16
+BATCH = 4
+SEQ = 8

@@ -17,6 +17,7 @@ from matchescu.matching.matchers.ml.training import BaseTrainer
 from .._loss import FocalLoss
 from .._module import MultiClassModule
 from .._params import MultiClassTrainingParams
+from .._types import LossType
 from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset
 
@@ -34,7 +35,7 @@ class MultiClassTrainer(
         task_name: str,
         hyperparams: MultiClassTrainingParams,
         model_dir: str | PathLike | None = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> None:
 
         super().__init__(
@@ -73,9 +74,8 @@ class MultiClassTrainer(
             "weight_decay": 0.0,
         }
 
-    @classmethod
     def _create_loss(
-        cls, data_loader: DataLoader[AsymmetricMultiClassDataset]
+        self, data_loader: DataLoader[AsymmetricMultiClassDataset]
     ) -> _Loss:
         label_counts = cast(
             AsymmetricMultiClassDataset, data_loader.dataset
@@ -87,7 +87,11 @@ class MultiClassTrainer(
         )
         weights = torch.sqrt(weights)  # dampening
         weights = weights / weights[0]
-        return FocalLoss(weights)
+        match self._params.loss_type:
+            case LossType.WEIGHTED_CE:
+                return FocalLoss(weights, gamma=0.0)
+            case LossType.FOCAL:
+                return FocalLoss(weights, gamma=self._params.reverse_penalty_weight)
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
@@ -163,5 +167,5 @@ class MultiClassTrainer(
         valid_mask = y_rev < 2  # Filter out invalid targets (though none exist here)
         loss_rev = F.cross_entropy(cls_logits_rev[valid_mask], y_rev[valid_mask])
         class_2_penalty = F.softmax(cls_logits_rev, dim=1)[:, 2].mean()
-        loss_rev += 2.0 * class_2_penalty  # Adjust weight (10.0) as needed
+        loss_rev += self._params.reverse_penalty_weight * class_2_penalty
         return loss + loss_rev
