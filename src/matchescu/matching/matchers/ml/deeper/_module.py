@@ -16,7 +16,8 @@ class DeepERModule(nn.Module):
         super().__init__()
         self.num_attributes = params.num_attributes
         self.bert: BertModel = BertModel.from_pretrained(
-            params.model_name or self.__DEFAULT_BERT_MODEL
+            params.model_name or self.__DEFAULT_BERT_MODEL,
+            attn_implementation="eager",
         )
         self.__freeze_bert()
         embedding_dim = self.bert.config.hidden_size

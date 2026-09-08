@@ -15,7 +15,10 @@ class MultiClassModule(nn.Module):
     def __init__(self, params: MultiClassTrainingParams):
         super().__init__()
         self._bert_name = params.model_name or self._DEFAULT_MODEL
-        self._bert = cast(BertModel, AutoModel.from_pretrained(self._bert_name))
+        self._bert = cast(
+            BertModel,
+            AutoModel.from_pretrained(self._bert_name, attn_implementation="eager"),
+        )
         hidden_size = self._bert.config.hidden_size
         self._classifier = ClassificationHead(
             3 * hidden_size,
