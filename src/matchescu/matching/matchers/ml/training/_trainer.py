@@ -146,7 +146,8 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
     ) -> Any:
-        return loss_fn(*(x.float() for x in tensors))
+        logits, labels = list(tensors)
+        return loss_fn(logits.float(), labels.long())
 
     def run_training(
         self,

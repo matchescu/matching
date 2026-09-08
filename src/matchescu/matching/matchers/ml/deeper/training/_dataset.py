@@ -57,7 +57,7 @@ class DeepERDataset(MatchescuDataset):
         left_enc, right_enc = to_deeper_repr(
             left, right, self.__tokenizer, self.__attr_map, self.__max_len
         )
-        labels = torch.tensor(self._labels[idx], dtype=torch.float)
+        labels = torch.tensor(self._labels[idx], dtype=torch.int64)
         return left_enc, right_enc, labels
 
     def _collate(

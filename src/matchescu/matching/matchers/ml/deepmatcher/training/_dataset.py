@@ -53,7 +53,7 @@ class DeepMatcherDataset(MatchescuDataset):
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         left, right = self._pairs[idx]
         return {
-            "label": torch.tensor(self._labels[idx], dtype=torch.float),
+            "label": torch.tensor(self._labels[idx], dtype=torch.int64),
             **to_deepmatcher_repr(
                 left, right, self.__tokenizer, self.__attr_map, self.__max_len
             ),
