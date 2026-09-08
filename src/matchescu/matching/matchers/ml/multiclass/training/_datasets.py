@@ -91,4 +91,4 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         x_fwd_list, x_rev_list, y = zip(*batch)
         x_fwd_padded = self._pad(x_fwd_list)
         x_rev_padded = self._pad(x_rev_list)
-        return x_fwd_padded, x_rev_padded, torch.LongTensor(y)
+        return x_fwd_padded, x_rev_padded, torch.tensor(y, dtype=torch.int64)

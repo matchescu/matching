@@ -152,8 +152,14 @@ class MultiClassTrainer(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
     ) -> Any:
         cls_logits, cls_logits_rev, y, y_rev = tensors
-        loss = loss_fn(cls_logits, y)
+        cls_logits, cls_logits_rev, y, y_rev = (
+            cls_logits.float(),
+            cls_logits_rev.float(),
+            y.long(),
+            y_rev.long(),
+        )
 
+        loss = loss_fn(cls_logits, y)
         valid_mask = y_rev < 2  # Filter out invalid targets (though none exist here)
         loss_rev = F.cross_entropy(cls_logits_rev[valid_mask], y_rev[valid_mask])
         class_2_penalty = F.softmax(cls_logits_rev, dim=1)[:, 2].mean()

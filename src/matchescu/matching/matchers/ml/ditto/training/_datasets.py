@@ -362,9 +362,9 @@ class DittoDataset(MatchescuDataset):
             n = max(map(len, x1 + x2))
             x1 = DittoDataset.__pad(x1, n)
             x2 = DittoDataset.__pad(x2, n)
-            return x1, x2, torch.LongTensor(y)
+            return x1, x2, torch.tensor(y, dtype=torch.int64)
         else:
             x, y = zip(*batch)
             n = max(map(len, x))
             x = DittoDataset.__pad(x, n)
-            return x, torch.LongTensor(y)
+            return x, torch.tensor(y, dtype=torch.int64)

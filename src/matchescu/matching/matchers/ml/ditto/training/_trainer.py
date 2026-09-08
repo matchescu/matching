@@ -1,8 +1,10 @@
+from collections.abc import Iterable
 from os import PathLike
 from pathlib import Path
 from typing import Any
 
 import torch
+from torch import Tensor
 from torch.nn import BCEWithLogitsLoss, Module
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
@@ -71,6 +73,12 @@ class DittoTrainer(
     @classmethod
     def _create_loss(cls, _: DataLoader[TDataset]) -> _Loss:
         return BCEWithLogitsLoss()
+
+    def _compute_loss(
+        self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
+    ) -> Any:
+        logits, labels = list(tensors)
+        return loss_fn(logits.float(), labels.float())
 
     @classmethod
     def _forward_pass(cls, model: Module, batch: tuple, device: torch.device) -> tuple:
