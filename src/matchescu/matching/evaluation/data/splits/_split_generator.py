@@ -2,7 +2,6 @@ import argparse
 import logging
 import math
 import os
-import random
 import sys
 from collections import Counter, defaultdict
 
