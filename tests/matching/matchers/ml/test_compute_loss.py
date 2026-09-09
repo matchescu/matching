@@ -10,8 +10,6 @@ from matchescu.matching.matchers.ml.deepmatcher.training import DeepMatcherTrain
 from matchescu.matching.matchers.ml.ditto._params import DittoModelTrainingParams
 from matchescu.matching.matchers.ml.ditto.training import DittoTrainer
 from matchescu.matching.matchers.ml.multiclass._loss import FocalLoss
-from matchescu.matching.matchers.ml.multiclass._params import MultiClassTrainingParams
-from matchescu.matching.matchers.ml.multiclass.training import MultiClassTrainer
 
 
 def _make_trainer(cls, params_cls):
@@ -34,11 +32,6 @@ def deepmatcher_trainer():
 @pytest.fixture
 def ditto_trainer():
     return _make_trainer(DittoTrainer, DittoModelTrainingParams)
-
-
-@pytest.fixture
-def multiclass_trainer():
-    return _make_trainer(MultiClassTrainer, MultiClassTrainingParams)
 
 
 def test_deeper_compute_loss_runs_forward_and_backward(deeper_trainer):
@@ -84,9 +77,9 @@ def test_ditto_compute_loss_runs_forward_and_backward(ditto_trainer):
 
 
 def test_multiclass_compute_loss_runs_forward_and_backward(multiclass_trainer):
-    loss_fn = FocalLoss(torch.tensor([1.0, 1.0, 1.0, 1.0]))
-    logits = torch.randn(8, 4, requires_grad=True)
-    logits_rev = torch.randn(8, 4, requires_grad=True)
+    loss_fn = FocalLoss(torch.tensor([1.0, 1.0, 1.0]))
+    logits = torch.randn(8, 3, requires_grad=True)
+    logits_rev = torch.randn(8, 3, requires_grad=True)
     targets = torch.randint(0, 2, (8,), dtype=torch.long)
     targets_rev = targets.clone()
     targets_rev[targets == 2] = 0
