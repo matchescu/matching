@@ -5,7 +5,7 @@ import torch
 from torch.nn.modules.loss import _Loss
 from torch.utils.data import DataLoader
 
-from matchescu.matching.matchers.ml.training import BaseTrainer, TDataset
+from matchescu.matching.matchers.ml.training import BaseTrainer
 
 from .._module import DeepERModule
 from .._params import DeepERParams
@@ -28,7 +28,7 @@ class DeepERTrainer(
     ) -> None:
         super().__init__(task_name, hyperparams, model_dir, **kwargs)
 
-    def _create_loss(self, data_loader: DataLoader[TDataset]) -> _Loss:
+    def _create_loss(self, data_loader: DataLoader[DeepERDataset]) -> _Loss:
         return torch.nn.CrossEntropyLoss()
 
     @classmethod
