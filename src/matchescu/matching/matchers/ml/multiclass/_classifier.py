@@ -21,6 +21,10 @@ class ClassificationHead(nn.Module):
             nn.Linear(hidden_size, output_size, dtype=dtype),
         )
 
+    @property
+    def input_size(self) -> int:
+        return self._model[0].in_features
+
     def forward(self, x):
         return self._model(x)
 

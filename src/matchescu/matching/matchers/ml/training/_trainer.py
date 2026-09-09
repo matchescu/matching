@@ -84,9 +84,8 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
             anneal_strategy="cos",
         )
 
-    @classmethod
     @abstractmethod
-    def _create_loss(cls, data_loader: DataLoader[TDataset]) -> _Loss:
+    def _create_loss(self, data_loader: DataLoader[TDataset]) -> _Loss:
         raise NotImplementedError
 
     @classmethod
