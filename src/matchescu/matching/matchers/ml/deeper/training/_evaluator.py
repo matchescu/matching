@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 
+import torch
 from sklearn.metrics import f1_score
 from torch.utils.data import DataLoader
 
@@ -33,9 +34,17 @@ class DeepEREvaluator(
     ) -> tuple[bool, dict]:
         y_pred = []
         y_true = []
-
+        device = model.device
         for left_attrs, right_attrs, labels in data:
-            logits = model(left_attrs, right_attrs)
+            with torch.no_grad():
+                left_attrs = [
+                    {k: v.to(device) for k, v in a.items()} for a in left_attrs
+                ]
+                right_attrs = [
+                    {k: v.to(device) for k, v in a.items()} for a in right_attrs
+                ]
+                logits = model(left_attrs, right_attrs)
+
             y_pred.extend(logits.argmax(dim=1).detach().cpu().numpy())
             y_true.extend(labels.detach().cpu().numpy())
 

@@ -1,9 +1,3 @@
-"""The DeepMatcher architecture works with pairs of entity references. The
-corresponding attributes (given by the user) are always encoded pairwise using
-a tokenizer of choice. Our implementation uses ``PreTrainedTokenizerBase`` from
-the ``transformers`` library.
-"""
-
 from matchescu.typing import EntityReference
 from transformers import BatchEncoding, PreTrainedTokenizerBase
 
@@ -22,6 +16,19 @@ def ensure_attr_map(
     }
 
 
+def _attr_text(value) -> str:
+    """Normalize an attribute value to its tokenizable text.
+
+    Null/missing values and the literal ``"None"`` string (produced upstream
+    when nulls are stringified) are treated as empty, so the tokenizer emits
+    ``[CLS] [SEP]`` instead of encoding the word "none" as real content.
+    """
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return "" if text.lower() == "none" else text
+
+
 def to_deeper_repr(
     a: EntityReference,
     b: EntityReference,
@@ -31,7 +38,7 @@ def to_deeper_repr(
 ) -> tuple[list[BatchEncoding], list[BatchEncoding]]:
     left_tokens, right_tokens = [], []
     for left_key, right_key in attr_map.items():
-        left_text = str(a[left_key])
+        left_text = _attr_text(a[left_key])
         left_enc = tokenizer(
             left_text,
             padding="max_length",
@@ -39,7 +46,7 @@ def to_deeper_repr(
             max_length=max_len,
             return_tensors="pt",
         )
-        right_text = str(b[right_key])
+        right_text = _attr_text(b[right_key])
         right_enc = tokenizer(
             right_text,
             padding="max_length",
