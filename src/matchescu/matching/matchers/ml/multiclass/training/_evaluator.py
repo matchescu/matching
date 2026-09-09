@@ -66,8 +66,20 @@ class TrainingEvaluator(
         mcc_rev = metrics.matthews_corrcoef(y_true_rev, y_pred_rev)
         mcc = (mcc_normal + mcc_rev) / 2
 
+        n = len(y_true)
+        c2_fwd_fn = float(((y_true == 2) & (y_pred != 2)).sum()) / n
+        c2_fwd_fp = float(((y_true != 2) & (y_pred == 2)).sum()) / n
+        c2_rev_fp = float((y_pred_rev == 2).sum()) / n
+
         if self._is_evaluating(best_config):
-            best_config.update({"test_mcc": mcc})
+            best_config.update(
+                {
+                    "test_mcc": mcc,
+                    "test_c2_fwd_fn": c2_fwd_fn,
+                    "test_c2_fwd_fp": c2_fwd_fp,
+                    "test_c2_rev_fp": c2_rev_fp,
+                }
+            )
             return True, best_config
         else:
             success = False
@@ -75,4 +87,9 @@ class TrainingEvaluator(
             if current > self._best:
                 self._best = current
                 success = True
-            return success, {"dev_mcc": mcc}
+            return success, {
+                "dev_mcc": mcc,
+                "dev_c2_fwd_fn": c2_fwd_fn,
+                "dev_c2_fwd_fp": c2_fwd_fp,
+                "dev_c2_rev_fp": c2_rev_fp,
+            }

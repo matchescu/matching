@@ -70,8 +70,7 @@ class DittoTrainer(
             optimizer, num_warmup_steps=0, num_training_steps=num_steps
         )
 
-    @classmethod
-    def _create_loss(cls, _: DataLoader[TDataset]) -> _Loss:
+    def _create_loss(self, data_loader: DataLoader[TDataset]) -> _Loss:
         return BCEWithLogitsLoss()
 
     def _compute_loss(

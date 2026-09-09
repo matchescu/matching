@@ -27,8 +27,7 @@ class DeepMatcherTrainer(
     ) -> None:
         super().__init__(task_name, hyperparams, model_dir, **kwargs)
 
-    @classmethod
-    def _create_loss(cls, _: DataLoader[TDataset]) -> _Loss:
+    def _create_loss(self, data_loader: DataLoader[TDataset]) -> _Loss:
         return torch.nn.CrossEntropyLoss()
 
     @classmethod
