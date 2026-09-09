@@ -10,7 +10,7 @@ from matchescu.matching.matchers.ml.multiclass._types import (
     HeadType,
 )
 
-from ._constants import BATCH, HIDDEN
+from .._constants import BATCH, HIDDEN
 
 
 @pytest.mark.parametrize(
