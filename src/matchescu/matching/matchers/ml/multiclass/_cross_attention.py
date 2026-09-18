@@ -106,21 +106,22 @@ class PerAttributeCrossAttention(nn.Module):
                 (segment_a or segment_b).
 
         Returns:
-            Nested list ``[batch][attr]`` of ``(span_len, hidden)`` tensors.
+            Nested list ``[batch][attr]`` of ``(span_len, hidden)`` and
+            ``(span_len,)`` boolean mask tensors.
         """
         batch_size = hidden.size(0)
-        spans: list[list[torch.Tensor]] = []
+        spans: list[list[tuple[torch.Tensor, torch.Tensor]]] = []
         for b in range(batch_size):
             cols = col_positions[b]
             valid_cols = cols[cols >= 0].tolist()
-            item_spans: list[torch.Tensor] = []
+            item_spans: list[tuple[torch.Tensor, torch.Tensor]] = []
             for i, col_pos in enumerate(valid_cols):
                 end_pos = (
                     valid_cols[i + 1] if i + 1 < len(valid_cols) else hidden.size(1)
                 )
                 span_mask = segment_mask[b, col_pos:end_pos]
                 span = hidden[b, col_pos:end_pos] * span_mask.unsqueeze(-1)
-                item_spans.append(span)
+                item_spans.append((span, span_mask.eq(0)))
             spans.append(item_spans)
         return spans
 
@@ -153,15 +154,23 @@ class PerAttributeCrossAttention(nn.Module):
         for b in range(batch_size):
             attr_outs_a: list[torch.Tensor] = []
             attr_outs_b: list[torch.Tensor] = []
-            for span_a, span_b in zip(spans_a[b], spans_b[b]):
+            for (span_a, pad_a), (span_b, pad_b) in zip(spans_a[b], spans_b[b]):
                 if span_a.size(0) == 0 or span_b.size(0) == 0:
                     continue
                 sa = span_a.unsqueeze(0)
                 sb = span_b.unsqueeze(0)
-                out_a, _ = self.attn_a(query=sb, key=sa, value=sa)
-                out_b, _ = self.attn_b(query=sa, key=sb, value=sb)
-                attr_outs_a.append(out_a.squeeze(0).mean(dim=0))
-                attr_outs_b.append(out_b.squeeze(0).mean(dim=0))
+                out_a, _ = self.attn_a(
+                    query=sb, key=sa, value=sa, key_padding_mask=pad_a.unsqueeze(0)
+                )
+                out_b, _ = self.attn_b(
+                    query=sa, key=sb, value=sb, key_padding_mask=pad_b.unsqueeze(0)
+                )
+                valid_a = out_a.squeeze(0)[~pad_a]
+                valid_b = out_b.squeeze(0)[~pad_b]
+                if valid_a.size(0) == 0 or valid_b.size(0) == 0:
+                    continue
+                attr_outs_a.append(valid_a.mean(dim=0))
+                attr_outs_b.append(valid_b.mean(dim=0))
             if attr_outs_a:
                 enc_a_list.append(torch.stack(attr_outs_a).mean(dim=0))
             else:

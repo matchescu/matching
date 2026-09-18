@@ -1,5 +1,4 @@
 import random
-from typing import ClassVar
 
 import numpy as np
 import torch
@@ -13,7 +12,6 @@ from .._encoder import to_ditto_text
 
 
 class AsymmetricMultiClassDataset(MatchescuDataset):
-    _LABEL_SWAP: ClassVar[dict[int, int]] = {0: 0, 1: 1, 2: 3, 3: 2}
     _COL_TOKEN = "COL"
 
     def __init__(
@@ -32,7 +30,9 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         self.__left_cols = left_cols
         self.__right_cols = right_cols
         self.__label_counts = np.bincount(self._labels)
-        self.__col_token_id = tokenizer.convert_tokens_to_ids(self._COL_TOKEN)
+        self.__col_token_id = tokenizer(self._COL_TOKEN, add_special_tokens=False)[
+            "input_ids"
+        ][0]
         random.seed(random_seed)
 
     @property

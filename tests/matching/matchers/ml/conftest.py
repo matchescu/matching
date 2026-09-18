@@ -16,6 +16,9 @@ def fake_bert():
     bert = MagicMock(spec=nn.Module)
     bert.config = SimpleNamespace(hidden_size=HIDDEN)
     bert.dtype = torch.float32
+    bert.to.return_value = bert
+    bert.train.return_value = bert
+    bert.eval.return_value = bert
     return bert
 
 
