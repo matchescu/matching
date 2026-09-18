@@ -67,7 +67,9 @@ class MultiClassSimilarity:
                 truncation=True,
                 return_tensors="pt",
             )
-            col_token_id = self.__tokenizer.convert_tokens_to_ids("COL")
+            col_token_id = self.__tokenizer("COL", add_special_tokens=False)[
+                "input_ids"
+            ][0]
             input_ids = encoding["input_ids"]
             positions = (input_ids == col_token_id).nonzero(as_tuple=False)
             col_positions = (

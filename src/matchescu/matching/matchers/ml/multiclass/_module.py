@@ -142,9 +142,8 @@ class MultiClassModule(nn.Module):
         return self
 
     def eval(self):
+        super().eval()
         self.to(torch.device("cpu"))
-        self._bert.eval()
-        self._classifier.eval()
 
     def to(self, device: str | torch.device) -> None:
         self._bert = self._bert.to(device)
@@ -156,20 +155,11 @@ class MultiClassModule(nn.Module):
         )
 
     def train(self, mode: bool = True) -> "MultiClassModule":
-        if mode:
-            self._bert.train(True)
-            self._classifier.train(True)
-            if self._cross_attn is not None:
-                self._cross_attn.train(True)
-        else:
-            self._classifier.train(False)
-            self._bert.train(False)
-            if self._cross_attn is not None:
-                self._cross_attn.train(False)
-            if self._device is not None:
-                match self._device.type:
-                    case "mps":
-                        torch.mps.empty_cache()
-                    case "cuda":
-                        torch.cuda.empty_cache()
+        super().train(mode)
+        if not mode and self._device is not None:
+            match self._device.type:
+                case "mps":
+                    torch.mps.empty_cache()
+                case "cuda":
+                    torch.cuda.empty_cache()
         return self

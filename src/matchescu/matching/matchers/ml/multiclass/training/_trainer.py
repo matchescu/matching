@@ -121,6 +121,13 @@ class MultiClassTrainer(
             self._get_decay_model_params(model.embeddings_layer, emb_lr, weight_decay)
         )
 
+        if model.cross_attention is not None:
+            param_groups.extend(
+                self._get_decay_model_params(
+                    model.cross_attention, base_lr / decay_factor, weight_decay
+                )
+            )
+
         return torch.optim.AdamW(param_groups)
 
     def _create_scheduler(
