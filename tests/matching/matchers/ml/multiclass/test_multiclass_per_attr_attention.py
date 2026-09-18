@@ -37,3 +37,34 @@ def test_attention_output_ignores_masked_span_positions(attention):
 
     assert torch.allclose(enc_a_with, enc_a_without)
     assert torch.allclose(enc_b_with, enc_b_without)
+
+
+def test_spans_extracted_per_segment_with_global_col_positions(attention):
+    """Global COL positions spanning both segments must yield one span per
+    segment per attribute, each owned by its own segment."""
+    torch.manual_seed(0)
+    hidden = torch.randn(1, 8, HIDDEN)
+    mask_a = torch.tensor([[1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]])
+    mask_b = torch.tensor([[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]])
+    col_positions = torch.tensor([[0, 4]])
+
+    spans_a = attention._extract_attr_spans(hidden, col_positions, mask_a)
+    spans_b = attention._extract_attr_spans(hidden, col_positions, mask_b)
+
+    assert len(spans_a[0]) == 1
+    assert len(spans_b[0]) == 1
+    assert not spans_a[0][0][1].all()
+    assert not spans_b[0][0][1].all()
+
+
+def test_encodings_nonzero_when_segments_disjoint(attention):
+    torch.manual_seed(0)
+    hidden = torch.randn(1, 8, HIDDEN)
+    mask_a = torch.tensor([[1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0]])
+    mask_b = torch.tensor([[0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0]])
+    col_positions = torch.tensor([[0, 4]])
+
+    enc_a, enc_b = attention.forward(hidden, mask_a, mask_b, col_positions)
+
+    assert enc_a.abs().sum() > 0
+    assert enc_b.abs().sum() > 0

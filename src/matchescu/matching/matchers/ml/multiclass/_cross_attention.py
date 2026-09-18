@@ -95,8 +95,13 @@ class PerAttributeCrossAttention(nn.Module):
         hidden: torch.Tensor,
         col_positions: torch.Tensor,
         segment_mask: torch.Tensor,
-    ) -> list[list[torch.Tensor]]:
+    ) -> list[list[tuple[torch.Tensor, torch.Tensor]]]:
         """Split hidden states into per-attribute spans for each batch item.
+
+        Only COL positions that belong to the same segment (``segment_mask`` is
+        1.0 at the COL token) open a span. Each segment's span list holds
+        that segment's attributes in order and index ``i`` of the two
+        segments refers to the same attribute.
 
         Args:
             hidden: (batch, seq_len, hidden).
@@ -114,11 +119,16 @@ class PerAttributeCrossAttention(nn.Module):
         for b in range(batch_size):
             cols = col_positions[b]
             valid_cols = cols[cols >= 0].tolist()
+            owns = segment_mask[b, valid_cols] == 1.0
+            item_cols = [col_pos for col_pos, owns in zip(valid_cols, owns) if owns]
             item_spans: list[tuple[torch.Tensor, torch.Tensor]] = []
-            for i, col_pos in enumerate(valid_cols):
-                end_pos = (
-                    valid_cols[i + 1] if i + 1 < len(valid_cols) else hidden.size(1)
-                )
+            for i, col_pos in enumerate(item_cols):
+                if i + 1 < len(item_cols):
+                    end_pos = item_cols[i + 1]
+                else:
+                    end_pos = next(
+                        (p for p in valid_cols if p > col_pos), hidden.size(1)
+                    )
                 span_mask = segment_mask[b, col_pos:end_pos]
                 span = hidden[b, col_pos:end_pos] * span_mask.unsqueeze(-1)
                 item_spans.append((span, span_mask.eq(0)))
@@ -165,8 +175,8 @@ class PerAttributeCrossAttention(nn.Module):
                 out_b, _ = self.attn_b(
                     query=sa, key=sb, value=sb, key_padding_mask=pad_b.unsqueeze(0)
                 )
-                valid_a = out_a.squeeze(0)[~pad_a]
-                valid_b = out_b.squeeze(0)[~pad_b]
+                valid_a = out_a.squeeze(0)[~pad_b]
+                valid_b = out_b.squeeze(0)[~pad_a]
                 if valid_a.size(0) == 0 or valid_b.size(0) == 0:
                     continue
                 attr_outs_a.append(valid_a.mean(dim=0))
