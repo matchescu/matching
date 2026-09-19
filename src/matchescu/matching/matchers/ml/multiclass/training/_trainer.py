@@ -22,12 +22,14 @@ from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset
 
 
+
 class MultiClassTrainer(
     BaseTrainer[
         MultiClassModule, MultiClassTrainingParams, AsymmetricMultiClassDataset
     ],
     capability=CAPABILITY,
 ):
+    _FOCAL_GAMMA = 2.0
     hyperparams_schema = MultiClassTrainingParams
 
     def __init__(
@@ -91,7 +93,7 @@ class MultiClassTrainer(
             case LossType.WEIGHTED_CE:
                 return FocalLoss(weights, gamma=0.0)
             case LossType.FOCAL:
-                return FocalLoss(weights, gamma=self._params.reverse_penalty_weight)
+                return FocalLoss(weights, gamma=self._FOCAL_GAMMA)
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
