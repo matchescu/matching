@@ -3,12 +3,7 @@ from torch import nn
 
 
 class PooledCrossAttention(nn.Module):
-    """Symmetric cross-attention over pooled segment representations.
-
-    Both directions share the same ``MultiheadAttention`` instance so the
-    attention is symmetric by construction: ``enc_a`` and ``enc_b`` differ
-    only in which segment acts as query vs. key/value context.
-    """
+    """Cross-attention over pooled segment representations."""
 
     def __init__(self, hidden_size: int, num_heads: int = 8, dropout: float = 0.1):
         super().__init__()
@@ -26,7 +21,7 @@ class PooledCrossAttention(nn.Module):
         mask_a: torch.Tensor,
         mask_b: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Produce ``(enc_a, enc_b)`` via symmetric cross-attention.
+        """Produce ``(enc_a, enc_b)`` via cross-attention.
 
         Args:
             hidden: (batch, seq_len, hidden) — BERT token-level hidden states.
@@ -51,15 +46,15 @@ class PooledCrossAttention(nn.Module):
 
         enc_a, _ = self.attn(
             query=pooled_a.unsqueeze(1),
-            key=seg_a,
-            value=seg_a,
-            key_padding_mask=key_padding_mask_a,
-        )
-        enc_b, _ = self.attn(
-            query=pooled_b.unsqueeze(1),
             key=seg_b,
             value=seg_b,
             key_padding_mask=key_padding_mask_b,
+        )
+        enc_b, _ = self.attn(
+            query=pooled_b.unsqueeze(1),
+            key=seg_a,
+            value=seg_a,
+            key_padding_mask=key_padding_mask_a,
         )
         return enc_a.squeeze(1), enc_b.squeeze(1)
 
@@ -70,8 +65,8 @@ class PerAttributeCrossAttention(nn.Module):
     Splits BERT token-level hidden states into per-attribute chunks at COL
     token boundaries (supplied externally, keeping this module
     tokenizer-agnostic) and applies standard ``MultiheadAttention`` per
-    attribute in both directions.  The two directions use separate attention
-    instances so the mechanism is asymmetric by construction.
+    attribute in both directions. The two directions use separate attention
+    instances.
     """
 
     def __init__(self, hidden_size: int, num_heads: int = 8, dropout: float = 0.1):
@@ -170,10 +165,10 @@ class PerAttributeCrossAttention(nn.Module):
                 sa = span_a.unsqueeze(0)
                 sb = span_b.unsqueeze(0)
                 out_a, _ = self.attn_a(
-                    query=sb, key=sa, value=sa, key_padding_mask=pad_a.unsqueeze(0)
+                    query=sa, key=sb, value=sb, key_padding_mask=pad_b.unsqueeze(0)
                 )
                 out_b, _ = self.attn_b(
-                    query=sa, key=sb, value=sb, key_padding_mask=pad_b.unsqueeze(0)
+                    query=sb, key=sa, value=sa, key_padding_mask=pad_a.unsqueeze(0)
                 )
                 valid_a = out_a.squeeze(0)[~pad_b]
                 valid_b = out_b.squeeze(0)[~pad_a]
