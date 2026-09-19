@@ -13,7 +13,7 @@ from matchescu.matching.matchers.ml.transformers import (
     suppress_transformer_modeling_utils_warnings,
 )
 
-from ._encoder import to_ditto_text
+from ._encoder import to_ditto_text, value_token_mask
 from ._module import MultiClassModule
 from ._params import MultiClassTrainingParams
 
@@ -79,6 +79,12 @@ class MultiClassSimilarity:
                 else torch.tensor([[-1]], dtype=torch.long)
             )
             encoding["col_positions"] = col_positions
+            val_token_id = self.__tokenizer("VAL", add_special_tokens=False)[
+                "input_ids"
+            ][0]
+            encoding["value_mask"] = value_token_mask(
+                encoding, col_token_id, val_token_id
+            )
             cls_logits = self.__model(**encoding).squeeze(0)
             prediction: int = torch.argmax(cls_logits, dim=-1).int().item()
             cls_weights = logits_to_probs(cls_logits).tolist()

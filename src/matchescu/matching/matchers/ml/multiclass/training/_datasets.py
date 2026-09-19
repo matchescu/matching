@@ -7,7 +7,7 @@ from matchescu.matching.evaluation.data.splits._split import Split
 from matchescu.matching.matchers.ml.torch import set_random_seed
 
 from ...training import MatchescuDataset
-from .._encoder import to_ditto_text
+from .._encoder import to_ditto_text, value_token_mask
 
 
 class AsymmetricMultiClassDataset(MatchescuDataset):
@@ -32,6 +32,7 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         self.__col_token_id = tokenizer(self._COL_TOKEN, add_special_tokens=False)[
             "input_ids"
         ][0]
+        self.__val_token_id = tokenizer("VAL", add_special_tokens=False)["input_ids"][0]
         if random_seed is not None:
             set_random_seed(random_seed)
 
@@ -80,6 +81,10 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
 
         x_fwd["col_positions"] = self._find_col_positions(x_fwd["input_ids"])
         x_rev["col_positions"] = self._find_col_positions(x_rev["input_ids"])
+        for encoding in (x_fwd, x_rev):
+            encoding["value_mask"] = value_token_mask(
+                encoding, self.__col_token_id, self.__val_token_id
+            )
 
         return x_fwd, x_rev, y
 
@@ -120,11 +125,23 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
 
         fwd_cols = [item.pop("col_positions") for item in x_fwd_list]
         rev_cols = [item.pop("col_positions") for item in x_rev_list]
+        fwd_values = [item.pop("value_mask") for item in x_fwd_list]
+        rev_values = [item.pop("value_mask") for item in x_rev_list]
 
         x_fwd_padded = self._pad(x_fwd_list)
         x_rev_padded = self._pad(x_rev_list)
 
         x_fwd_padded["col_positions"] = self._pad_col_positions(fwd_cols)
         x_rev_padded["col_positions"] = self._pad_col_positions(rev_cols)
+        for encoding, values in (
+            (x_fwd_padded, fwd_values),
+            (x_rev_padded, rev_values),
+        ):
+            encoding["value_mask"] = torch.nn.utils.rnn.pad_sequence(
+                values,
+                batch_first=True,
+                padding_value=False,
+                padding_side=self.__tokenizer.padding_side,
+            )
 
         return x_fwd_padded, x_rev_padded, torch.tensor(y, dtype=torch.int64)

@@ -73,6 +73,7 @@ class MultiClassModule(nn.Module):
         token_type_ids: torch.Tensor | None = None,
         col_positions: torch.Tensor | None = None,
         special_tokens_mask: torch.Tensor | None = None,
+        value_mask: torch.Tensor | None = None,
     ):
         enc = self._bert_encode(
             input_ids,
@@ -80,6 +81,7 @@ class MultiClassModule(nn.Module):
             token_type_ids,
             col_positions,
             special_tokens_mask,
+            value_mask,
         )
         return self._classifier(enc)
 
@@ -90,6 +92,7 @@ class MultiClassModule(nn.Module):
         token_type_ids: torch.Tensor | None = None,
         col_positions: torch.Tensor | None = None,
         special_tokens_mask: torch.Tensor | None = None,
+        value_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         out = self._bert(
             input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
@@ -102,7 +105,9 @@ class MultiClassModule(nn.Module):
         mask_a = (token_type_ids == 0).unsqueeze(-1).float() * mask
         mask_b = (token_type_ids == 1).unsqueeze(-1).float() * mask
 
-        enc_a, enc_b = self._compute_encodings(hidden, mask_a, mask_b, col_positions)
+        enc_a, enc_b = self._compute_encodings(
+            hidden, mask_a, mask_b, col_positions, value_mask
+        )
         return self._apply_head(enc_a, enc_b)
 
     def _compute_encodings(
@@ -111,6 +116,7 @@ class MultiClassModule(nn.Module):
         mask_a: torch.Tensor,
         mask_b: torch.Tensor,
         col_positions: torch.Tensor | None,
+        value_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         mask_a_flat = mask_a.squeeze(-1)
         mask_b_flat = mask_b.squeeze(-1)
@@ -122,7 +128,9 @@ class MultiClassModule(nn.Module):
                 raise ValueError(
                     "col_positions required for bert_per_attr_cross_attn architecture"
                 )
-            return self._cross_attn(hidden, mask_a_flat, mask_b_flat, col_positions)
+            return self._cross_attn(
+                hidden, mask_a_flat, mask_b_flat, col_positions, value_mask
+            )
         else:
             enc_a = (hidden * mask_a).sum(1) / mask_a.sum(1).clamp(min=1e-9)
             enc_b = (hidden * mask_b).sum(1) / mask_b.sum(1).clamp(min=1e-9)

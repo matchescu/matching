@@ -103,6 +103,7 @@ class PerAttributeCrossAttention(nn.Module):
         hidden: torch.Tensor,
         col_positions: torch.Tensor,
         segment_mask: torch.Tensor,
+        value_mask: torch.Tensor | None = None,
     ) -> list[list[tuple[torch.Tensor, torch.Tensor]]]:
         """Split hidden states into per-attribute spans for each batch item.
 
@@ -138,6 +139,13 @@ class PerAttributeCrossAttention(nn.Module):
                         (p for p in valid_cols if p > col_pos), hidden.size(1)
                     )
                 span_mask = segment_mask[b, col_pos:end_pos]
+                if (
+                    value_mask is not None
+                    and not (
+                        value_mask[b, col_pos:end_pos].bool() & span_mask.bool()
+                    ).any()
+                ):
+                    span_mask = torch.zeros_like(span_mask)
                 span = hidden[b, col_pos:end_pos] * span_mask.unsqueeze(-1)
                 item_spans.append((span, span_mask.eq(0)))
             spans.append(item_spans)
@@ -149,6 +157,7 @@ class PerAttributeCrossAttention(nn.Module):
         mask_a: torch.Tensor,
         mask_b: torch.Tensor,
         col_positions: torch.Tensor,
+        value_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Produce ``(enc_a, enc_b)`` via directional per-attribute attention.
 
@@ -162,8 +171,8 @@ class PerAttributeCrossAttention(nn.Module):
         Returns:
             (enc_a, enc_b) each of shape (batch, hidden).
         """
-        spans_a = self._extract_attr_spans(hidden, col_positions, mask_a)
-        spans_b = self._extract_attr_spans(hidden, col_positions, mask_b)
+        spans_a = self._extract_attr_spans(hidden, col_positions, mask_a, value_mask)
+        spans_b = self._extract_attr_spans(hidden, col_positions, mask_b, value_mask)
 
         batch_size = hidden.size(0)
         enc_a_list: list[torch.Tensor] = []
@@ -173,7 +182,7 @@ class PerAttributeCrossAttention(nn.Module):
             attr_outs_a: list[torch.Tensor] = []
             attr_outs_b: list[torch.Tensor] = []
             for (span_a, pad_a), (span_b, pad_b) in zip(spans_a[b], spans_b[b]):
-                if span_a.size(0) == 0 or span_b.size(0) == 0:
+                if pad_a.all() or pad_b.all():
                     continue
                 sa = span_a.unsqueeze(0)
                 sb = span_b.unsqueeze(0)
