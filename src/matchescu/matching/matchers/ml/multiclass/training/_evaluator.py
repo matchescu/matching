@@ -13,6 +13,24 @@ from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset
 
 
+class BestByDevMetric:
+    """Track the best dev metric and expose the epoch that achieved it."""
+
+    def __init__(self, metric: str = "dev_mcc", min_delta: float = 0.0) -> None:
+        self._metric = metric
+        self._min_delta = min_delta
+        self._best = -float("inf")
+        self.best_epoch = -1
+
+    def __call__(self, epoch: int, dev_metrics: dict) -> bool:
+        value = float(dev_metrics[self._metric])
+        if value > self._best + self._min_delta:
+            self._best = value
+            self.best_epoch = epoch
+            return True
+        return False
+
+
 class TrainingEvaluator(
     BaseEvaluator[MultiClassModule, AsymmetricMultiClassDataset], capability=CAPABILITY
 ):
@@ -25,6 +43,7 @@ class TrainingEvaluator(
         logger: logging.Logger | None = None,
     ) -> None:
         super().__init__(task_name, xv_data, test_data, tb_log_dir, logger)
+        self._selector = BestByDevMetric("dev_mcc", min_delta=0.0)
         self._best = -1.0
 
     def _interpret_result(
@@ -49,30 +68,31 @@ class TrainingEvaluator(
             order_energy(enc_b, enc_a),
         )
 
-    @torch.no_grad()
-    def _run_model(
-        self,
-        model: MultiClassModule,
-        data_loader: DataLoader[AsymmetricMultiClassDataset],
-        best_config: dict | None = None,
-    ) -> tuple[bool, dict]:
-        batch_results = [
-            (*self._interpret_result(model, batch_fwd, batch_rev), y_true)
-            for batch_fwd, batch_rev, y_true in data_loader
-        ]
+    @classmethod
+    def _aggregate_predictions(
+        cls, batch_results: list[tuple[torch.Tensor, ...]]
+    ) -> tuple:
         y_pred, y_pred_rev, energy_fwd, energy_rev, y_true = zip(*batch_results)
-        y_pred = torch.cat(y_pred).detach().cpu().numpy()
-        y_pred_rev = torch.cat(y_pred_rev).detach().cpu().numpy()
+        y_pred = torch.cat(y_pred).detach().cpu()
+        y_pred_rev = torch.cat(y_pred_rev).detach().cpu()
         y_true = torch.cat(y_true).detach().cpu()
         energy = torch.stack(
             (torch.cat(energy_fwd), torch.cat(energy_rev)), dim=-1
         ).cpu()
-        energy_metrics = {}
+        return y_pred, y_pred_rev, y_true, energy
+
+    @staticmethod
+    def _energy_metrics(
+        energy: torch.Tensor, y_true: torch.Tensor, order_margin: float
+    ) -> dict:
+        energy_metrics: dict = {}
         for label in range(3):
             selected = energy[y_true == label]
             support = len(selected)
             means = (
-                selected.mean(dim=0) if support else energy.new_full((2,), float("nan"))
+                selected.mean(dim=0)
+                if support
+                else energy.new_full((2,), float("nan"))
             )
             stds = selected.std(dim=0, correction=0) if support else means
             energy_metrics.update(
@@ -84,44 +104,128 @@ class TrainingEvaluator(
                     f"order_c{label}_rev_std": stds[1].item(),
                 }
             )
+        c2_support = energy_metrics["order_c2_support"]
         energy_metrics["order_c2_rev_above_margin"] = (
-            (energy[y_true == 2, 1] > model.order_margin).float().mean().item()
+            (energy[y_true == 2, 1] > order_margin).float().mean().item()
+            if c2_support
+            else float("nan")
         )
+        return energy_metrics
+
+    @classmethod
+    def _directional_metrics(
+        cls, y_true: torch.Tensor, y_pred: torch.Tensor, y_pred_rev: torch.Tensor
+    ) -> dict:
         y_true = y_true.numpy()
+        y_pred = y_pred.numpy()
+        y_pred_rev = y_pred_rev.numpy()
+
+        mcc_fwd = metrics.matthews_corrcoef(y_true, y_pred)
+
         y_true_rev = y_true.copy()
         y_true_rev[y_true == 2] = 0
-        avg_loss = float(best_config.get("average_loss", 1))
-
-        mcc_normal = metrics.matthews_corrcoef(y_true, y_pred)
         mcc_rev = metrics.matthews_corrcoef(y_true_rev, y_pred_rev)
-        mcc = (mcc_normal + mcc_rev) / 2
 
         n = len(y_true)
-        c2_fwd_fn = float(((y_true == 2) & (y_pred != 2)).sum()) / n
-        c2_fwd_fp = float(((y_true != 2) & (y_pred == 2)).sum()) / n
-        c2_rev_fp = float((y_pred_rev == 2).sum()) / n
+        c2_support = int((y_true == 2).sum())
+        c2_fwd_fn = (
+            float(((y_true == 2) & (y_pred != 2)).sum()) / c2_support
+            if c2_support
+            else float("nan")
+        )
+        non_c2_support = n - c2_support
+        c2_fwd_fp = (
+            float(((y_true != 2) & (y_pred == 2)).sum()) / non_c2_support
+            if non_c2_support
+            else float("nan")
+        )
+
+        y1_mask = y_true == 1
+        y1_support = int(y1_mask.sum())
+        rev_fpr = (
+            float((y1_mask & (y_pred_rev == 0)).sum()) / y1_support
+            if y1_support
+            else float("nan")
+        )
+
+        non_y1_mask = y_true != 1
+        non_y1_support = int(non_y1_mask.sum())
+        rev_fnr = (
+            float((non_y1_mask & (y_pred_rev != 0)).sum()) / non_y1_support
+            if non_y1_support
+            else float("nan")
+        )
+
+        y2_mask = y_true == 2
+        y2_support = int(y2_mask.sum())
+        c2_rev_zero_acc = (
+            float((y2_mask & (y_pred_rev == 0)).sum()) / y2_support
+            if y2_support
+            else float("nan")
+        )
+        c2_rev_ambiguous = (
+            float((y2_mask & (y_pred_rev == 1)).sum()) / y2_support
+            if y2_support
+            else float("nan")
+        )
+        c2_rev_directed = (
+            float((y2_mask & (y_pred_rev == 2)).sum()) / y2_support
+            if y2_support
+            else float("nan")
+        )
+
+        order_mask = y2_mask
+        order_support = y2_support
+        order_acc = (
+            float(
+                ((y_pred == 2) & (y_pred_rev == 0) & order_mask).sum()
+            )
+            / order_support
+            if order_support
+            else float("nan")
+        )
+        collapse = float((y_pred == y_pred_rev).sum()) / n
+
+        return {
+            "mcc": mcc_fwd,
+            "mcc_rev": mcc_rev,
+            "c2_fwd_fn": c2_fwd_fn,
+            "c2_fwd_fp": c2_fwd_fp,
+            "rev_fpr": rev_fpr,
+            "rev_fnr": rev_fnr,
+            "c2_rev_zero_acc": c2_rev_zero_acc,
+            "c2_rev_ambiguous": c2_rev_ambiguous,
+            "c2_rev_directed": c2_rev_directed,
+            "order_acc": order_acc,
+            "collapse": collapse,
+        }
+
+    @torch.no_grad()
+    def _run_model(
+        self,
+        model: MultiClassModule,
+        data: DataLoader[AsymmetricMultiClassDataset],
+        best_config: dict | None = None,
+    ) -> tuple[bool, dict]:
+        batch_results = [
+            (*self._interpret_result(model, batch_fwd, batch_rev), y_true)
+            for batch_fwd, batch_rev, y_true in data
+        ]
+        y_pred, y_pred_rev, y_true, energy = self._aggregate_predictions(
+            batch_results
+        )
+
+        directional = self._directional_metrics(y_true, y_pred, y_pred_rev)
+        energy_metrics = self._energy_metrics(energy, y_true, model.order_margin)
+
+        result = {**directional, **energy_metrics}
 
         if self._is_evaluating(best_config):
-            best_config.update(
-                {
-                    "test_mcc": mcc,
-                    "test_c2_fwd_fn": c2_fwd_fn,
-                    "test_c2_fwd_fp": c2_fwd_fp,
-                    "test_c2_rev_fp": c2_rev_fp,
-                    **{f"test_{key}": value for key, value in energy_metrics.items()},
-                }
-            )
+            best_config = best_config or {}
+            best_config.update({f"test_{key}": value for key, value in result.items()})
             return True, best_config
-        else:
-            success = False
-            current = mcc / avg_loss
-            if current > self._best:
-                self._best = current
-                success = True
-            return success, {
-                "dev_mcc": mcc,
-                "dev_c2_fwd_fn": c2_fwd_fn,
-                "dev_c2_fwd_fp": c2_fwd_fp,
-                "dev_c2_rev_fp": c2_rev_fp,
-                **{f"dev_{key}": value for key, value in energy_metrics.items()},
-            }
+
+        dev_result = {f"dev_{key}": value for key, value in result.items()}
+        epoch = getattr(model, "_training_epoch", 1)
+        success = self._selector(epoch, dev_result)
+        return success, dev_result
