@@ -1,11 +1,10 @@
-import random
-
 import numpy as np
 import torch
 from matchescu.reference_store.id_table import IdTable
 from transformers import BatchEncoding, PreTrainedTokenizerFast
 
 from matchescu.matching.evaluation.data.splits._split import Split
+from matchescu.matching.matchers.ml.torch import set_random_seed
 
 from ...training import MatchescuDataset
 from .._encoder import to_ditto_text
@@ -22,7 +21,7 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         max_len: int = 256,
         left_cols: tuple | None = None,
         right_cols: tuple | None = None,
-        random_seed: int = 42,
+        random_seed: int | None = 42,
     ):
         super().__init__(id_table, split)
         self.__tokenizer = tokenizer
@@ -33,7 +32,8 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         self.__col_token_id = tokenizer(self._COL_TOKEN, add_special_tokens=False)[
             "input_ids"
         ][0]
-        random.seed(random_seed)
+        if random_seed is not None:
+            set_random_seed(random_seed)
 
     @property
     def label_counts(self) -> np.ndarray:

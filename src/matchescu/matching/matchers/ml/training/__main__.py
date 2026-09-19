@@ -26,6 +26,7 @@ from matchescu.matching.matchers.ml.multiclass.training import (
     AsymmetricMultiClassDataset,
     MultiClassTrainer,
 )
+from matchescu.matching.matchers.ml.torch import set_random_seed
 from matchescu.matching.matchers.ml.training import BaseEvaluator, BaseTrainer
 from matchescu.matching.matchers.ml.training._config import (
     DEFAULT_DATA_DIR,
@@ -66,11 +67,13 @@ def get_benchmark_data_loaders(
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
     splits = benchmark_data.splits
     split_names = splits
+    dataset_kwargs = {}
     if issubclass(ds_cls, AsymmetricMultiClassDataset):
         validation_name = "valid_split" if "valid_split" in splits else "dev_split"
         split_names = ("train_split", validation_name, "test_split")
+        dataset_kwargs["random_seed"] = None
     train_ds, xv_ds, test_ds = [
-        ds_cls(benchmark_data.id_table, splits[name], tokenizer)
+        ds_cls(benchmark_data.id_table, splits[name], tokenizer, **dataset_kwargs)
         for name in split_names
     ]
     sampler = (
@@ -101,6 +104,8 @@ def train_on_benchmark_data[TParams](
     if (model_and_ds := _TRAINER_MAPPINGS.get(trainer_cls)) is None:
         raise RuntimeError(f"unsupported trainer: {trainer_cls.__qualname__}")
     model_cls, ds_cls = model_and_ds
+    if issubclass(ds_cls, AsymmetricMultiClassDataset):
+        set_random_seed(42)
     train, xv, test = get_benchmark_data_loaders(
         ds_cls, benchmark_data, tokenizer, train_params
     )
