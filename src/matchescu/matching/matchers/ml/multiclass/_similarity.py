@@ -73,7 +73,7 @@ class MultiClassSimilarity:
             input_ids = encoding["input_ids"]
             positions = (input_ids == col_token_id).nonzero(as_tuple=False)
             col_positions = (
-                positions.squeeze(-1).unsqueeze(0)
+                positions[:, 1].unsqueeze(0)
                 if positions.numel() > 0
                 else torch.tensor([[-1]], dtype=torch.long)
             )
