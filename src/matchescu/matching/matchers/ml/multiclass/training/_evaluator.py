@@ -20,13 +20,21 @@ class BestByDevMetric:
         self._metric = metric
         self._min_delta = min_delta
         self._best = -float("inf")
-        self.best_epoch = -1
+        self._best_epoch = -1
+
+    @property
+    def best_epoch(self) -> int:
+        return self._best_epoch
+
+    def reset(self) -> None:
+        self._best = -float("inf")
+        self._best_epoch = -1
 
     def __call__(self, epoch: int, dev_metrics: dict) -> bool:
         value = float(dev_metrics[self._metric])
         if value > self._best + self._min_delta:
             self._best = value
-            self.best_epoch = epoch
+            self._best_epoch = epoch
             return True
         return False
 
@@ -45,6 +53,29 @@ class TrainingEvaluator(
         super().__init__(task_name, xv_data, test_data, tb_log_dir, logger)
         self._selector = BestByDevMetric("dev_mcc", min_delta=0.0)
         self._best = -1.0
+        self._pending_epoch = 0
+
+    def reset_selector(self) -> None:
+        self._selector.reset()
+        self._pending_epoch = 0
+
+    @classmethod
+    def _interpret_result_core(
+        cls,
+        model: MultiClassModule,
+        batch_fwd: dict[str, torch.Tensor],
+        batch_rev: dict[str, torch.Tensor],
+    ):
+        cls_logits, enc_a, enc_b = model(**batch_fwd, return_embeddings=True)
+        cls_logits_rev = model(**batch_rev)
+        cls_pred = torch.argmax(cls_logits, dim=-1)
+        cls_pred_rev = torch.argmax(cls_logits_rev, dim=-1)
+        return (
+            cls_pred,
+            cls_pred_rev,
+            order_energy(enc_a, enc_b),
+            order_energy(enc_b, enc_a),
+        )
 
     def _interpret_result(
         self,
@@ -90,9 +121,7 @@ class TrainingEvaluator(
             selected = energy[y_true == label]
             support = len(selected)
             means = (
-                selected.mean(dim=0)
-                if support
-                else energy.new_full((2,), float("nan"))
+                selected.mean(dim=0) if support else energy.new_full((2,), float("nan"))
             )
             stds = selected.std(dim=0, correction=0) if support else means
             energy_metrics.update(
@@ -177,9 +206,7 @@ class TrainingEvaluator(
         order_mask = y2_mask
         order_support = y2_support
         order_acc = (
-            float(
-                ((y_pred == 2) & (y_pred_rev == 0) & order_mask).sum()
-            )
+            float(((y_pred == 2) & (y_pred_rev == 0) & order_mask).sum())
             / order_support
             if order_support
             else float("nan")
@@ -200,6 +227,33 @@ class TrainingEvaluator(
             "collapse": collapse,
         }
 
+    @classmethod
+    @torch.no_grad()
+    def _measure(
+        cls,
+        model: MultiClassModule,
+        data: DataLoader[AsymmetricMultiClassDataset],
+        order_margin: float,
+        device: torch.device | None = None,
+    ) -> dict:
+        if device is None:
+            device = torch.device("cpu")
+        batch_results = [
+            (
+                *cls._interpret_result_core(
+                    model,
+                    {k: v.to(device) for k, v in batch_fwd.items()},
+                    {k: v.to(device) for k, v in batch_rev.items()},
+                ),
+                y_true,
+            )
+            for batch_fwd, batch_rev, y_true in data
+        ]
+        y_pred, y_pred_rev, y_true, energy = cls._aggregate_predictions(batch_results)
+        directional = cls._directional_metrics(y_true, y_pred, y_pred_rev)
+        energy_metrics = cls._energy_metrics(energy, y_true, order_margin)
+        return {**directional, **energy_metrics}
+
     @torch.no_grad()
     def _run_model(
         self,
@@ -211,9 +265,7 @@ class TrainingEvaluator(
             (*self._interpret_result(model, batch_fwd, batch_rev), y_true)
             for batch_fwd, batch_rev, y_true in data
         ]
-        y_pred, y_pred_rev, y_true, energy = self._aggregate_predictions(
-            batch_results
-        )
+        y_pred, y_pred_rev, y_true, energy = self._aggregate_predictions(batch_results)
 
         directional = self._directional_metrics(y_true, y_pred, y_pred_rev)
         energy_metrics = self._energy_metrics(energy, y_true, model.order_margin)
@@ -226,6 +278,15 @@ class TrainingEvaluator(
             return True, best_config
 
         dev_result = {f"dev_{key}": value for key, value in result.items()}
-        epoch = getattr(model, "_training_epoch", 1)
-        success = self._selector(epoch, dev_result)
+        success = self._selector(self._pending_epoch, dev_result)
         return success, dev_result
+
+    def __call__(
+        self, model: MultiClassModule, training_metrics: dict, epoch: int
+    ) -> tuple[bool, dict]:
+        self._pending_epoch = epoch
+        return super().__call__(model, training_metrics, epoch)
+
+    @property
+    def best_epoch(self) -> int:
+        return self._selector.best_epoch

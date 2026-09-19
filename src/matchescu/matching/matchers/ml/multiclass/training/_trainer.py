@@ -8,6 +8,7 @@ from torch import Tensor
 from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
+from torch.optim.lr_scheduler import LRScheduler
 from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 
@@ -19,6 +20,7 @@ from .._params import MultiClassTrainingParams
 from .._types import LossType
 from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset
+from ._evaluator import TrainingEvaluator
 
 
 class MultiClassTrainer(
@@ -186,3 +188,77 @@ class MultiClassTrainer(
             "loss_dir": loss_dir,
             "loss_order": loss_order,
         }
+
+    def _train_one_epoch(
+        self,
+        epoch: int,
+        device: torch.device,
+        model: torch.nn.Module,
+        train_iter: DataLoader[AsymmetricMultiClassDataset],
+        optimizer: Optimizer,
+        scheduler: LRScheduler,
+    ) -> dict:
+        metrics = super()._train_one_epoch(
+            epoch, device, model, train_iter, optimizer, scheduler
+        )
+        train_dataset = getattr(train_iter, "dataset", None)
+        if train_dataset is not None and hasattr(train_dataset, "get_data_loader"):
+            train_loader = train_dataset.get_data_loader(
+                self._params.batch_size, shuffle=False, sampler=None
+            )
+            train_eval = TrainingEvaluator._measure(
+                model, train_loader, self._params.order_margin, device
+            )
+            metrics.update({f"train_{key}": value for key, value in train_eval.items()})
+        return metrics
+
+    def run_training(
+        self,
+        model: MultiClassModule,
+        training_data: DataLoader[AsymmetricMultiClassDataset],
+        evaluator: TrainingEvaluator | None = None,
+        save_model: bool = False,
+    ) -> None:
+        if evaluator is not None and not save_model:
+            raise ValueError(
+                "multiclass training requires save_model=True when an evaluator is supplied"
+            )
+        if evaluator is not None:
+            evaluator.reset_selector()
+
+        super().run_training(model, training_data, evaluator, save_model)
+
+        if evaluator is None or not save_model:
+            return
+
+        ckpt_path = self._model_dir / self._task / "model.pt"
+        if not ckpt_path.exists():
+            raise RuntimeError(f"no best checkpoint found at {ckpt_path}")
+
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        best_epoch = evaluator.best_epoch
+        if ckpt.get("epoch") != best_epoch:
+            raise RuntimeError(
+                f"checkpoint epoch {ckpt.get('epoch')} does not match best epoch {best_epoch}"
+            )
+
+        model.load_state_dict(ckpt["model"])
+        optimizer = self._create_optimizer(model)
+        optimizer.load_state_dict(ckpt["optimizer"])
+        scheduler = self._create_scheduler(training_data.dataset, optimizer)
+        scheduler.load_state_dict(ckpt["scheduler"])
+
+        model.eval()
+        best_config = dict(ckpt["additional_info"]["best_config"])
+        best_config["is_evaluating"] = True
+        ok, final_config = evaluator._run_model(
+            model, evaluator._test_data, best_config
+        )
+        if not ok:
+            raise RuntimeError("failed to evaluate selected checkpoint on test data")
+
+        self._log.info(
+            "selected epoch %d: %s", best_epoch, evaluator._repr_config(final_config)
+        )
+        ckpt["additional_info"]["best_config"] = final_config
+        torch.save(ckpt, ckpt_path)
