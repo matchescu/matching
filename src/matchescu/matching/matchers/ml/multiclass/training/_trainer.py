@@ -5,7 +5,6 @@ from typing import Any, cast
 
 import torch
 from torch import Tensor
-from torch.functional import F
 from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
@@ -14,7 +13,7 @@ from transformers import get_linear_schedule_with_warmup
 
 from matchescu.matching.matchers.ml.training import BaseTrainer
 
-from .._loss import FocalLoss
+from .._loss import FocalLoss, directional_margin_loss
 from .._module import MultiClassModule
 from .._params import MultiClassTrainingParams
 from .._types import LossType
@@ -91,7 +90,7 @@ class MultiClassTrainer(
             case LossType.WEIGHTED_CE:
                 return FocalLoss(weights, gamma=0.0)
             case LossType.FOCAL:
-                return FocalLoss(weights, gamma=self._params.reverse_penalty_weight)
+                return FocalLoss(weights, gamma=self._params.focal_gamma)
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
@@ -161,7 +160,7 @@ class MultiClassTrainer(
 
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
-    ) -> Any:
+    ) -> dict[str, Tensor]:
         cls_logits, cls_logits_rev, y, y_rev = tensors
         cls_logits, cls_logits_rev, y, y_rev = (
             cls_logits.float(),
@@ -170,9 +169,15 @@ class MultiClassTrainer(
             y_rev.long(),
         )
 
-        loss = loss_fn(cls_logits, y)
+        loss_fwd = loss_fn(cls_logits, y)
         valid_mask = y_rev < 2  # Filter out invalid targets (though none exist here)
-        loss_rev = F.cross_entropy(cls_logits_rev[valid_mask], y_rev[valid_mask])
-        class_2_penalty = F.softmax(cls_logits_rev, dim=1)[:, 2].mean()
-        loss_rev += self._params.reverse_penalty_weight * class_2_penalty
-        return loss + loss_rev
+        loss_rev = loss_fn(cls_logits_rev[valid_mask], y_rev[valid_mask])
+        loss_dir = directional_margin_loss(
+            cls_logits, cls_logits_rev, y, self._params.dir_margin
+        )
+        return {
+            "total": loss_fwd + loss_rev + self._params.dir_margin_weight * loss_dir,
+            "loss_fwd": loss_fwd,
+            "loss_rev": loss_rev,
+            "loss_dir": loss_dir,
+        }

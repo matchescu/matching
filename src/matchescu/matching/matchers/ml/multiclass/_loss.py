@@ -4,6 +4,16 @@ from torch import Tensor, nn
 from torch.nn.modules.loss import _Loss
 
 
+def directional_margin_loss(
+    logits_fwd: Tensor, logits_rev: Tensor, y: Tensor, margin: float = 2.0
+) -> Tensor:
+    m = y == 2
+    if not m.any():
+        return logits_fwd.new_zeros(())
+    gap = logits_fwd[m, 2] - logits_rev[m, 2]
+    return F.relu(margin - gap).mean()
+
+
 class FocalLoss(_Loss):
     """
     Multiclass focal loss implementation.

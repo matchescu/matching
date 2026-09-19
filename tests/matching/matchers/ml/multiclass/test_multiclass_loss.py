@@ -14,14 +14,14 @@ def test_create_loss_when_loss_type_weighted_ce_returns_focal_with_gamma_zero(
     assert loss_fn.gamma == 0.0
 
 
-def test_create_loss_when_loss_type_focal_returns_focal_with_penalty_gamma(
+def test_create_loss_when_loss_type_focal_returns_focal_with_configured_gamma(
     make_trainer, mock_data_loader
 ):
-    trainer = make_trainer(loss_type=LossType.FOCAL, reverse_penalty_weight=2.0)
+    trainer = make_trainer(loss_type=LossType.FOCAL, focal_gamma=0.5)
     loader = mock_data_loader([100, 50, 12])
     loss_fn = trainer._create_loss(loader)
     assert isinstance(loss_fn, FocalLoss)
-    assert loss_fn.gamma == 2.0
+    assert loss_fn.gamma == 0.5
 
 
 def test_create_loss_weights_are_sqrt_dampened_and_normalized(

@@ -1,49 +1,97 @@
+from unittest.mock import Mock
+
 import pytest
 import torch
+import torch.nn.functional as F
 
 from matchescu.matching.matchers.ml.multiclass._loss import FocalLoss
+from matchescu.matching.matchers.ml.multiclass._params import MultiClassTrainingParams
 from matchescu.matching.matchers.ml.multiclass._types import LossType
 
 
-def _compute_loss_with_penalty(make_trainer, penalty_weight):
-    trainer = make_trainer(
-        loss_type=LossType.WEIGHTED_CE, reverse_penalty_weight=penalty_weight
+@pytest.fixture
+def loss_tensors():
+    fwd = torch.tensor(
+        [[2.0, 0.0, 1.0], [0.0, 2.0, 1.0], [1.0, 0.0, 2.0]], requires_grad=True
     )
-    loss_fn = FocalLoss(torch.tensor([1.0, 1.0, 1.0]), gamma=0.0)
-
-    torch.manual_seed(42)
-    logits = torch.randn(8, 3, requires_grad=True)
-    logits_rev = torch.randn(8, 3, requires_grad=True)
-    targets = torch.randint(0, 2, (8,), dtype=torch.long)
-    targets_rev = targets.clone()
-    targets_rev[targets == 2] = 0
-
-    loss = trainer._compute_loss(0, loss_fn, [logits, logits_rev, targets, targets_rev])
-    return loss.item(), logits_rev.detach()
+    rev = torch.tensor(
+        [[1.0, 2.0, 0.0], [0.0, 1.0, 2.0], [2.0, 0.0, 1.0]], requires_grad=True
+    )
+    return fwd, rev, torch.tensor([0, 1, 2]), torch.tensor([0, 1, 0])
 
 
-def test_compute_loss_when_penalty_zero_adds_nothing(make_trainer):
-    loss_zero, _ = _compute_loss_with_penalty(make_trainer, 0.0)
-    loss_nonzero, logits_rev = _compute_loss_with_penalty(make_trainer, 2.0)
-
-    expected_penalty = 2.0 * torch.softmax(logits_rev, dim=1)[:, 2].mean().item()
-    assert loss_nonzero - loss_zero == pytest.approx(expected_penalty, rel=1e-5)
-
-
-def test_compute_loss_penalty_scales_linearly_with_weight(make_trainer):
-    loss_0, logits_rev = _compute_loss_with_penalty(make_trainer, 0.0)
-    loss_1, _ = _compute_loss_with_penalty(make_trainer, 1.0)
-    loss_2, _ = _compute_loss_with_penalty(make_trainer, 2.0)
-
-    penalty_term = torch.softmax(logits_rev, dim=1)[:, 2].mean().item()
-    assert loss_1 - loss_0 == pytest.approx(penalty_term, rel=1e-5)
-    assert loss_2 - loss_0 == pytest.approx(2 * penalty_term, rel=1e-5)
+def test_directional_params_replace_reverse_penalty():
+    params = MultiClassTrainingParams()
+    assert (params.focal_gamma, params.dir_margin_weight, params.dir_margin) == (
+        0.0,
+        0.0,
+        2.0,
+    )
+    assert "reverse_penalty_weight" not in type(params).model_fields
+    assert "reversePenaltyWeight" not in params.model_dump()
 
 
-def test_forward_pass_relabeled_targets_when_class_is_two_becomes_zero():
-    y = torch.tensor([0, 1, 2, 0, 1, 2, 0, 1], dtype=torch.long)
-    y_rev = y.clone()
-    y_rev[y == 2] = 0
+@pytest.mark.parametrize("gamma", [0.0, 2.0])
+@pytest.mark.parametrize("weight", [0.0, 2.0])
+@pytest.mark.parametrize("loss_type", list(LossType))
+def test_loss_settings_are_independent(
+    make_trainer, mock_data_loader, loss_tensors, gamma, weight, loss_type
+):
+    trainer = make_trainer(
+        loss_type=loss_type, focal_gamma=gamma, dir_margin_weight=weight, dir_margin=3.0
+    )
+    loss_fn = trainer._create_loss(mock_data_loader([100, 25, 4]))
+    expected_gamma = gamma if loss_type == LossType.FOCAL else 0.0
+    assert loss_fn.gamma == expected_gamma
+    result = trainer._compute_loss(0, loss_fn, loss_tensors)
+    fwd, rev, y, y_rev = loss_tensors
+    torch.testing.assert_close(result["loss_fwd"], loss_fn(fwd, y))
+    torch.testing.assert_close(result["loss_rev"], loss_fn(rev, y_rev))
+    torch.testing.assert_close(result["loss_dir"], fwd.new_tensor(2.0))
+    torch.testing.assert_close(
+        result["total"], loss_fn(fwd, y) + loss_fn(rev, y_rev) + weight * 2.0
+    )
 
-    assert (y_rev[y == 2] == 0).all()
-    assert (y_rev[y != 2] == y[y != 2]).all()
+
+@pytest.mark.parametrize("gamma", [0.0, 2.0])
+def test_fixed_baseline_differs_only_by_weighted_focal_reverse(
+    make_trainer, mock_data_loader, loss_tensors, gamma
+):
+    trainer = make_trainer(focal_gamma=gamma)
+    loss_fn = trainer._create_loss(mock_data_loader([100, 25, 4]))
+    fwd, rev, y, y_rev = loss_tensors
+    old_fwd = FocalLoss(loss_fn.alpha, gamma=0.0)(fwd, y)
+    old_rev = F.cross_entropy(rev, y_rev)
+    result = trainer._compute_loss(0, loss_fn, loss_tensors)
+    expected_delta = loss_fn(fwd, y) - old_fwd + loss_fn(rev, y_rev) - old_rev
+    torch.testing.assert_close(result["total"] - (old_fwd + old_rev), expected_delta)
+    assert not torch.isclose(result["loss_rev"], old_rev)
+
+
+def test_default_loss_matches_old_baseline_for_unit_weights(make_trainer, loss_tensors):
+    loss_fn = FocalLoss(torch.ones(3), gamma=0.0)
+    fwd, rev, y, y_rev = loss_tensors
+    result = make_trainer()._compute_loss(0, loss_fn, loss_tensors)
+    torch.testing.assert_close(
+        result["total"], loss_fn(fwd, y) + F.cross_entropy(rev, y_rev)
+    )
+
+
+def test_compute_loss_reuses_loss_object_for_valid_reverse_targets(
+    make_trainer, loss_tensors
+):
+    fwd, rev, y, _ = loss_tensors
+    y_rev = torch.tensor([0, 1, 2])
+    loss_fn = Mock(side_effect=lambda x, y: F.cross_entropy(x, y))
+    make_trainer()._compute_loss(0, loss_fn, (fwd, rev, y, y_rev))
+    assert loss_fn.call_count == 2
+    torch.testing.assert_close(loss_fn.call_args.args[0], rev[:2])
+    torch.testing.assert_close(loss_fn.call_args.args[1], y_rev[:2])
+
+
+def test_forward_pass_relabels_class_two(make_trainer, loss_tensors):
+    fwd, rev, y, y_rev = loss_tensors
+    result = make_trainer()._forward_pass(
+        Mock(side_effect=[fwd, rev]), ({}, {}, y), torch.device("cpu")
+    )
+    torch.testing.assert_close(result[3], y_rev)

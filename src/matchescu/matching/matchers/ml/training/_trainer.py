@@ -105,6 +105,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         scheduler: LRScheduler,
     ):
         total_loss = 0.0
+        component_totals = {}
         batch_no = 0
 
         try:
@@ -118,6 +119,13 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
                 loss = self._compute_loss(
                     epoch, loss_fn, (x.to(device) for x in result)
                 )
+                if isinstance(loss, dict):
+                    for name, value in loss.items():
+                        if name != "total":
+                            component_totals[name] = (
+                                component_totals.get(name, 0.0) + value.item()
+                            )
+                    loss = loss["total"]
 
                 loss.backward()
                 optimizer.step()
@@ -140,7 +148,10 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
 
         avg_loss = total_loss / batch_no if batch_no > 0 else 0
         self._log.info("epoch %d: avg loss=%.4f", epoch, avg_loss)
-        return {"average_loss": avg_loss}
+        return {
+            "average_loss": avg_loss,
+            **{name: value / batch_no for name, value in component_totals.items()},
+        }
 
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
