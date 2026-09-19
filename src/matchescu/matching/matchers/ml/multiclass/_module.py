@@ -72,9 +72,14 @@ class MultiClassModule(nn.Module):
         attention_mask: torch.Tensor,
         token_type_ids: torch.Tensor | None = None,
         col_positions: torch.Tensor | None = None,
+        special_tokens_mask: torch.Tensor | None = None,
     ):
         enc = self._bert_encode(
-            input_ids, attention_mask, token_type_ids, col_positions
+            input_ids,
+            attention_mask,
+            token_type_ids,
+            col_positions,
+            special_tokens_mask,
         )
         return self._classifier(enc)
 
@@ -84,11 +89,14 @@ class MultiClassModule(nn.Module):
         attention_mask: torch.Tensor,
         token_type_ids: torch.Tensor | None = None,
         col_positions: torch.Tensor | None = None,
+        special_tokens_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         out = self._bert(
             input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
         hidden = out[0]
+        if special_tokens_mask is not None:
+            attention_mask = attention_mask.masked_fill(special_tokens_mask.bool(), 0)
         mask = attention_mask.unsqueeze(-1).float()
 
         mask_a = (token_type_ids == 0).unsqueeze(-1).float() * mask

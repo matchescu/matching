@@ -66,6 +66,7 @@ class MultiClassSimilarity:
                 max_length=self.__max_len,
                 truncation=True,
                 return_tensors="pt",
+                return_special_tokens_mask=True,
             )
             col_token_id = self.__tokenizer("COL", add_special_tokens=False)[
                 "input_ids"

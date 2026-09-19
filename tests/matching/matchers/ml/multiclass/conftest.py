@@ -46,6 +46,7 @@ def local_tokenizer():
         unk_token="[UNK]",
         cls_token="[CLS]",
         sep_token="[SEP]",
+        model_input_names=["input_ids", "token_type_ids", "attention_mask"],
     )
 
 

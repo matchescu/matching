@@ -33,3 +33,13 @@ def test_similarity_passes_token_indexes_when_col_count_varies(
     )
 
     assert model.call_args.kwargs["col_positions"].tolist() == expected
+
+
+def test_similarity_passes_boundary_mask_when_tokenizing(similarity_model, ref_pair):
+    similarity, model = similarity_model
+
+    similarity(*ref_pair)
+
+    encoding = model.call_args.kwargs
+    expected = torch.isin(encoding["input_ids"], torch.tensor([0, 2, 3])).long()
+    assert torch.equal(encoding["special_tokens_mask"], expected)

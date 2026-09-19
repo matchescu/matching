@@ -48,6 +48,11 @@ class PooledCrossAttention(nn.Module):
 
         key_padding_mask_a = mask_a == 0
         key_padding_mask_b = mask_b == 0
+        empty_a = key_padding_mask_a.all(dim=1)
+        empty_b = key_padding_mask_b.all(dim=1)
+        # Attend to one zero token on empty rows to avoid an all-masked softmax.
+        key_padding_mask_a[empty_a, 0] = False
+        key_padding_mask_b[empty_b, 0] = False
 
         enc_a, _ = self.attn(
             query=pooled_a.unsqueeze(1),
@@ -61,7 +66,10 @@ class PooledCrossAttention(nn.Module):
             value=seg_b,
             key_padding_mask=key_padding_mask_b,
         )
-        return enc_a.squeeze(1), enc_b.squeeze(1)
+        return (
+            enc_a.squeeze(1).masked_fill(empty_a.unsqueeze(-1), 0),
+            enc_b.squeeze(1).masked_fill(empty_b.unsqueeze(-1), 0),
+        )
 
 
 class PerAttributeCrossAttention(nn.Module):

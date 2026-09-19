@@ -63,6 +63,7 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
                 max_length=self.__max_len,
                 truncation=True,
                 return_tensors="pt",
+                return_special_tokens_mask=True,
             ).items()
         }
         x_rev = {
@@ -73,6 +74,7 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
                 max_length=self.__max_len,
                 truncation=True,
                 return_tensors="pt",
+                return_special_tokens_mask=True,
             ).items()
         }
 
