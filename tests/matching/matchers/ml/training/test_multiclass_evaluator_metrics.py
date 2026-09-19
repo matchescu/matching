@@ -28,7 +28,7 @@ def _patch_interpret(monkeypatch, y_pred, y_pred_rev):
     pred_rev = torch.tensor(y_pred_rev, dtype=torch.long)
 
     def _interpret(self, model, batch_fwd, batch_rev):
-        return pred, pred_rev
+        return pred, pred_rev, torch.zeros(len(pred)), torch.zeros(len(pred))
 
     monkeypatch.setattr(TrainingEvaluator, "_interpret_result", _interpret)
 
@@ -46,7 +46,9 @@ def patched_evaluator(monkeypatch, evaluator):
 def _run_dev(evaluator, monkeypatch, y_pred, y_pred_rev, y_true):
     _patch_interpret(monkeypatch, y_pred, y_pred_rev)
     evaluator._xv_data = [_fake_batch(y_true)]
-    return evaluator._run_model(MagicMock(), evaluator._xv_data, {"average_loss": 1.0})
+    return evaluator._run_model(
+        MagicMock(order_margin=1.0), evaluator._xv_data, {"average_loss": 1.0}
+    )
 
 
 def test_class2_metrics_forward_fn(patched_evaluator):
@@ -138,7 +140,9 @@ def test_test_branch_includes_class2_metrics(patched_evaluator):
     evaluator._test_data = [_fake_batch(y_true)]
 
     best_config = {"is_evaluating": True, "average_loss": 0.5}
-    ok, result = evaluator._run_model(MagicMock(), evaluator._test_data, best_config)
+    ok, result = evaluator._run_model(
+        MagicMock(order_margin=1.0), evaluator._test_data, best_config
+    )
 
     assert ok is True
     assert "test_c2_fwd_fn" in result

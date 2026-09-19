@@ -14,6 +14,21 @@ def directional_margin_loss(
     return F.relu(margin - gap).mean()
 
 
+def order_energy(u: Tensor, v: Tensor) -> Tensor:
+    return F.relu(v - u).pow(2).sum(-1)
+
+
+def order_loss(ea: Tensor, eb: Tensor, y: Tensor, margin: float = 1.0) -> Tensor:
+    fwd, rev = order_energy(ea, eb), order_energy(eb, ea)
+    terms = []
+    m2, m0 = y == 2, y == 0
+    if m2.any():
+        terms.append(fwd[m2].mean() + F.relu(margin - rev[m2]).mean())
+    if m0.any():
+        terms.append(F.relu(margin - fwd[m0]).mean() + F.relu(margin - rev[m0]).mean())
+    return sum(terms, ea.new_zeros(())) / max(len(terms), 1)
+
+
 class FocalLoss(_Loss):
     """
     Multiclass focal loss implementation.

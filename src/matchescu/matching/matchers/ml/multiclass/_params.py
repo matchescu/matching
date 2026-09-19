@@ -11,6 +11,8 @@ class MultiClassTrainingParams(ModelTrainingParams):
     focal_gamma: float = 0.0
     dir_margin_weight: float = 0.0
     dir_margin: float = 2.0
+    order_loss_weight: float = 0.0
+    order_margin: float = 1.0
     head_type: HeadType = HeadType.SIGNED
     architecture: ArchitectureType = ArchitectureType.BERT
     loss_type: LossType = LossType.FOCAL

@@ -23,6 +23,7 @@ class MultiClassModule(nn.Module):
         )
         self._head_type = params.head_type
         self._architecture = params.architecture
+        self.order_margin = params.order_margin
         hidden_size = self._bert.config.hidden_size
 
         if self._architecture == ArchitectureType.BERT_CROSS_ATTN:
@@ -74,16 +75,19 @@ class MultiClassModule(nn.Module):
         col_positions: torch.Tensor | None = None,
         special_tokens_mask: torch.Tensor | None = None,
         value_mask: torch.Tensor | None = None,
+        return_embeddings: bool = False,
     ):
-        enc = self._bert_encode(
+        enc_a, enc_b = self._bert_encode(
             input_ids,
             attention_mask,
             token_type_ids,
             col_positions,
             special_tokens_mask,
             value_mask,
+            return_embeddings=True,
         )
-        return self._classifier(enc)
+        logits = self._classifier(self._apply_head(enc_a, enc_b))
+        return (logits, enc_a, enc_b) if return_embeddings else logits
 
     def _bert_encode(
         self,
@@ -93,7 +97,8 @@ class MultiClassModule(nn.Module):
         col_positions: torch.Tensor | None = None,
         special_tokens_mask: torch.Tensor | None = None,
         value_mask: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        return_embeddings: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         out = self._bert(
             input_ids, attention_mask=attention_mask, token_type_ids=token_type_ids
         )
@@ -108,6 +113,8 @@ class MultiClassModule(nn.Module):
         enc_a, enc_b = self._compute_encodings(
             hidden, mask_a, mask_b, col_positions, value_mask
         )
+        if return_embeddings:
+            return enc_a, enc_b
         return self._apply_head(enc_a, enc_b)
 
     def _compute_encodings(

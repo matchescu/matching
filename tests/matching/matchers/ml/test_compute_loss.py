@@ -85,7 +85,9 @@ def test_multiclass_compute_loss_runs_forward_and_backward(multiclass_trainer):
     targets_rev[targets == 2] = 0
 
     loss = multiclass_trainer._compute_loss(
-        0, loss_fn, [logits, logits_rev, targets, targets_rev]
+        0,
+        loss_fn,
+        [logits, logits_rev, targets, targets_rev, torch.zeros(8, 2), torch.ones(8, 2)],
     )["total"]
 
     assert loss.requires_grad

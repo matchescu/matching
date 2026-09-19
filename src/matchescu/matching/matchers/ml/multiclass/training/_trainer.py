@@ -13,7 +13,7 @@ from transformers import get_linear_schedule_with_warmup
 
 from matchescu.matching.matchers.ml.training import BaseTrainer
 
-from .._loss import FocalLoss, directional_margin_loss
+from .._loss import FocalLoss, directional_margin_loss, order_loss
 from .._module import MultiClassModule
 from .._params import MultiClassTrainingParams
 from .._types import LossType
@@ -145,7 +145,7 @@ class MultiClassTrainer(
         model: Module,
         batch: tuple[dict, dict, torch.LongTensor],
         device: torch.device,
-    ) -> tuple:
+    ) -> tuple[Tensor, ...]:
         x_fwd, x_rev, y = batch
         x_fwd = {k: v.to(device) for k, v in x_fwd.items()}
         x_rev = {k: v.to(device) for k, v in x_rev.items()}
@@ -154,14 +154,14 @@ class MultiClassTrainer(
         y_rev[y == 2] = (
             0  # when reversing the pairs, all data labeled initially with 2 is a non-match
         )
-        cls_logits = model(**x_fwd)
+        cls_logits, enc_a, enc_b = model(**x_fwd, return_embeddings=True)
         cls_logits_rev = model(**x_rev)
-        return cls_logits, cls_logits_rev, y, y_rev
+        return cls_logits, cls_logits_rev, y, y_rev, enc_a, enc_b
 
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
     ) -> dict[str, Tensor]:
-        cls_logits, cls_logits_rev, y, y_rev = tensors
+        cls_logits, cls_logits_rev, y, y_rev, enc_a, enc_b = tensors
         cls_logits, cls_logits_rev, y, y_rev = (
             cls_logits.float(),
             cls_logits_rev.float(),
@@ -175,9 +175,14 @@ class MultiClassTrainer(
         loss_dir = directional_margin_loss(
             cls_logits, cls_logits_rev, y, self._params.dir_margin
         )
+        loss_order = order_loss(enc_a, enc_b, y, self._params.order_margin)
         return {
-            "total": loss_fwd + loss_rev + self._params.dir_margin_weight * loss_dir,
+            "total": loss_fwd
+            + loss_rev
+            + self._params.dir_margin_weight * loss_dir
+            + self._params.order_loss_weight * loss_order,
             "loss_fwd": loss_fwd,
             "loss_rev": loss_rev,
             "loss_dir": loss_dir,
+            "loss_order": loss_order,
         }
