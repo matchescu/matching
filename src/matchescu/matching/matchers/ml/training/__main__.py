@@ -64,9 +64,14 @@ def get_benchmark_data_loaders(
     tokenizer: PreTrainedTokenizerFast,
     train_params: ModelTrainingParams,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
+    splits = benchmark_data.splits
+    split_names = splits
+    if issubclass(ds_cls, AsymmetricMultiClassDataset):
+        validation_name = "valid_split" if "valid_split" in splits else "dev_split"
+        split_names = ("train_split", validation_name, "test_split")
     train_ds, xv_ds, test_ds = [
-        ds_cls(benchmark_data.id_table, split, tokenizer)
-        for split_name, split in benchmark_data.splits.items()
+        ds_cls(benchmark_data.id_table, splits[name], tokenizer)
+        for name in split_names
     ]
     sampler = (
         train_ds.get_weighted_sampler()
