@@ -3,11 +3,13 @@ from torch import nn
 
 
 class PooledCrossAttention(nn.Module):
-    """Symmetric cross-attention over pooled segment representations.
+    """Encode each pooled segment against the opposite token context.
 
-    Both directions share the same ``MultiheadAttention`` instance so the
-    attention is symmetric by construction: ``enc_a`` and ``enc_b`` differ
-    only in which segment acts as query vs. key/value context.
+    .. note::
+        Both directions share attention weights, but distinct query and key
+        projections do not enforce symmetric directional scores. With dropout
+        disabled, swapping segment masks swaps the output pair for fixed hidden
+        states.
     """
 
     def __init__(self, hidden_size: int, num_heads: int = 8, dropout: float = 0.1):
@@ -26,15 +28,15 @@ class PooledCrossAttention(nn.Module):
         mask_a: torch.Tensor,
         mask_b: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Produce ``(enc_a, enc_b)`` via symmetric cross-attention.
+        """Return ordered encodings conditioned on opposite-segment tokens.
 
-        Args:
-            hidden: (batch, seq_len, hidden) — BERT token-level hidden states.
-            mask_a: (batch, seq_len) — float mask for segment A tokens.
-            mask_b: (batch, seq_len) — float mask for segment B tokens.
+        .. note::
+            Rows with an empty query segment or key/value context return zeros.
 
-        Returns:
-            (enc_a, enc_b) each of shape (batch, hidden).
+        :param hidden: BERT token states of shape ``(batch, seq_len, hidden)``.
+        :param mask_a: Valid A tokens marked by one, of shape ``(batch, seq_len)``.
+        :param mask_b: Valid B tokens marked by one, of shape ``(batch, seq_len)``.
+        :returns: ``(enc_a, enc_b)``, each of shape ``(batch, hidden)``.
         """
         pooled_a = (hidden * mask_a.unsqueeze(-1)).sum(1) / mask_a.sum(
             1, keepdim=True
@@ -56,19 +58,20 @@ class PooledCrossAttention(nn.Module):
 
         enc_a, _ = self.attn(
             query=pooled_a.unsqueeze(1),
-            key=seg_a,
-            value=seg_a,
-            key_padding_mask=key_padding_mask_a,
-        )
-        enc_b, _ = self.attn(
-            query=pooled_b.unsqueeze(1),
             key=seg_b,
             value=seg_b,
             key_padding_mask=key_padding_mask_b,
         )
+        enc_b, _ = self.attn(
+            query=pooled_b.unsqueeze(1),
+            key=seg_a,
+            value=seg_a,
+            key_padding_mask=key_padding_mask_a,
+        )
+        empty_pair = (empty_a | empty_b).unsqueeze(-1)
         return (
-            enc_a.squeeze(1).masked_fill(empty_a.unsqueeze(-1), 0),
-            enc_b.squeeze(1).masked_fill(empty_b.unsqueeze(-1), 0),
+            enc_a.squeeze(1).masked_fill(empty_pair, 0),
+            enc_b.squeeze(1).masked_fill(empty_pair, 0),
         )
 
 

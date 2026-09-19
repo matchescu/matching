@@ -39,7 +39,7 @@ def test_ablation_config_resolves_base_params(ablation_config):
 
 
 def test_ablation_config_defaults_preserve_current_behavior(data_dir):
-    """Keep the signed head with optional loss terms disabled by default."""
+    """Use the NONE head with optional loss terms disabled by default."""
     raw = {
         "kind": "multiclass",
         "learningRate": 2e-5,
@@ -67,7 +67,7 @@ def test_ablation_config_defaults_preserve_current_behavior(data_dir):
             path, data_dir=data_dir, discovery_packages=_DISCOVERY
         )
         params = config.get(model="bert-base-uncased", dataset="amazon-google")
-        assert params.head_type.value == "signed"
+        assert params.head_type.value == "none"
         assert params.architecture.value == "bert"
         assert params.loss_type.value == "focal"
         assert params.focal_gamma == 0.0
@@ -105,12 +105,12 @@ def test_ablation_config_defaults_preserve_current_behavior(data_dir):
         ),
         (
             {
-                "headType": "signed",
+                "headType": "asymmetric",
                 "architecture": "bert",
                 "lossType": "weighted_ce",
                 "dirMarginWeight": 0.0,
             },
-            "signed",
+            "asymmetric",
             "bert",
             "weighted_ce",
             0.0,
