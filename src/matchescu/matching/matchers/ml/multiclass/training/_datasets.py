@@ -50,8 +50,8 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
             positions for both normal and reversed input orders.
         """
         left, right = self._pairs[idx]
-        left_text = to_ditto_text(left)
-        right_text = to_ditto_text(right)
+        left_text = to_ditto_text(left, self.__left_cols)
+        right_text = to_ditto_text(right, self.__right_cols)
 
         y = self._labels[idx]
 
