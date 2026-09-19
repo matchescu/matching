@@ -30,12 +30,12 @@ def encoded_model(request, make_params, fake_bert):
 
 @pytest.mark.parametrize("head", list(HeadType))
 def test_optional_embeddings_are_attached_pre_head_pair_from_same_pass(
-    encoded_model, fake_bert, monkeypatch, head
+    encoded_model, fake_bert, monkeypatch, make_params, head
 ):
     module, batch, hidden = encoded_model
-    module._head_type = head
-    if head == HeadType.NONE:
-        module._classifier = torch.nn.Linear(2 * HIDDEN, 3)
+    module = MultiClassModule(
+        make_params(architecture=module._architecture, head_type=head, dropout_p=0.0)
+    )
     spy = Mock(wraps=module._apply_head)
     monkeypatch.setattr(module, "_apply_head", spy)
     logits, a, b = module(**batch, return_embeddings=True)

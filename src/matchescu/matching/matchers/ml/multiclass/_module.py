@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from transformers import AutoModel, BertModel
 
-from ._classifier import ClassificationHead
+from ._classifier import AsymmetricHead, ClassificationHead
 from ._cross_attention import PerAttributeCrossAttention, PooledCrossAttention
 from ._params import MultiClassTrainingParams
 from ._types import ArchitectureType, HeadType
@@ -37,14 +37,19 @@ class MultiClassModule(nn.Module):
         else:
             self._cross_attn = None
 
-        head_multiplier = 3 if self._head_type != HeadType.NONE else 2
-        self._classifier = ClassificationHead(
-            head_multiplier * hidden_size,
-            hidden_size,
-            self._CLASSIFIER_OUTPUT_SIZE,
-            params.dropout_p,
-            dtype=self._bert.dtype,
-        )
+        if self._head_type == HeadType.ASYMMETRIC:
+            self._classifier = AsymmetricHead(
+                hidden_size, dropout_p=params.dropout_p, dtype=self._bert.dtype
+            )
+        else:
+            head_multiplier = 3 if self._head_type == HeadType.ABS else 2
+            self._classifier = ClassificationHead(
+                head_multiplier * hidden_size,
+                hidden_size,
+                self._CLASSIFIER_OUTPUT_SIZE,
+                params.dropout_p,
+                dtype=self._bert.dtype,
+            )
         self._device = None
 
     @property
@@ -149,7 +154,7 @@ class MultiClassModule(nn.Module):
         elif self._head_type == HeadType.ABS:
             return torch.cat([enc_a, enc_b, torch.abs(enc_a - enc_b)], dim=-1)
         else:
-            return torch.cat([enc_a, enc_b, enc_a - enc_b], dim=-1)
+            return self._classifier.features(enc_a, enc_b)
 
     def with_frozen_bert_layers(
         self, frozen_layer_count: int = 6

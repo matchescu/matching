@@ -13,6 +13,6 @@ class MultiClassTrainingParams(ModelTrainingParams):
     dir_margin: float = 2.0
     order_loss_weight: float = 0.0
     order_margin: float = 1.0
-    head_type: HeadType = HeadType.SIGNED
+    head_type: HeadType = HeadType.NONE
     architecture: ArchitectureType = ArchitectureType.BERT
     loss_type: LossType = LossType.FOCAL

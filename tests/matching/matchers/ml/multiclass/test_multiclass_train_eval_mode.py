@@ -3,7 +3,6 @@ import pytest
 from matchescu.matching.matchers.ml.multiclass._module import MultiClassModule
 from matchescu.matching.matchers.ml.multiclass._types import (
     ArchitectureType,
-    HeadType,
 )
 
 
@@ -11,7 +10,7 @@ from matchescu.matching.matchers.ml.multiclass._types import (
 def module(make_params):
     return MultiClassModule(
         make_params(
-            head_type=HeadType.SIGNED,
+            head_type="asymmetric",
             architecture=ArchitectureType.BERT_PER_ATTR_CROSS_ATTN,
         )
     )

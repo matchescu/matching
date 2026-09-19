@@ -4,7 +4,7 @@ from enum import Enum
 class HeadType(str, Enum):
     NONE = "none"
     ABS = "abs"
-    SIGNED = "signed"
+    ASYMMETRIC = "asymmetric"
 
 
 class ArchitectureType(str, Enum):
