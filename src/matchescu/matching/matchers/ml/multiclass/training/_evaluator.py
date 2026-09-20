@@ -60,7 +60,6 @@ class TrainingEvaluator(
         y_true = torch.cat(y_true).detach().cpu().numpy()
         y_true_rev = y_true.copy()
         y_true_rev[y_true == 2] = 0
-        avg_loss = float(best_config.get("average_loss", 1))
 
         mcc_normal = metrics.matthews_corrcoef(y_true, y_pred)
         mcc_rev = metrics.matthews_corrcoef(y_true_rev, y_pred_rev)
@@ -69,7 +68,8 @@ class TrainingEvaluator(
         n = len(y_true)
         c2_fwd_fn = float(((y_true == 2) & (y_pred != 2)).sum()) / n
         c2_fwd_fp = float(((y_true != 2) & (y_pred == 2)).sum()) / n
-        c2_rev_fp = float((y_pred_rev == 2).sum()) / n
+        c2_rev_fp = (y_true != 1) & (y_pred_rev == 1)
+        c2_rev_fp = float(c2_rev_fp.sum()) / n
 
         if self._is_evaluating(best_config):
             best_config.update(
@@ -83,9 +83,8 @@ class TrainingEvaluator(
             return True, best_config
         else:
             success = False
-            current = mcc / avg_loss
-            if current > self._best:
-                self._best = current
+            if mcc > self._best:
+                self._best = mcc
                 success = True
             return success, {
                 "dev_mcc": mcc,

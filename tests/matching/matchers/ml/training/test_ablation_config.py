@@ -68,10 +68,10 @@ def test_ablation_config_defaults_preserve_current_behavior(data_dir):
             path, data_dir=data_dir, discovery_packages=_DISCOVERY
         )
         params = config.get(model="bert-base-uncased", dataset="amazon-google")
-        assert params.head_type.value == "signed"
+        assert params.head_type.value == "none"
         assert params.architecture.value == "bert"
-        assert params.loss_type.value == "focal"
-        assert params.reverse_penalty_weight == 2.0
+        assert params.loss_type.value == "weighted_ce"
+        assert params.reverse_penalty_weight == 0.0
     finally:
         path.unlink(missing_ok=True)
 
@@ -105,12 +105,12 @@ def test_ablation_config_defaults_preserve_current_behavior(data_dir):
         ),
         (
             {
-                "headType": "signed",
+                "headType": "bilinear",
                 "architecture": "bert",
                 "lossType": "weighted_ce",
                 "reversePenaltyWeight": 0.0,
             },
-            "signed",
+            "bilinear",
             "bert",
             "weighted_ce",
             0.0,

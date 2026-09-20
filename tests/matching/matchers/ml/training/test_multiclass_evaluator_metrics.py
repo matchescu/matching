@@ -84,7 +84,7 @@ def test_class2_metrics_reverse_fp(patched_evaluator):
     since y_true_rev has all class-2 labels relabeled to 0."""
     evaluator, monkeypatch = patched_evaluator
     y_pred = [0, 1, 2, 0, 1]
-    y_pred_rev = [0, 2, 2, 0, 2]
+    y_pred_rev = [0, 0, 0, 1, 0]
     y_true = [0, 1, 2, 2, 1]
 
     _, result = _run_dev(evaluator, monkeypatch, y_pred, y_pred_rev, y_true)
@@ -92,14 +92,14 @@ def test_class2_metrics_reverse_fp(patched_evaluator):
     n = len(y_true)
     assert result["dev_c2_fwd_fn"] == pytest.approx(1 / n)
     assert result["dev_c2_fwd_fp"] == pytest.approx(0 / n)
-    assert result["dev_c2_rev_fp"] == pytest.approx(3 / n)
+    assert result["dev_c2_rev_fp"] == pytest.approx(1 / n)
 
 
 def test_class2_metrics_combined(patched_evaluator):
     """All three error types present in a single batch."""
     evaluator, monkeypatch = patched_evaluator
     y_pred = [2, 1, 1, 0, 2, 2]
-    y_pred_rev = [0, 2, 0, 2, 2, 0]
+    y_pred_rev = [0, 1, 1, 0, 0, 0]
     y_true = [0, 1, 2, 2, 1, 2]
 
     _, result = _run_dev(evaluator, monkeypatch, y_pred, y_pred_rev, y_true)
@@ -110,7 +110,7 @@ def test_class2_metrics_combined(patched_evaluator):
     # y_pred_rev==2 at idx 1,3,4 -> rev_fp=3
     assert result["dev_c2_fwd_fn"] == pytest.approx(2 / n)
     assert result["dev_c2_fwd_fp"] == pytest.approx(2 / n)
-    assert result["dev_c2_rev_fp"] == pytest.approx(3 / n)
+    assert result["dev_c2_rev_fp"] == pytest.approx(1 / n)
 
 
 def test_class2_metrics_zero_errors(patched_evaluator):
@@ -131,7 +131,7 @@ def test_test_branch_includes_class2_metrics(patched_evaluator):
     """The evaluation branch (is_evaluating=True) must populate test_ keys."""
     evaluator, monkeypatch = patched_evaluator
     y_pred = [0, 1, 2, 0, 1]
-    y_pred_rev = [0, 1, 0, 0, 2]
+    y_pred_rev = [0, 1, 0, 0, 0]
     y_true = [0, 1, 2, 0, 1]
     _patch_interpret(monkeypatch, y_pred, y_pred_rev)
 
@@ -144,5 +144,4 @@ def test_test_branch_includes_class2_metrics(patched_evaluator):
     assert "test_c2_fwd_fn" in result
     assert "test_c2_fwd_fp" in result
     assert "test_c2_rev_fp" in result
-    n = len(y_true)
-    assert result["test_c2_rev_fp"] == pytest.approx(1 / n)
+    assert result["test_c2_rev_fp"] == 0

@@ -121,12 +121,13 @@ class MultiClassModule(nn.Module):
             return enc_a, enc_b
 
     def _apply_head(self, enc_a: torch.Tensor, enc_b: torch.Tensor) -> torch.Tensor:
-        if self._head_type == HeadType.NONE:
-            return torch.cat([enc_a, enc_b], dim=-1)
-        elif self._head_type == HeadType.ABS:
-            return torch.cat([enc_a, enc_b, torch.abs(enc_a - enc_b)], dim=-1)
-        else:
-            return torch.cat([enc_a, enc_b, enc_a - enc_b], dim=-1)
+        match self._head_type:
+            case HeadType.NONE:
+                return torch.cat([enc_a, enc_b], dim=-1)
+            case HeadType.ABS:
+                return torch.cat([enc_a, enc_b, torch.abs(enc_a - enc_b)], dim=-1)
+
+        return torch.cat([enc_a, enc_b, enc_a - enc_b], dim=-1)
 
     def with_frozen_bert_layers(
         self, frozen_layer_count: int = 6

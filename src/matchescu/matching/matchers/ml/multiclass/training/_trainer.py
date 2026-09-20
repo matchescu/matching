@@ -89,6 +89,7 @@ class MultiClassTrainer(
         )
         weights = torch.sqrt(weights)  # dampening
         weights = weights / weights[0]
+
         match self._params.loss_type:
             case LossType.WEIGHTED_CE:
                 return FocalLoss(weights, gamma=0.0)
@@ -174,8 +175,12 @@ class MultiClassTrainer(
 
         # gap can be at most 2, which is the best case.
         gap = logits_fwd[m, 2] - logits_rev[m, 2]
-        # subtract the avg gap from the max margin (2.0) -> 0
-        return F.relu(margin - gap).mean()
+        # subtract the avg gap from the max margin (2.0)
+        # we want this to be as close to zero as possible
+        # negative values in the gap are penalized the most
+        # this is fine because fwd > rev is the worst kind of offense
+        relu = F.relu(margin - gap)
+        return relu.mean()
 
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]

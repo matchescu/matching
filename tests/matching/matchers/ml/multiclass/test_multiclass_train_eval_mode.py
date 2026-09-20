@@ -1,17 +1,13 @@
 import pytest
 
 from matchescu.matching.matchers.ml.multiclass._module import MultiClassModule
-from matchescu.matching.matchers.ml.multiclass._types import (
-    ArchitectureType,
-    HeadType,
-)
+from matchescu.matching.matchers.ml.multiclass._types import ArchitectureType
 
 
 @pytest.fixture
 def module(make_params):
     return MultiClassModule(
         make_params(
-            head_type=HeadType.SIGNED,
             architecture=ArchitectureType.BERT_PER_ATTR_CROSS_ATTN,
         )
     )
