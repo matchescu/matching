@@ -1,4 +1,5 @@
 import pytest
+import torch
 
 from matchescu.matching.matchers.ml.multiclass._loss import FocalLoss
 from matchescu.matching.matchers.ml.multiclass._types import LossType
@@ -40,3 +41,17 @@ def test_create_loss_weights_are_monotonic_for_rarer_classes(
     loader = mock_data_loader([100, 50, 12])
     loss_fn = trainer._create_loss(loader)
     assert loss_fn.alpha[2] > loss_fn.alpha[1] > loss_fn.alpha[0]
+
+
+def test_multiclass_compute_loss_runs_forward_and_backward(
+    trainer, loss_fn, logits, logits_rev, targets, targets_rev
+):
+    loss = trainer._compute_loss(0, loss_fn, [logits, logits_rev, targets, targets_rev])
+
+    assert loss.requires_grad
+    assert torch.isfinite(loss)
+    loss.backward()
+    assert logits.grad is not None
+    assert logits_rev.grad is not None
+    assert torch.isfinite(logits.grad).all()
+    assert torch.isfinite(logits_rev.grad).all()

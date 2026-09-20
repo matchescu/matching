@@ -22,7 +22,6 @@ from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset
 
 
-
 class MultiClassTrainer(
     BaseTrainer[
         MultiClassModule, MultiClassTrainingParams, AsymmetricMultiClassDataset
@@ -30,6 +29,7 @@ class MultiClassTrainer(
     capability=CAPABILITY,
 ):
     _FOCAL_GAMMA = 2.0
+    _DIRECTIONAL_MARGIN = 2.0
     hyperparams_schema = MultiClassTrainingParams
 
     def __init__(
@@ -154,12 +154,28 @@ class MultiClassTrainer(
         x_rev = {k: v.to(device) for k, v in x_rev.items()}
         y = y.to(device)
         y_rev = y.clone()
-        y_rev[y == 2] = (
-            0  # when reversing the pairs, all data labeled initially with 2 is a non-match
-        )
+        # in reverse order, all data labeled initially with 2 is a non-match
+        y_rev[y == 2] = 0
         cls_logits = model(**x_fwd)
         cls_logits_rev = model(**x_rev)
         return cls_logits, cls_logits_rev, y, y_rev
+
+    @staticmethod
+    def _directional_margin_loss(
+        logits_fwd: torch.Tensor,
+        logits_rev: torch.Tensor,
+        y: torch.Tensor,
+        margin: float,
+    ) -> torch.Tensor:
+        m = y == 2
+        if not m.any():
+            # without class-2 items in the ground truth, cancel this loss term
+            return logits_fwd.new_zeros(())
+
+        # gap can be at most 2, which is the best case.
+        gap = logits_fwd[m, 2] - logits_rev[m, 2]
+        # subtract the avg gap from the max margin (2.0) -> 0
+        return F.relu(margin - gap).mean()
 
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
@@ -173,8 +189,8 @@ class MultiClassTrainer(
         )
 
         loss = loss_fn(cls_logits, y)
-        valid_mask = y_rev < 2  # Filter out invalid targets (though none exist here)
-        loss_rev = F.cross_entropy(cls_logits_rev[valid_mask], y_rev[valid_mask])
-        class_2_penalty = F.softmax(cls_logits_rev, dim=1)[:, 2].mean()
-        loss_rev += self._params.reverse_penalty_weight * class_2_penalty
-        return loss + loss_rev
+        rev_loss = self._params.reverse_penalty_weight * self._directional_margin_loss(
+            cls_logits, cls_logits_rev, y, self._DIRECTIONAL_MARGIN
+        )
+
+        return loss + rev_loss

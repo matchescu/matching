@@ -7,8 +7,14 @@ from torch import nn
 
 from matchescu.matching.matchers.ml.multiclass._params import MultiClassTrainingParams
 from matchescu.matching.matchers.ml.multiclass.training import MultiClassTrainer
+from matchescu.matching.matchers.ml.torch import set_random_seed
 
 from ._constants import BATCH, HIDDEN, SEQ
+
+
+@pytest.fixture(scope="package", autouse=True)
+def set_seed():
+    set_random_seed(42)
 
 
 @pytest.fixture
