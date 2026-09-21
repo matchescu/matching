@@ -20,7 +20,7 @@
       "headType": "none",
       "architecture": "bert",
       "lossType": "weighted_ce",
-      "reversePenaltyWeight": 0.0
+      "crossOrderWeight": 0.0
     }
   }
 }

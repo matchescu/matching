@@ -25,8 +25,8 @@ class AsymmetricHead(nn.Module):
                 self._output_size = 3 * input_size + rank
                 self._u = nn.Linear(input_size, rank, bias=False)
                 self._v = nn.Linear(input_size, rank, bias=False)
-            case HeadType.ABS:
-                self._output_size = 3 * input_size
+            case HeadType.DIFF:
+                self._output_size = 4 * input_size
             case _:
                 self._output_size = 2 * input_size
 
@@ -39,7 +39,13 @@ class AsymmetricHead(nn.Module):
         match self._head_type:
             case HeadType.BILINEAR:
                 out_features.append((enc_a - enc_b).abs())
-                out_features.append(self._u(enc_a) * self._v(enc_b))
-            case HeadType.ABS:
-                out_features.append((enc_a - enc_b).abs())
+                ua = self._u(enc_a)
+                ub = self._u(enc_b)
+                va = self._v(enc_a)
+                vb = self._v(enc_b)
+                skew_diff = (ua * vb) - (ub * va)
+                out_features.append(skew_diff)
+            case HeadType.DIFF:
+                out_features.append(enc_a - enc_b)
+                out_features.append(enc_a * enc_b)
         return cat(out_features, dim=-1)

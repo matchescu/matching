@@ -43,7 +43,7 @@ def asymmetric_head(input_size, rank, head_type):
     "input_size,rank,head_type,expected",
     [
         (DEFAULT_INPUT_SIZE, DEFAULT_RANK, HeadType.NONE, 16),
-        (DEFAULT_INPUT_SIZE, DEFAULT_RANK, HeadType.ABS, 24),
+        (DEFAULT_INPUT_SIZE, DEFAULT_RANK, HeadType.DIFF, 32),
         (DEFAULT_INPUT_SIZE, DEFAULT_RANK, HeadType.BILINEAR, 34),
         (10, DEFAULT_RANK, HeadType.NONE, 20),
         (10, 15, HeadType.BILINEAR, 45),

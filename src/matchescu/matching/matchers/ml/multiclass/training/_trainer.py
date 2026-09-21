@@ -150,13 +150,18 @@ class MultiClassTrainer(
         batch: tuple[dict, dict, torch.LongTensor],
         device: torch.device,
     ) -> tuple:
-        x_fwd, x_rev, y = batch
+        x_fwd, x_rev, y_fwd = batch
         x_fwd = {k: v.to(device) for k, v in x_fwd.items()}
         x_rev = {k: v.to(device) for k, v in x_rev.items()}
-        bits = torch.stack(((y > 0), (y == 1)), dim=1).long().to(device)
-        cls_logits = model(**x_fwd)
-        cls_logits_rev = model(**x_rev)
-        return cls_logits, cls_logits_rev, bits, bits.flip(dims=(1,))
+        y_fwd = y_fwd.to(device)
+        y_rev = torch.where(y_fwd == 2, torch.zeros_like(y_fwd), y_fwd).to(device)
+
+        logits_fwd = model(**x_fwd)
+        logits_rev = model(**x_rev)
+        bits_fwd = torch.stack(((y_fwd > 0), (y_fwd == 1)), dim=1).long().to(device)
+        bits_rev = torch.stack(((y_rev > 0), (y_rev == 1)), dim=1).long().to(device)
+
+        return logits_fwd, logits_rev, bits_fwd, bits_rev
 
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
@@ -175,4 +180,19 @@ class MultiClassTrainer(
         loss_rev = loss_fn(z_rev[:, 0], bits_rev[:, 0]) + loss_fn(
             z_rev[:, 1], bits_rev[:, 1]
         )
-        return loss_fwd + loss_rev
+        co_loss = self._params.cross_order_weight * self._cross_order_consistency(
+            z_fwd, z_rev
+        )
+        return loss_fwd + loss_rev + co_loss
+
+    @staticmethod
+    def _cross_order_consistency(z_fwd: Tensor, z_rev: Tensor) -> Tensor:
+        # get the {0, 1} predictions in each direction (actual p and q values)
+        fwd_pos = z_fwd.softmax(dim=-1)[..., 1]
+        rev_pos = z_rev.softmax(dim=-1)[..., 1]
+        p_fwd, q_fwd = fwd_pos.unbind(dim=1)
+        p_rev, q_rev = rev_pos.unbind(dim=1)
+        # Mean-squared disagreement between the two estimates of each direction.
+        return (
+            (q_rev - p_fwd.detach()).pow(2) + (p_rev - q_fwd.detach()).pow(2)
+        ).mean()
