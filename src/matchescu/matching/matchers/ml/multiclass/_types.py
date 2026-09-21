@@ -3,7 +3,7 @@ from enum import Enum
 
 class HeadType(str, Enum):
     NONE = "none"
-    ABS = "abs"
+    DIFF = "diff"
     BILINEAR = "bilinear"
 
 

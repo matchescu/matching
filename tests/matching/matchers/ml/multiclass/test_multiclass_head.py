@@ -13,7 +13,7 @@ from .._constants import HIDDEN
     "head_type,expected_multiplier",
     [
         (HeadType.NONE, 2),
-        (HeadType.ABS, 3),
+        (HeadType.DIFF, 4),
     ],
 )
 def test_classifier_input_size_when_head_type_is(
