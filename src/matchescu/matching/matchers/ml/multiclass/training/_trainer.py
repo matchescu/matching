@@ -3,9 +3,9 @@ from os import PathLike
 from pathlib import Path
 from typing import Any, cast
 
+import numpy as np
 import torch
 from torch import Tensor
-from torch.functional import F
 from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
@@ -28,6 +28,8 @@ class MultiClassTrainer(
     ],
     capability=CAPABILITY,
 ):
+    _FOCAL_GAMMA = 2.0
+    _DIRECTIONAL_MARGIN = 2.0
     hyperparams_schema = MultiClassTrainingParams
 
     def __init__(
@@ -37,7 +39,6 @@ class MultiClassTrainer(
         model_dir: str | PathLike | None = None,
         **kwargs: Any,
     ) -> None:
-
         super().__init__(
             task_name, hyperparams, model_dir or Path(__file__).parent, **kwargs
         )
@@ -74,24 +75,26 @@ class MultiClassTrainer(
             "weight_decay": 0.0,
         }
 
+    @staticmethod
+    def _compute_weights(label_counts: np.ndarray) -> torch.Tensor:
+        c0, c1, c2 = torch.as_tensor(label_counts, dtype=torch.float)
+        total_positive = 2 * c1 + c2
+        total_negative = 2 * c0 + c2
+        weights = torch.stack([1.0 / total_negative, 1.0 / total_positive])
+        weights = weights * (2.0 / weights.sum())
+        return weights
+
     def _create_loss(
         self, data_loader: DataLoader[AsymmetricMultiClassDataset]
     ) -> _Loss:
-        label_counts = cast(
-            AsymmetricMultiClassDataset, data_loader.dataset
-        ).label_counts
-        total_count = label_counts.sum()
-        n_classes = len(label_counts)
-        weights = torch.tensor(
-            total_count / (label_counts * n_classes), dtype=torch.float32
-        )
-        weights = torch.sqrt(weights)  # dampening
-        weights = weights / weights[0]
+        lc = cast(AsymmetricMultiClassDataset, data_loader.dataset).label_counts
+        weights = self._compute_weights(lc)
+
         match self._params.loss_type:
             case LossType.WEIGHTED_CE:
                 return FocalLoss(weights, gamma=0.0)
             case LossType.FOCAL:
-                return FocalLoss(weights, gamma=self._params.reverse_penalty_weight)
+                return FocalLoss(weights, gamma=self._FOCAL_GAMMA)
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
@@ -150,29 +153,26 @@ class MultiClassTrainer(
         x_fwd, x_rev, y = batch
         x_fwd = {k: v.to(device) for k, v in x_fwd.items()}
         x_rev = {k: v.to(device) for k, v in x_rev.items()}
-        y = y.to(device)
-        y_rev = y.clone()
-        y_rev[y == 2] = (
-            0  # when reversing the pairs, all data labeled initially with 2 is a non-match
-        )
+        bits = torch.stack(((y > 0), (y == 1)), dim=1).long().to(device)
         cls_logits = model(**x_fwd)
         cls_logits_rev = model(**x_rev)
-        return cls_logits, cls_logits_rev, y, y_rev
+        return cls_logits, cls_logits_rev, bits, bits.flip(dims=(1,))
 
     def _compute_loss(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
     ) -> Any:
-        cls_logits, cls_logits_rev, y, y_rev = tensors
-        cls_logits, cls_logits_rev, y, y_rev = (
-            cls_logits.float(),
-            cls_logits_rev.float(),
-            y.long(),
-            y_rev.long(),
-        )
+        logits_fwd, logits_rev, bits_fwd, bits_rev = tensors
+        # rearrange logits as (N, bit, class)
+        z_fwd = logits_fwd.float().view(-1, 2, 2)
+        z_rev = logits_rev.float().view(-1, 2, 2)
+        bits_fwd = bits_fwd.long()
+        bits_rev = bits_rev.long()
 
-        loss = loss_fn(cls_logits, y)
-        valid_mask = y_rev < 2  # Filter out invalid targets (though none exist here)
-        loss_rev = F.cross_entropy(cls_logits_rev[valid_mask], y_rev[valid_mask])
-        class_2_penalty = F.softmax(cls_logits_rev, dim=1)[:, 2].mean()
-        loss_rev += self._params.reverse_penalty_weight * class_2_penalty
-        return loss + loss_rev
+        # compute loss on 2 separate objectives in fwd and rev orders
+        loss_fwd = loss_fn(z_fwd[:, 0], bits_fwd[:, 0]) + loss_fn(
+            z_fwd[:, 1], bits_fwd[:, 1]
+        )
+        loss_rev = loss_fn(z_rev[:, 0], bits_rev[:, 0]) + loss_fn(
+            z_rev[:, 1], bits_rev[:, 1]
+        )
+        return loss_fwd + loss_rev

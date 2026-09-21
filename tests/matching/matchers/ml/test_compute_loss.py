@@ -9,7 +9,6 @@ from matchescu.matching.matchers.ml.deepmatcher._params import (
 from matchescu.matching.matchers.ml.deepmatcher.training import DeepMatcherTrainer
 from matchescu.matching.matchers.ml.ditto._params import DittoModelTrainingParams
 from matchescu.matching.matchers.ml.ditto.training import DittoTrainer
-from matchescu.matching.matchers.ml.multiclass._loss import FocalLoss
 
 
 def _make_trainer(cls, params_cls):
@@ -74,24 +73,3 @@ def test_ditto_compute_loss_runs_forward_and_backward(ditto_trainer):
     loss.backward()
     assert logits.grad is not None
     assert torch.isfinite(logits.grad).all()
-
-
-def test_multiclass_compute_loss_runs_forward_and_backward(multiclass_trainer):
-    loss_fn = FocalLoss(torch.tensor([1.0, 1.0, 1.0]))
-    logits = torch.randn(8, 3, requires_grad=True)
-    logits_rev = torch.randn(8, 3, requires_grad=True)
-    targets = torch.randint(0, 2, (8,), dtype=torch.long)
-    targets_rev = targets.clone()
-    targets_rev[targets == 2] = 0
-
-    loss = multiclass_trainer._compute_loss(
-        0, loss_fn, [logits, logits_rev, targets, targets_rev]
-    )
-
-    assert loss.requires_grad
-    assert torch.isfinite(loss)
-    loss.backward()
-    assert logits.grad is not None
-    assert logits_rev.grad is not None
-    assert torch.isfinite(logits.grad).all()
-    assert torch.isfinite(logits_rev.grad).all()

@@ -64,10 +64,14 @@ def get_benchmark_data_loaders(
     tokenizer: PreTrainedTokenizerFast,
     train_params: ModelTrainingParams,
 ) -> tuple[DataLoader, DataLoader, DataLoader]:
-    train_ds, xv_ds, test_ds = [
-        ds_cls(benchmark_data.id_table, split, tokenizer)
+    datasets = {
+        split_name: ds_cls(benchmark_data.id_table, split, tokenizer)
         for split_name, split in benchmark_data.splits.items()
-    ]
+    }
+    train_ds = datasets["train_split"]
+    xv_ds = datasets["valid_split"]
+    test_ds = datasets["test_split"]
+
     sampler = (
         train_ds.get_weighted_sampler()
         if isinstance(train_ds, AsymmetricMultiClassDataset)
@@ -83,7 +87,7 @@ def get_benchmark_data_loaders(
     )
 
 
-@timer(start_message="train ditto")
+@timer(start_message="train on benchmark data")
 def train_on_benchmark_data[TParams](
     model_save_dir: Path,
     model_name: str,

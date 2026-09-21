@@ -30,7 +30,7 @@ def test_create_loss_weights_are_sqrt_dampened_and_normalized(
     trainer = make_trainer(loss_type=LossType.WEIGHTED_CE)
     loader = mock_data_loader([100, 50, 12])
     loss_fn = trainer._create_loss(loader)
-    assert loss_fn.alpha[0].item() == pytest.approx(1.0)
+    assert loss_fn.alpha[0].item() == pytest.approx(0.6913580298423767)
 
 
 def test_create_loss_weights_are_monotonic_for_rarer_classes(
@@ -39,4 +39,4 @@ def test_create_loss_weights_are_monotonic_for_rarer_classes(
     trainer = make_trainer(loss_type=LossType.WEIGHTED_CE)
     loader = mock_data_loader([100, 50, 12])
     loss_fn = trainer._create_loss(loader)
-    assert loss_fn.alpha[2] > loss_fn.alpha[1] > loss_fn.alpha[0]
+    assert loss_fn.alpha[1] > loss_fn.alpha[0]

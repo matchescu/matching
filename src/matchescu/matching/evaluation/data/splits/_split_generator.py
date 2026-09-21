@@ -119,23 +119,61 @@ class SplitGenerator:
             "matcher ground truth positive classes: %s",
             ", ".join(f"[{c}] = {n}" for c, n in pos_class_counts.items()),
         )
-        bridge_class_counts = [n for c, n in pos_class_counts.items() if c > 1]
-        if len(bridge_class_counts) > 0:
-            bridge_max = max([1, *bridge_class_counts])
-            n1_target = self._clamp(
-                round(self.match_bridge_ratio * bridge_max), pos_class_counts[1]
-            )
-        else:
-            n1_target = pos_class_counts[1]
+        bridge_classes = [c for c in pos_classes if c > 1]
+        avail_bridge_counts = {c: pos_class_counts[c] for c in bridge_classes}
+        avail_bridge_total = sum(avail_bridge_counts.values())
+        avail_n1 = pos_class_counts.get(1, 0)
 
-        total_pos = n1_target + sum(bridge_class_counts)
+        bridge_targets = {}
+        if avail_bridge_total > 0 and self.match_bridge_ratio > 0:
+            needed_n1 = round(self.match_bridge_ratio * avail_bridge_total)
+            if avail_n1 < needed_n1:
+                target_bridge_total = max(
+                    MIN_PER_CLASS * len(bridge_classes),
+                    round(avail_n1 / self.match_bridge_ratio),
+                )
+                target_bridge_total = min(target_bridge_total, avail_bridge_total)
+
+                allocated = 0
+                for c in bridge_classes:
+                    available = avail_bridge_counts[c]
+                    share = round(
+                        target_bridge_total * (available / avail_bridge_total)
+                    )
+                    count = self._clamp(share, available)
+                    bridge_targets[c] = count
+                    allocated += count
+
+                # Adjust rounding differences on the largest bridge class
+                discrepancy = target_bridge_total - allocated
+                if discrepancy != 0 and bridge_classes:
+                    largest_bridge = max(
+                        bridge_classes, key=lambda k: bridge_targets[k]
+                    )
+                    bridge_targets[largest_bridge] = self._clamp(
+                        bridge_targets[largest_bridge] + discrepancy,
+                        avail_bridge_counts[largest_bridge],
+                    )
+
+                # Set Class 1 target to match the final aggregate bridge count
+                actual_bridge_total = sum(bridge_targets.values())
+                n1_target = round(self.match_bridge_ratio * actual_bridge_total)
+                n1_target = self._clamp(n1_target, avail_n1)
+            else:
+                bridge_targets = avail_bridge_counts.copy()
+                n1_target = self._clamp(needed_n1, avail_n1)
+        else:
+            bridge_targets = avail_bridge_counts.copy()
+            n1_target = avail_n1
+
+        total_pos = n1_target + sum(bridge_targets.values())
         n0_target = max(MIN_PER_CLASS, round(self.neg_pos_ratio * total_pos))
 
         # ── apply max_total_samples cap ──
         raw_targets = {
             0: n0_target,
             1: n1_target,
-            **{c: n for c, n in pos_class_counts.items() if c > 1},
+            **bridge_targets,
         }
         targets = self._apply_cap(raw_targets)
         for c, n in raw_targets.items():

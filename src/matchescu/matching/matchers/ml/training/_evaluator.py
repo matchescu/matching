@@ -49,7 +49,7 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
 
     @abstractmethod
     def _run_model(
-        self, model: TModel, data: DataLoader[TDataset], best_config: dict | None = None
+        self, model: TModel, data: DataLoader[TDataset], metrics: dict
     ) -> tuple[bool, dict]:
         """Run the model in evaluation mode on the specified data.
 
@@ -86,9 +86,7 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
             return False
         return bool(config.pop(self.__IS_EVAL_KWARG, False))
 
-    def __call__(
-        self, model: TModel, training_metrics: dict, epoch: int
-    ) -> tuple[bool, dict]:
+    def __call__(self, model: TModel, metrics: dict, epoch: int) -> tuple[bool, dict]:
         """Find the metadata of the best model version on the dev data.
 
         Returns information about the model version that performed best on the
@@ -101,22 +99,20 @@ class BaseEvaluator(AbstractContextManager, Generic[TModel, TDataset]):
             model.eval()
 
             self._log.info("tuning on dev")
-            found_new_best, best_config = self._run_model(
-                model, self._xv_data, training_metrics
-            )
-            training_metrics.update(best_config)
+            found_new_best, best_config = self._run_model(model, self._xv_data, metrics)
+            metrics.update(best_config)
             if found_new_best:
                 self._log.info("evaluating on test")
                 best_config[self.__IS_EVAL_KWARG] = True
                 ok, best_config = self._run_model(model, self._test_data, best_config)
                 if ok:
-                    training_metrics.update(best_config)
+                    metrics.update(best_config)
                 else:
                     self._log.warning("failed to evaluate model on test")
                     found_new_best = False
             else:
                 self._log.info("no improvements")
-            self._summary_writer.add_scalars(self._task, training_metrics, epoch)
+            self._summary_writer.add_scalars(self._task, metrics, epoch)
             self._log.info("tuning completed: %s", self._repr_config(best_config))
             return found_new_best, best_config
         finally:
