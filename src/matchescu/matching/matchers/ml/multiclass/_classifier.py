@@ -23,7 +23,7 @@ class ClassificationHead(nn.Module):
 
     @property
     def input_size(self) -> int:
-        return self._model[0].in_features
+        return int(self._model[0].in_features)
 
     def forward(self, x):
         return self._model(x)

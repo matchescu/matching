@@ -39,6 +39,11 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
     def label_counts(self) -> np.ndarray:
         return self.__label_counts
 
+    def compute_rev_label_counts(self) -> np.ndarray:
+        rev = self._labels.copy()
+        rev[rev == 2] = 0
+        return np.bincount(rev)
+
     def __getitem__(self, idx):
         """Return a tokenized item of the dataset.
 

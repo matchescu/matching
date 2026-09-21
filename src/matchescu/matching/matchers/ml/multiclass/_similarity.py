@@ -5,7 +5,6 @@ from pathlib import Path
 import torch
 from matchescu.similarity import MatchResult
 from matchescu.typing import EntityReference
-from torch.distributions.utils import logits_to_probs
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.matchers.ml.core import AdditionalModelInfo
@@ -13,6 +12,7 @@ from matchescu.matching.matchers.ml.transformers import (
     suppress_transformer_modeling_utils_warnings,
 )
 
+from ._decoder import decode_logits, per_class_probabilities
 from ._encoder import to_ditto_text
 from ._module import MultiClassModule
 from ._params import MultiClassTrainingParams
@@ -78,7 +78,7 @@ class MultiClassSimilarity:
                 else torch.tensor([[-1]], dtype=torch.long)
             )
             encoding["col_positions"] = col_positions
-            cls_logits = self.__model(**encoding).squeeze(0)
-            prediction: int = torch.argmax(cls_logits, dim=-1).int().item()
-            cls_weights = logits_to_probs(cls_logits).tolist()
+            cls_logits = self.__model(**encoding)
+            prediction: int = decode_logits(cls_logits).item()
+            cls_weights = per_class_probabilities(cls_logits).squeeze(0).tolist()
         return MatchResult(a.id, b.id, prediction, cls_weights)

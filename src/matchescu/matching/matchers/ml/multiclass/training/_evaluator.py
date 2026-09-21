@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 
 from matchescu.matching.matchers.ml.training import BaseEvaluator
 
+from .._decoder import decode_logits
 from .._module import MultiClassModule
 from ._config import CAPABILITY
 from ._datasets import AsymmetricMultiClassDataset
@@ -24,7 +25,7 @@ class TrainingEvaluator(
         logger: logging.Logger | None = None,
     ) -> None:
         super().__init__(task_name, xv_data, test_data, tb_log_dir, logger)
-        self._best = -1.0
+        self._best = (0, 0)
 
     def _interpret_result(
         self,
@@ -34,12 +35,12 @@ class TrainingEvaluator(
     ):
         cls_logits = model(**batch_fwd)
         cls_logits_rev = model(**batch_rev)
-        cls_pred = torch.argmax(cls_logits, dim=-1)
-        cls_pred_rev = torch.argmax(cls_logits_rev, dim=-1)
+        cls_pred = decode_logits(cls_logits)
+        cls_pred_rev = decode_logits(cls_logits_rev)
         self._log.info(
-            "cls_logits: %s; cls_logits_rev: %s",
-            cls_logits.softmax(dim=1).mean(dim=0),
-            cls_logits_rev.softmax(dim=1).mean(dim=0),
+            "pred dist fwd: %s; pred dist rev: %s",
+            torch.bincount(cls_pred, minlength=3).float() / cls_pred.numel(),
+            torch.bincount(cls_pred_rev, minlength=3).float() / cls_pred_rev.numel(),
         )
         return cls_pred, cls_pred_rev
 
@@ -55,40 +56,35 @@ class TrainingEvaluator(
             for batch_fwd, batch_rev, y_true in data_loader
         ]
         y_pred, y_pred_rev, y_true = zip(*batch_results)
-        y_pred = torch.cat(y_pred).detach().cpu().numpy()
-        y_pred_rev = torch.cat(y_pred_rev).detach().cpu().numpy()
-        y_true = torch.cat(y_true).detach().cpu().numpy()
-        y_true_rev = y_true.copy()
+        y_pred = torch.cat(y_pred).detach().cpu()
+        y_pred_rev = torch.cat(y_pred_rev).detach().cpu()
+        y_true = torch.cat(y_true).detach().cpu()
+        y_true_rev = y_true.clone()
         y_true_rev[y_true == 2] = 0
 
-        mcc_normal = metrics.matthews_corrcoef(y_true, y_pred)
-        mcc_rev = metrics.matthews_corrcoef(y_true_rev, y_pred_rev)
-        mcc = (mcc_normal + mcc_rev) / 2
-
-        n = len(y_true)
-        c2_fwd_fn = float(((y_true == 2) & (y_pred != 2)).sum()) / n
-        c2_fwd_fp = float(((y_true != 2) & (y_pred == 2)).sum()) / n
-        c2_rev_fp = (y_true != 1) & (y_pred_rev == 1)
-        c2_rev_fp = float(c2_rev_fp.sum()) / n
+        mcc_fwd = metrics.matthews_corrcoef(y_true.numpy(), y_pred.numpy())
+        mcc_rev = metrics.matthews_corrcoef(y_true_rev.numpy(), y_pred_rev.numpy())
+        bit_p_acc = float(((y_true > 0) == (y_pred > 0)).float().mean())
+        bit_q_acc = float(((y_true == 1) == (y_pred == 1))[y_true > 0].float().mean())
 
         if self._is_evaluating(best_config):
             best_config.update(
                 {
-                    "test_mcc": mcc,
-                    "test_c2_fwd_fn": c2_fwd_fn,
-                    "test_c2_fwd_fp": c2_fwd_fp,
-                    "test_c2_rev_fp": c2_rev_fp,
+                    "test_mcc_fwd": mcc_fwd,
+                    "test_mcc_rev": mcc_rev,
+                    "test_bit_p_acc": bit_p_acc,
+                    "test_bit_q_acc": bit_q_acc,
                 }
             )
             return True, best_config
         else:
             success = False
-            if mcc > self._best:
-                self._best = mcc
+            if (mcc_fwd, mcc_rev) > self._best:
+                self._best = (mcc_fwd, mcc_rev)
                 success = True
             return success, {
-                "dev_mcc": mcc,
-                "dev_c2_fwd_fn": c2_fwd_fn,
-                "dev_c2_fwd_fp": c2_fwd_fp,
-                "dev_c2_rev_fp": c2_rev_fp,
+                "dev_mcc_fwd": mcc_fwd,
+                "dev_mcc_rev": mcc_rev,
+                "dev_bit_p_acc": bit_p_acc,
+                "dev_bit_q_acc": bit_q_acc,
             }
