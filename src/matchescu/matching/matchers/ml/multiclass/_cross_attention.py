@@ -62,16 +62,21 @@ class PooledCrossAttention(nn.Module):
 class PerAttributeCrossAttention(nn.Module):
     """Directional per-attribute cross-attention.
 
-    Splits BERT token-level hidden states into per-attribute chunks at COL
-    token boundaries (supplied externally, keeping this module
-    tokenizer-agnostic) and applies standard ``MultiheadAttention`` per
-    attribute in both directions. The two directions use separate attention
-    instances.
+    Splits BERT token-level hidden states into per-attribute spans at COL
+    token boundaries (supplied externally via ``col_positions``) and applies
+    directional ``MultiheadAttention`` per attribute in both directions.
     """
 
-    def __init__(self, hidden_size: int, num_heads: int = 8, dropout: float = 0.1):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int = 8,
+        dropout: float = 0.1,
+        residual: bool = True,
+    ):
         super().__init__()
         self.hidden_size = hidden_size
+        self.residual = residual
         self.attn_a = nn.MultiheadAttention(
             hidden_size,
             num_heads,
@@ -87,47 +92,35 @@ class PerAttributeCrossAttention(nn.Module):
 
     @staticmethod
     def _extract_attr_spans(
-        hidden: torch.Tensor,
-        col_positions: torch.Tensor,
-        segment_mask: torch.Tensor,
-    ) -> list[list[tuple[torch.Tensor, torch.Tensor]]]:
-        """Split hidden states into per-attribute spans for each batch item.
-
-        Only COL positions that belong to the same segment (``segment_mask`` is
-        1.0 at the COL token) open a span. Each segment's span list holds
-        that segment's attributes in order and index ``i`` of the two
-        segments refers to the same attribute.
+        hidden_item: torch.Tensor,
+        col_indices: list[int],
+        segment_mask_item: torch.Tensor,
+    ) -> list[torch.Tensor]:
+        """Extract contiguous per-attribute spans for a single sequence.
 
         Args:
-            hidden: (batch, seq_len, hidden).
-            col_positions: (batch, max_cols) — positions of COL tokens for
-                each item, padded with -1.
-            segment_mask: (batch, seq_len) — float mask for the segment
-                (segment_a or segment_b).
+            hidden_item: (seq_len, hidden) token embeddings.
+            col_indices: Sorted list of COL token positions belonging to this segment.
+            segment_mask_item: (seq_len,) mask indicating tokens in this segment.
 
         Returns:
-            Nested list ``[batch][attr]`` of ``(span_len, hidden)`` and
-            ``(span_len,)`` boolean mask tensors.
+            List of (span_len, hidden) tensors, one per attribute.
         """
-        batch_size = hidden.size(0)
-        spans: list[list[tuple[torch.Tensor, torch.Tensor]]] = []
-        for b in range(batch_size):
-            cols = col_positions[b]
-            valid_cols = cols[cols >= 0].tolist()
-            owns = segment_mask[b, valid_cols] == 1.0
-            item_cols = [col_pos for col_pos, owns in zip(valid_cols, owns) if owns]
-            item_spans: list[tuple[torch.Tensor, torch.Tensor]] = []
-            for i, col_pos in enumerate(item_cols):
-                if i + 1 < len(item_cols):
-                    end_pos = item_cols[i + 1]
-                else:
-                    end_pos = next(
-                        (p for p in valid_cols if p > col_pos), hidden.size(1)
-                    )
-                span_mask = segment_mask[b, col_pos:end_pos]
-                span = hidden[b, col_pos:end_pos] * span_mask.unsqueeze(-1)
-                item_spans.append((span, span_mask.eq(0)))
-            spans.append(item_spans)
+        if not col_indices:
+            return []
+
+        active_indices = torch.nonzero(segment_mask_item > 0, as_tuple=False).squeeze(
+            -1
+        )
+        if active_indices.numel() == 0:
+            return []
+        seg_end = active_indices[-1].item() + 1
+
+        spans: list[torch.Tensor] = []
+        for i, start in enumerate(col_indices):
+            end = col_indices[i + 1] if i + 1 < len(col_indices) else seg_end
+            if end > start:
+                spans.append(hidden_item[start:end])
         return spans
 
     def forward(
@@ -139,43 +132,54 @@ class PerAttributeCrossAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Produce ``(enc_a, enc_b)`` via directional per-attribute attention.
 
-        Args:
-            hidden: (batch, seq_len, hidden) — BERT token-level hidden states.
-            mask_a: (batch, seq_len) — float mask for segment A tokens.
-            mask_b: (batch, seq_len) — float mask for segment B tokens.
-            col_positions: (batch, max_cols) — positions of COL tokens for
-                each item, padded with -1.
+        :param hidden: (batch, seq_len, hidden) — BERT token-level hidden states.
+        :param mask_a: (batch, seq_len) — mask for segment A tokens.
+        :param mask_b: (batch, seq_len) — mask for segment B tokens.
+        :param col_positions: (batch, max_cols) — positions of COL tokens, padded with -1.
 
-        Returns:
+        :returns:
             (enc_a, enc_b) each of shape (batch, hidden).
         """
-        spans_a = self._extract_attr_spans(hidden, col_positions, mask_a)
-        spans_b = self._extract_attr_spans(hidden, col_positions, mask_b)
-
-        batch_size = hidden.size(0)
+        batch_size, seq_len, _ = hidden.shape
         enc_a_list: list[torch.Tensor] = []
         enc_b_list: list[torch.Tensor] = []
 
-        for b in range(batch_size):
+        for i in range(batch_size):
+            # Identify valid COL positions belonging to segment A and segment B
+            valid_cols = col_positions[i][col_positions[i] >= 0]
+            cols_a = [p.item() for p in valid_cols if p < seq_len and mask_a[i, p] > 0]
+            cols_b = [p.item() for p in valid_cols if p < seq_len and mask_b[i, p] > 0]
+            cols_a.sort()
+            cols_b.sort()
+
+            spans_a = self._extract_attr_spans(hidden[i], cols_a, mask_a[i])
+            spans_b = self._extract_attr_spans(hidden[i], cols_b, mask_b[i])
+
             attr_outs_a: list[torch.Tensor] = []
             attr_outs_b: list[torch.Tensor] = []
-            for (span_a, pad_a), (span_b, pad_b) in zip(spans_a[b], spans_b[b]):
+
+            # Pair attributes in order of appearance
+            for span_a, span_b in zip(spans_a, spans_b):
                 if span_a.size(0) == 0 or span_b.size(0) == 0:
                     continue
-                sa = span_a.unsqueeze(0)
-                sb = span_b.unsqueeze(0)
-                out_a, _ = self.attn_a(
-                    query=sa, key=sb, value=sb, key_padding_mask=pad_b.unsqueeze(0)
-                )
-                out_b, _ = self.attn_b(
-                    query=sb, key=sa, value=sa, key_padding_mask=pad_a.unsqueeze(0)
-                )
-                valid_a = out_a.squeeze(0)[~pad_b]
-                valid_b = out_b.squeeze(0)[~pad_a]
-                if valid_a.size(0) == 0 or valid_b.size(0) == 0:
-                    continue
-                attr_outs_a.append(valid_a.mean(dim=0))
-                attr_outs_b.append(valid_b.mean(dim=0))
+
+                sa = span_a.unsqueeze(0)  # (1, len_a, hidden)
+                sb = span_b.unsqueeze(0)  # (1, len_b, hidden)
+
+                # Cross-attend: A queries B, B queries A
+                out_a, _ = self.attn_a(query=sa, key=sb, value=sb)  # (1, len_a, hidden)
+                out_b, _ = self.attn_b(query=sb, key=sa, value=sa)  # (1, len_b, hidden)
+
+                if self.residual:
+                    rep_a = (sa + out_a).mean(dim=1).squeeze(0)
+                    rep_b = (sb + out_b).mean(dim=1).squeeze(0)
+                else:
+                    rep_a = out_a.mean(dim=1).squeeze(0)
+                    rep_b = out_b.mean(dim=1).squeeze(0)
+
+                attr_outs_a.append(rep_a)
+                attr_outs_b.append(rep_b)
+
             if attr_outs_a:
                 enc_a_list.append(torch.stack(attr_outs_a).mean(dim=0))
             else:
@@ -184,6 +188,7 @@ class PerAttributeCrossAttention(nn.Module):
                         self.hidden_size, dtype=hidden.dtype, device=hidden.device
                     )
                 )
+
             if attr_outs_b:
                 enc_b_list.append(torch.stack(attr_outs_b).mean(dim=0))
             else:
