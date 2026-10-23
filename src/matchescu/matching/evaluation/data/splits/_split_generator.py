@@ -189,11 +189,9 @@ class SplitGenerator:
         for c, n in targets.items():
             if c < 2:
                 continue
-            if n >= raw_targets[c]:
-                rand_idx = self._rng.choice(len(by[c]), size=n, replace=False)
-                class_pool = [by[c][i] for i in rand_idx]
-            else:
-                class_pool = by[c]
+            # _apply_cap guarantees n <= raw_targets[c] <= len(by[c]).
+            rand_idx = self._rng.choice(len(by[c]), size=n, replace=False)
+            class_pool = [by[c][i] for i in rand_idx]
             samples.update({c: class_pool})
         samples.update({0: self._generate_negatives(targets[0], set(self._matcher_gt))})
 
