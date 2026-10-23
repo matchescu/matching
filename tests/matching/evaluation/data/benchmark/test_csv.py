@@ -77,6 +77,27 @@ def test_split_with_max_comparison_space(affils_dir, affils_id_col, affils_trait
     assert len(data.train_split) + len(data.test_split) + len(data.valid_split) == 10000
 
 
+def test_split_with_bridge_classes_and_max_comparison_space(
+    affils_dir, affils_id_col, affils_traits
+):
+    data = (
+        CsvBenchmarkData(affils_dir, ["affiliationstrings_ids_with_source.csv"])
+        .load_data([affils_traits], [affils_id_col], ["source"])
+        .with_ideal_mapping(
+            "directed_with_label.csv",
+            id_cols=(0, 2),
+            source_cols=(1, 3),
+            label_col=4,
+            has_header=True,
+        )
+        .with_clusters("affiliationstrings_clusters.csv")
+    )
+
+    data.split(max_sample_count=1000, neg_pos_ratio=4, bridge_class_ratio=2)
+
+    assert len(data.train_split) + len(data.test_split) + len(data.valid_split) == 1000
+
+
 def test_true_matches(affils_dir, affils_id_col, affils_traits):
     mapping_file = "affiliationstrings_mapping.csv"
     data = (
