@@ -27,8 +27,8 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         super().__init__(id_table, split)
         self.__tokenizer = tokenizer
         self.__max_len = max_len
-        self.__left_cols = left_cols
-        self.__right_cols = right_cols
+        self.__left_cols = list(left_cols or [])
+        self.__right_cols = list(right_cols or [])
         self.__label_counts = np.bincount(self._labels)
         self.__col_token_id = tokenizer(self._COL_TOKEN, add_special_tokens=False)[
             "input_ids"
@@ -55,8 +55,8 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
             positions for both normal and reversed input orders.
         """
         left, right = self._pairs[idx]
-        left_text = to_ditto_text(left)
-        right_text = to_ditto_text(right)
+        left_text = to_ditto_text(left, self.__left_cols)
+        right_text = to_ditto_text(right, self.__right_cols)
 
         y = self._labels[idx]
 
