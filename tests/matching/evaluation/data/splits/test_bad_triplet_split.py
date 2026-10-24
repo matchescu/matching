@@ -51,6 +51,14 @@ def _contested_data():
     return clusters, label_two
 
 
+def _quota_data():
+    clusters = {i: [f"r{i}a", f"r{i}b"] for i in range(30)}
+    for home in range(15):
+        clusters[home].append(f"x{home}")
+    label_two = [(f"r{15 + i}a", f"x{i}") for i in range(15)]
+    return clusters, label_two
+
+
 def _frame_refs(frame: pl.DataFrame) -> set[EntityReferenceIdentifier]:
     rows = list(frame.iter_rows(named=True))
     return {EntityReferenceIdentifier(r["left_id"], r["left_source"]) for r in rows} | {
@@ -197,6 +205,47 @@ def test_chunks_fill_eval_splits_first_when_items_are_scarce():
         ["d"],
         ["e"],
     ]
+
+
+def test_chunks_fill_train_first_when_bridge_units_are_scarce():
+    generator = BadTripletSplitGenerator(split_ratio=RATIO)
+    assert generator._chunks([], [3, 1, 1], eval_first=False) == [[], [], []]
+    assert generator._chunks(["a", "b"], [3, 1, 1], eval_first=False) == [
+        ["a", "b"],
+        [],
+        [],
+    ]
+    assert generator._chunks(["a"], [3, 1, 1], eval_first=False) == [["a"], [], []]
+    assert generator._chunks(list("abcde"), [3, 1, 1], eval_first=False) == [
+        ["a", "b", "c"],
+        ["d"],
+        ["e"],
+    ]
+
+
+def test_bridge_units_and_positives_are_chunked_by_ratio():
+    id_table, cluster_gt, matcher_gt = _build(*_quota_data())
+    generator = (
+        BadTripletSplitGenerator(split_ratio=RATIO)
+        .load(id_table, cluster_gt, matcher_gt)
+        .generate()
+    )
+
+    bridges = {name: _label_two(frame) for name, frame in generator._splits.items()}
+    assert {name: len(pairs) for name, pairs in bridges.items()} == {
+        "train": 9,
+        "valid": 3,
+        "test": 3,
+    }
+
+    positives = {
+        name: sum(1 for r in frame.iter_rows(named=True) if r["label"] > 0)
+        for name, frame in generator._splits.items()
+    }
+    assert positives == {"train": 27, "valid": 9, "test": 9}
+
+    used = _bridge_clusters(bridges, cluster_gt)
+    assert len(used) == len(set(used))
 
 
 def test_bad_triplet_split_writes_configured_file_names(split_data, tmp_path):

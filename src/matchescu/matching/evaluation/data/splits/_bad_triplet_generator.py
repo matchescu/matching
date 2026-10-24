@@ -22,8 +22,9 @@ class BadTripletSplitGenerator(SplitGenerator):
     one kept bridge (as home or proximal), so every kept bridge is an isolated
     two-cluster unit and no graph is needed. Bridges losing a conflict are
     orphaned: their record stays in its home cluster as an ordinary member, or
-    is removed when ``drop_orphans`` is set. Kept bridges that beat a rival go
-    to the first (train) split; the rest are divided by ``split_ratio``.
+    is removed when ``drop_orphans`` is set. Kept bridges are chunked by
+    ``split_ratio`` quotas; bridges that beat a rival are chunked first, so
+    they prefer the train split, and any excess spills into the eval splits.
     """
 
     def __init__(self, *args, drop_orphans: bool = False, **kwargs) -> None:
@@ -100,10 +101,11 @@ class BadTripletSplitGenerator(SplitGenerator):
         self, kept: list[Bridge], winners: set[Bridge]
     ) -> dict[int, str]:
         names, ratios = list(self.split_ratio), list(self.split_ratio.values())
-        cluster_split = {c: names[0] for b in winners for c in (b.home, b.proximal)}
-
-        rest = [b for b in kept if b not in winners]
-        for name, chunk in zip(names, self._chunks(rest, ratios)):
+        units = [b for b in kept if b in winners] + [
+            b for b in kept if b not in winners
+        ]
+        cluster_split: dict[int, str] = {}
+        for name, chunk in zip(names, self._chunks(units, ratios, eval_first=False)):
             for b in chunk:
                 cluster_split[b.home] = cluster_split[b.proximal] = name
         bridged = {cluster_split[b.home] for b in kept}
@@ -119,15 +121,20 @@ class BadTripletSplitGenerator(SplitGenerator):
                 cluster_split[c] = name
         return cluster_split
 
-    def _chunks(self, items: list, ratios: list[int]) -> list[list]:
+    def _chunks(
+        self, items: list, ratios: list[int], eval_first: bool = True
+    ) -> list[list]:
         n, k = len(items), len(ratios)
-        # base _split_counts yields a negative train count when n < k;
-        # with too few items, fill the trailing (eval) splits first
-        counts = self._split_counts(n, ratios) if n >= k else [0] * (k - n) + [1] * n
+        if n < k:
+            counts = [0] * (k - n) + [1] * n
+            if not eval_first:
+                counts = [n] + [0] * (k - 1)
+        else:
+            counts = self._split_counts(n, ratios)
         out, start = [], 0
-        for c in counts:
-            out.append(items[start : start + c])
-            start += c
+        for count in counts:
+            out.append(items[start : start + count])
+            start += count
         return out
 
     def _cross_cluster_pairs(self, records: list[RefId]) -> int:
