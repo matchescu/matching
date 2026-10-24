@@ -19,7 +19,6 @@ class MultiClassModule(nn.Module):
     we have class 2. [p0, q0] resolves to class 0, [p1, q1] resolves to class 1.
     """
 
-    _CLASSIFIER_OUTPUT_SIZE = 4
     _DEFAULT_MODEL = "bert-base-uncased"
 
     def __init__(self, params: MultiClassTrainingParams):
@@ -49,7 +48,6 @@ class MultiClassModule(nn.Module):
         self._classifier = ClassificationHead(
             self._asymmetric_head.output_size,
             hidden_size,
-            self._CLASSIFIER_OUTPUT_SIZE,
             params.dropout_p,
             dtype=self._bert.dtype,
         )

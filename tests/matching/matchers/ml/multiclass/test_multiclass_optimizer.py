@@ -31,7 +31,7 @@ class _StubModel(nn.Module):
         super().__init__()
         self._bert = _StubBert()
         self._classifier = ClassificationHead(
-            3 * HIDDEN, HIDDEN, 3, dropout_p=0.1, dtype=torch.float32
+            3 * HIDDEN, HIDDEN, dropout_p=0.1, dtype=torch.float32
         )
         self._cross_attn = PerAttributeCrossAttention(HIDDEN, dropout=0.1)
 

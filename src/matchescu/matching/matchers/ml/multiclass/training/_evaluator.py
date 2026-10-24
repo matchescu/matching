@@ -25,7 +25,7 @@ class TrainingEvaluator(
         logger: logging.Logger | None = None,
     ) -> None:
         super().__init__(task_name, xv_data, test_data, tb_log_dir, logger)
-        self._best = (0, 0)
+        self._best_mean = 0
 
     def _interpret_result(
         self,
@@ -64,6 +64,8 @@ class TrainingEvaluator(
 
         mcc_fwd = metrics.matthews_corrcoef(y_true.numpy(), y_pred.numpy())
         mcc_rev = metrics.matthews_corrcoef(y_true_rev.numpy(), y_pred_rev.numpy())
+        mcc_mean = 2 * mcc_fwd * mcc_rev / (mcc_fwd + mcc_rev)
+
         bit_p_acc = float(((y_true > 0) == (y_pred > 0)).float().mean())
         bit_q_acc = float(((y_true == 1) == (y_pred == 1))[y_true > 0].float().mean())
 
@@ -72,6 +74,7 @@ class TrainingEvaluator(
                 {
                     "test_mcc_fwd": mcc_fwd,
                     "test_mcc_rev": mcc_rev,
+                    "test_mcc_mean": mcc_mean,
                     "test_bit_p_acc": bit_p_acc,
                     "test_bit_q_acc": bit_q_acc,
                 }
@@ -79,12 +82,13 @@ class TrainingEvaluator(
             return True, best_config
         else:
             success = False
-            if (mcc_fwd, mcc_rev) > self._best:
-                self._best = (mcc_fwd, mcc_rev)
+            if mcc_mean > self._best_mean:
+                self._best_mean = mcc_mean
                 success = True
             return success, {
                 "dev_mcc_fwd": mcc_fwd,
                 "dev_mcc_rev": mcc_rev,
+                "dev_mcc_mean": mcc_mean,
                 "dev_bit_p_acc": bit_p_acc,
                 "dev_bit_q_acc": bit_q_acc,
             }
