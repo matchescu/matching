@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Self, cast
 
 import torch
 from torch import nn
@@ -160,7 +160,7 @@ class MultiClassModule(nn.Module):
             device if isinstance(device, torch.device) else torch.device(device)
         )
 
-    def train(self, mode: bool = True) -> "MultiClassModule":
+    def train(self, mode: bool = True) -> Self:
         super().train(mode)
         if not mode and self._device is not None:
             match self._device.type:
