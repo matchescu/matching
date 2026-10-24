@@ -72,6 +72,10 @@ class MultiClassModule(nn.Module):
         return self._cross_attn
 
     @property
+    def asymmetric_head(self) -> AsymmetricHead:
+        return self._asymmetric_head
+
+    @property
     def classifier_input_size(self) -> int:
         return self._classifier.input_size
 

@@ -80,7 +80,7 @@ class MultiClassTrainer(
         c0, c1, c2 = torch.as_tensor(label_counts, dtype=torch.float)
         total_positive = 2 * c1 + c2
         total_negative = 2 * c0 + c2
-        weights = torch.stack([1.0 / total_negative, 1.0 / total_positive])
+        weights = torch.stack([1.0 / total_negative, 1.0 / total_positive]).sqrt()
         weights = weights * (2.0 / weights.sum())
         return weights
 
@@ -124,6 +124,13 @@ class MultiClassTrainer(
             self._get_decay_model_params(model.embeddings_layer, emb_lr, weight_decay)
         )
 
+        # asymmetric head
+        param_groups.extend(
+            self._get_decay_model_params(
+                model.asymmetric_head, base_lr / decay_factor, weight_decay
+            )
+        )
+
         if model.cross_attention is not None:
             param_groups.extend(
                 self._get_decay_model_params(
@@ -154,12 +161,11 @@ class MultiClassTrainer(
         x_fwd = {k: v.to(device) for k, v in x_fwd.items()}
         x_rev = {k: v.to(device) for k, v in x_rev.items()}
         y_fwd = y_fwd.to(device)
-        y_rev = torch.where(y_fwd == 2, torch.zeros_like(y_fwd), y_fwd).to(device)
 
         logits_fwd = model(**x_fwd)
         logits_rev = model(**x_rev)
         bits_fwd = torch.stack(((y_fwd > 0), (y_fwd == 1)), dim=1).long().to(device)
-        bits_rev = torch.stack(((y_rev > 0), (y_rev == 1)), dim=1).long().to(device)
+        bits_rev = bits_fwd.flip(dims=[1])
 
         return logits_fwd, logits_rev, bits_fwd, bits_rev
 
