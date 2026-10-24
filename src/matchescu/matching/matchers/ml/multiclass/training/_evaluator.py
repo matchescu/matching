@@ -64,7 +64,7 @@ class TrainingEvaluator(
 
         mcc_fwd = metrics.matthews_corrcoef(y_true.numpy(), y_pred.numpy())
         mcc_rev = metrics.matthews_corrcoef(y_true_rev.numpy(), y_pred_rev.numpy())
-        mcc_mean = 2 * mcc_fwd * mcc_rev / (mcc_fwd + mcc_rev)
+        mcc_mean = 2 * mcc_fwd * mcc_rev / (mcc_fwd + mcc_rev) if mcc_fwd or mcc_rev else 0
 
         bit_p_acc = float(((y_true > 0) == (y_pred > 0)).float().mean())
         bit_q_acc = float(((y_true == 1) == (y_pred == 1))[y_true > 0].float().mean())
