@@ -1,4 +1,5 @@
 import itertools
+import logging
 from os import PathLike
 from pathlib import Path
 from typing import ClassVar, cast
@@ -164,9 +165,12 @@ class MagellanBenchmarkDataBuilder(BenchmarkDataBuilder[MagellanBenchmarkData]):
     _MAGELLAN_TRAITS = MagellanTraits()
 
     def __init__(
-        self, params: MagellanBenchmarkDataConfig, data_dir: Path | None = None
+        self,
+        params: MagellanBenchmarkDataConfig,
+        data_dir: Path | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
-        super().__init__(params, data_dir)
+        super().__init__(params, data_dir, logger)
         self._params = cast(MagellanBenchmarkDataConfig, self._params)
 
     def _create_instance(self) -> MagellanBenchmarkData:

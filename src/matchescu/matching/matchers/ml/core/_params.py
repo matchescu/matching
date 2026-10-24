@@ -24,3 +24,4 @@ class ModelTrainingParams(ConfigModel):
     epochs: int = Field(default=10)
     batch_size: int = Field(default=32)
     model_name: str | None = None
+    seed: int | None = Field(default=None)

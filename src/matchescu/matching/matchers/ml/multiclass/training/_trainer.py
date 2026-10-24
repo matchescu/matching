@@ -6,8 +6,8 @@ from typing import Any, cast
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import Tensor
-from torch.functional import F
 from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
 from torch.optim import Optimizer
@@ -32,6 +32,7 @@ class MultiClassTrainer(
 ):
     _FOCAL_GAMMA = 2.0
     _DIRECTIONAL_MARGIN = 2.0
+    _Q_LOSS_WEIGHT = 1.0
     hyperparams_schema = MultiClassTrainingParams
 
     def __init__(
@@ -104,7 +105,7 @@ class MultiClassTrainer(
         lc = cast(AsymmetricMultiClassDataset, data_loader.dataset).label_counts
         loss_fn = self._create_loss_fn()
         w_p, w_q = self._compute_weights(lc)
-        return BitwiseLoss(loss_fn(alpha=w_p), loss_fn(alpha=w_q))
+        return BitwiseLoss(loss_fn(alpha=w_p), loss_fn(alpha=w_q), self._Q_LOSS_WEIGHT)
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
@@ -113,13 +114,6 @@ class MultiClassTrainer(
 
         num_layers = len(model.encoder_layers)
         param_groups = []
-
-        # classification head
-        param_groups.extend(
-            self._get_decay_model_params(
-                model.classifier, base_lr / decay_factor, weight_decay
-            )
-        )
 
         # encoder layers (for those that were frozen, decay to 0)
         for i, layer in enumerate(reversed(model.encoder_layers)):
@@ -134,18 +128,11 @@ class MultiClassTrainer(
             self._get_decay_model_params(model.embeddings_layer, emb_lr, weight_decay)
         )
 
-        # asymmetric head
-        param_groups.extend(
-            self._get_decay_model_params(
-                model.asymmetric_head, base_lr / decay_factor, weight_decay
-            )
-        )
-
-        if model.cross_attention is not None:
+        for head in [model.cross_attention, model.asymmetric_head, model.classifier]:
+            if head is None:
+                continue
             param_groups.extend(
-                self._get_decay_model_params(
-                    model.cross_attention, base_lr / decay_factor, weight_decay
-                )
+                self._get_decay_model_params(head, base_lr / decay_factor, weight_decay)
             )
 
         return torch.optim.AdamW(param_groups)
@@ -203,9 +190,10 @@ class MultiClassTrainer(
         # rearrange logits as (N, bit, class)
         z_fwd = logits_fwd.float().view(-1, 2, 2)
         z_rev = logits_rev.float().view(-1, 2, 2)
-        loss_fwd = loss_fn(z_fwd, bits_fwd)
-        loss_rev = loss_fn(z_rev, bits_rev)
-        total_loss = loss_fwd + loss_rev
+
+        z_all = torch.cat((z_fwd, z_rev), dim=0)
+        bits_all = torch.cat((bits_fwd, bits_rev), dim=0)
+        total_loss = loss_fn(z_all, bits_all)
 
         co_loss = (
             self._params.cross_order_weight

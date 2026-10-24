@@ -1,5 +1,3 @@
-import random
-
 import numpy as np
 import torch
 from matchescu.reference_store.id_table import IdTable
@@ -22,18 +20,24 @@ class AsymmetricMultiClassDataset(MatchescuDataset):
         max_len: int = 256,
         left_cols: tuple | None = None,
         right_cols: tuple | None = None,
-        random_seed: int = 42,
     ):
         super().__init__(id_table, split)
         self.__tokenizer = tokenizer
         self.__max_len = max_len
         self.__left_cols = list(left_cols or [])
         self.__right_cols = list(right_cols or [])
+        self.__validate_labels()
         self.__label_counts = np.bincount(self._labels)
         self.__col_token_id = tokenizer(self._COL_TOKEN, add_special_tokens=False)[
             "input_ids"
         ][0]
-        random.seed(random_seed)
+
+    def __validate_labels(self) -> None:
+        unsupported = {int(label) for label in self._labels} - {0, 1, 2}
+        if unsupported:
+            raise ValueError(
+                f"multiclass dataset supports labels 0, 1, 2; found {unsupported}"
+            )
 
     @property
     def label_counts(self) -> np.ndarray:

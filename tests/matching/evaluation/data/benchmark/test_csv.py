@@ -1,6 +1,18 @@
+import logging
+from unittest.mock import MagicMock
+
 import pytest
 
-from matchescu.matching.evaluation.data.benchmark._csv import CsvBenchmarkData
+from matchescu.matching.config import CsvBenchmarkDataConfig
+from matchescu.matching.config._dataset_config import SourceFileConfig, SplitConfig
+from matchescu.matching.evaluation.data.benchmark._csv import (
+    CsvBenchmarkData,
+    CsvBenchmarkDataBuilder,
+)
+from matchescu.matching.evaluation.data.splits import (
+    BadTripletSplitGenerator,
+    SplitGenerator,
+)
 
 
 def test_single_source(affils_dir, affils_id_col, affils_traits):
@@ -125,3 +137,47 @@ def test_true_clusters(affils_dir, affils_id_col, affils_traits):
     cluster_count = len(set(data.ref_id_cluster_map.values()))
     assert cluster_count == 330
     assert cluster_count <= len(data.id_table)
+
+
+def test_missing_split_files_warn_and_regenerate_to_configured_names(tmp_path, caplog):
+    builder = object.__new__(CsvBenchmarkDataBuilder)
+    builder._data_dir = tmp_path
+    builder._log = logging.getLogger("builder-test")
+    builder._instance = MagicMock()
+    builder._params = CsvBenchmarkDataConfig(
+        directory=tmp_path,
+        sources=[SourceFileConfig(file_name="ids.csv")],
+        pairwise_mapping="mapping.csv",
+        splits=SplitConfig(
+            files={
+                "train": "train-trial.csv",
+                "valid": "valid-trial.csv",
+                "test": "test-trial.csv",
+            }
+        ),
+    )
+
+    with caplog.at_level(logging.WARNING, logger="builder-test"):
+        builder.load_splits()
+
+    assert "missing" in caplog.text
+    builder._instance.split.assert_called_once()
+    assert builder._instance.split.call_args.kwargs["file_names"] == {
+        "train": "train-trial.csv",
+        "valid": "valid-trial.csv",
+        "test": "test-trial.csv",
+    }
+    assert builder._instance.split.call_args.kwargs["split_mode"] == "pair"
+
+
+@pytest.mark.parametrize(
+    "mode,expected",
+    [("pair", SplitGenerator), ("bad_triplet", BadTripletSplitGenerator)],
+)
+def test_split_mode_selects_generator(mode, expected):
+    assert CsvBenchmarkData._generator_class(mode) is expected
+
+
+def test_split_mode_rejects_unknown_value():
+    with pytest.raises(ValueError, match="unsupported split mode"):
+        CsvBenchmarkData._generator_class("unknown")

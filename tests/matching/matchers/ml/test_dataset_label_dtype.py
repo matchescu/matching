@@ -1,9 +1,11 @@
 import pytest
 import torch
 from matchescu.extraction import Traits
+from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from transformers import AutoTokenizer
 
 from matchescu.matching.evaluation.data.benchmark import MagellanBenchmarkData
+from matchescu.matching.evaluation.data.splits import Split
 from matchescu.matching.matchers.ml.deeper.training import DeepERDataset
 from matchescu.matching.matchers.ml.deepmatcher.training import DeepMatcherDataset
 from matchescu.matching.matchers.ml.ditto.training import DittoDataset
@@ -85,3 +87,17 @@ def test_multiclass_dataset_batch_has_padded_col_positions(benchmark, tokenizer)
     assert x_fwd["col_positions"].shape[1] >= 1
     # padding value is -1
     assert (x_fwd["col_positions"] >= -1).all()
+
+
+def test_multiclass_dataset_rejects_unsupported_labels(benchmark, tokenizer):
+    left, right = benchmark.train_split.to_comparison_labels(benchmark.id_table)[0][0]
+    comparison_space = InMemoryComparisonSpace()
+    comparison_space.put(left.id, right.id)
+    split = Split(
+        comparison_space=comparison_space,
+        matcher_labels={(left.id, right.id): 3},
+        gt_clusters={0: {left.id, right.id}},
+    )
+
+    with pytest.raises(ValueError, match="supports labels"):
+        AsymmetricMultiClassDataset(benchmark.id_table, split, tokenizer)
