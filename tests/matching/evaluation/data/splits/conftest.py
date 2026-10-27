@@ -10,6 +10,8 @@ from matchescu.typing import EntityReferenceIdentifier as RefId
 
 from matchescu.matching.evaluation.data.splits import BadTripletSplitGenerator
 
+PAIR_SOURCE = "pairs"
+
 SYNTHETIC = "bad_triplet_synthetic"
 SEED = 41
 PREFIX = "split"
@@ -71,9 +73,14 @@ def logger():
 
 
 @pytest.fixture
-def make_generator(split_ratio, logger):
+def generator_class():
+    return BadTripletSplitGenerator
+
+
+@pytest.fixture
+def make_generator(generator_class, split_ratio, logger):
     def _make(data, **kwargs):
-        generator = BadTripletSplitGenerator(
+        generator = generator_class(
             split_ratio=split_ratio, seed=SEED, log=logger, **kwargs
         )
         return generator.load(*data)
@@ -110,3 +117,23 @@ def label_three_data(dataset):
     id_table, cluster_gt, matcher_gt = dataset
     first_pair = next(iter(matcher_gt))
     return id_table, cluster_gt, {**matcher_gt, first_pair: 3}
+
+
+@pytest.fixture
+def make_pair_data():
+    def _make(cluster_count, label_two_count):
+        refs = [
+            [RefId(2 * c + i, PAIR_SOURCE) for i in range(2)]
+            for c in range(cluster_count)
+        ]
+        id_table = InMemoryIdTable()
+        for ref in (ref for pair in refs for ref in pair):
+            id_table.put(EntityReference(ref, {"id": ref.label}))
+        cluster_gt = {ref: c for c, pair in enumerate(refs) for ref in pair}
+        matcher_gt = {tuple(pair): 1 for pair in refs}
+        matcher_gt.update(
+            {(refs[c][0], refs[c + 1][1]): 2 for c in range(label_two_count)}
+        )
+        return id_table, cluster_gt, matcher_gt
+
+    return _make
