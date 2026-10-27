@@ -94,6 +94,14 @@ def generated(make_generator, dataset):
 
 
 @pytest.fixture
+def generation_messages(make_generator, dataset, logger, caplog):
+    generator = make_generator(dataset)
+    with caplog.at_level(logging.INFO, logger=logger.name):
+        generator.generate()
+    return caplog.messages
+
+
+@pytest.fixture
 def split_rows(generated, tmp_path, split_ratio):
     generated.save(tmp_path, prefix=PREFIX)
     return {

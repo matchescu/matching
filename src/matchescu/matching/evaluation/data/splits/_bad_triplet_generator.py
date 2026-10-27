@@ -22,6 +22,38 @@ class BadTriplet(NamedTuple):
     target_links: dict[int, list[Pair]]  # distinct target clusters -> (target, record) pairs
 
 
+class Component(NamedTuple):
+    """A connected component of the bridge graph.
+
+    :param clusters: the sorted ids of the clusters in the component
+    :param bridges: the sorted bridge records whose footprints form the component
+    :param label_two: the number of label-2 pairs of those bridges
+    """
+
+    clusters: tuple[int, ...]
+    bridges: tuple[RefId, ...]
+    label_two: int
+
+
+def _ref_key(ref: RefId) -> tuple[str, str]:
+    return ref.source, str(ref.label)
+
+
+def _find(parent: dict[int, int], node: int) -> int:
+    while parent[node] != node:
+        parent[node] = parent[parent[node]]
+        node = parent[node]
+    return node
+
+
+def _union(parent: dict[int, int], nodes: list[int]) -> None:
+    for node in nodes:
+        parent.setdefault(node, node)
+    root = _find(parent, nodes[0])
+    for node in nodes[1:]:
+        parent[_find(parent, node)] = root
+
+
 class BadTripletSplitGenerator(SplitGenerator):
     """Distributes the possible bad triplets over the splits.
 
@@ -60,6 +92,7 @@ class BadTripletSplitGenerator(SplitGenerator):
             raise ValueError(
                 f"bad triplet split does not support classes {unsupported}"
             )
+        self._log_components(self._components())
         split_of = self._distribute(self._triplets())
         label_two = [
             pair
@@ -74,6 +107,71 @@ class BadTripletSplitGenerator(SplitGenerator):
         )
         self._splits = self._build_splits(by, split_of, label_two, excluded)
         return self
+
+    def _label_two_by_bridge(self) -> dict[RefId, list[Pair]]:
+        """The label-2 pairs of every bridge, both in sorted order."""
+        result: dict[RefId, list[Pair]] = defaultdict(list)
+        pairs = (pair for pair, label in self._matcher_gt.items() if label == 2)
+        for pair in sorted(pairs, key=lambda p: (_ref_key(p[1]), _ref_key(p[0]))):
+            result[pair[1]].append(pair)
+        return result
+
+    def _footprint(self, bridge: RefId, pairs: list[Pair]) -> list[int]:
+        """The sorted clusters the text of *bridge* is derived from."""
+        targets = {self._cluster_gt[target] for target, _ in pairs}
+        return sorted(targets | {self._cluster_gt[bridge]})
+
+    def _bridge_forest(self, by_bridge: dict[RefId, list[Pair]]) -> dict[int, int]:
+        """Union-find parents: every bridge joins the clusters of its footprint."""
+        parent: dict[int, int] = {}
+        for bridge, pairs in by_bridge.items():
+            _union(parent, self._footprint(bridge, pairs))
+        return parent
+
+    def _components(self) -> list[Component]:
+        """The bridge graph components, sorted by their smallest cluster id."""
+        by_bridge = self._label_two_by_bridge()
+        parent = self._bridge_forest(by_bridge)
+        clusters: dict[int, list[int]] = defaultdict(list)
+        for cluster in sorted(parent):
+            clusters[_find(parent, cluster)].append(cluster)
+        bridges: dict[int, list[RefId]] = defaultdict(list)
+        for bridge in by_bridge:
+            bridges[_find(parent, self._cluster_gt[bridge])].append(bridge)
+        components = (
+            Component(
+                tuple(clusters[root]),
+                tuple(members),
+                sum(len(by_bridge[b]) for b in members),
+            )
+            for root, members in bridges.items()
+        )
+        return sorted(components, key=lambda component: component.clusters[0])
+
+    def _label_two_targets(self, total: int) -> dict[str, float]:
+        """The fractional label-2 share of every split under ``split_ratio``."""
+        weight = sum(self.split_ratio.values())
+        return {name: total * r / weight for name, r in self.split_ratio.items()}
+
+    def _log_components(self, components: list[Component]) -> None:
+        sizes = [component.label_two for component in components]
+        total = sum(sizes)
+        self._log.info("bridge graph: %d components", len(components))
+        self._log.info(
+            "label-2 pairs per component: %s", dict(sorted(Counter(sizes).items()))
+        )
+        if total:
+            self._log.info(
+                "largest component share: %.4f (%d/%d)",
+                max(sizes) / total,
+                max(sizes),
+                total,
+            )
+        targets = self._label_two_targets(total)
+        self._log.info(
+            "split label-2 targets: %s",
+            ", ".join(f"{k}={v:.1f}" for k, v in targets.items()),
+        )
 
     def _triplets(self) -> dict[RefId, BadTriplet]:
         """Group every available ``(source, bridge, target)`` triplet per bridge record."""

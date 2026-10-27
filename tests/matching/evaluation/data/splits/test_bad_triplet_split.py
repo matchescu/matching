@@ -1,6 +1,7 @@
 import pytest
 
 FILE_NAMES = {"train": "a.csv", "dev": "b.csv", "test": "c.csv"}
+SYNTHETIC_COMPONENTS = 5
 
 
 def test_generate_raises_when_matcher_ground_truth_has_class_three(
@@ -22,3 +23,9 @@ def test_save_writes_configured_file_names(generated, tmp_path):
     generated.save(tmp_path, file_names=FILE_NAMES)
 
     assert all((tmp_path / name).is_file() for name in FILE_NAMES.values())
+
+
+def test_generate_logs_bridge_graph_component_count(generation_messages):
+    expected = f"bridge graph: {SYNTHETIC_COMPONENTS} components"
+
+    assert expected in generation_messages
