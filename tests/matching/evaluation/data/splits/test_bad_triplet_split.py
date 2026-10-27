@@ -12,6 +12,7 @@ from matchescu.matching.evaluation.data.splits import (
 )
 
 RATIO = {"train": 3, "valid": 1, "test": 1}
+SEED = 42  # chosen so that the stranded fixture's bridge record is processed last
 
 
 def _ref(label: str, source: str = "source") -> EntityReference:
@@ -36,18 +37,61 @@ def _build(clusters, label_two):
     return id_table, cluster_gt, matcher_gt
 
 
+def _star_data():
+    clusters = {
+        0: ["a0", "a1", "x"],
+        1: ["b0", "b1", "w"],
+        2: ["c0", "c1", "y"],
+        3: ["d0", "d1"],
+        4: ["e0", "e1"],
+        5: ["f0", "f1"],
+        6: ["g0", "g1"],
+    }
+    # star: every bridge record targets cluster 1, so all triplets co-locate there
+    label_two = [("b0", "x"), ("b1", "y"), ("f0", "w")]
+    return clusters, label_two
+
+
 def _contested_data():
-    clusters = {i: [f"r{i}a", f"r{i}b"] for i in range(10)}
-    for home in (0, 2, 4, 6, 8):
-        clusters[home].append(f"x{home}")
-    # x0 and x8 both target cluster 1; the other bridges are independent
-    label_two = [
-        ("r1a", "x0"),
-        ("r3a", "x2"),
-        ("r5a", "x4"),
-        ("r7a", "x6"),
-        ("r1b", "x8"),
-    ]
+    clusters = {0: ["a0", "a1", "x"], 1: ["b0", "b1"], 2: ["c0", "c1"], 3: ["d0", "d1"]}
+    # one bridge record x (home 0) reached by target clusters 1 and 3
+    label_two = [("b0", "x"), ("d0", "x")]
+    return clusters, label_two
+
+
+def _pinned_data():
+    clusters = {
+        0: ["a0", "a1", "x"],
+        1: ["b0", "b1", "y"],
+        2: ["c0", "c1"],
+        3: ["d0", "d1", "z"],
+        4: ["e0", "e1"],
+        5: ["f0", "f1"],
+        6: ["g0", "g1"],
+    }
+    # x (home 0) is reached by clusters 1 and 3; y and z pin both clusters to 0
+    label_two = [("a0", "y"), ("a1", "z"), ("b0", "x"), ("d0", "x")]
+    return clusters, label_two
+
+
+def _stranded_data():
+    clusters = {
+        0: ["a0", "a1", "x", "c0"],
+        1: ["b0", "b1", "w0"],
+        2: ["c1"],
+        3: ["d0", "d1"],
+        4: ["e0", "e1"],
+    }
+    # c0 and w0 pin cluster 0 apart from clusters 1 and 3; x (home 0, targets 1
+    # and 3) can then share a split with no target cluster
+    label_two = [("c1", "c0"), ("d0", "w0"), ("b0", "x"), ("d1", "x")]
+    return clusters, label_two
+
+
+def _multi_link_data():
+    clusters = {0: ["a0", "x"], 1: ["b0", "b1", "b2"], 2: ["c0", "c1"], 3: ["d0", "d1"]}
+    # one bridge record with two source links and two target links
+    label_two = [("b0", "x"), ("b1", "x")]
     return clusters, label_two
 
 
@@ -77,150 +121,160 @@ def _label_two(frame: pl.DataFrame):
     ]
 
 
-def _bridge_clusters(bridges, cluster_gt):
+def _label_one(frame: pl.DataFrame):
     return [
-        cluster_gt[ref] for pairs in bridges.values() for pair in pairs for ref in pair
+        (
+            EntityReferenceIdentifier(r["left_id"], r["left_source"]),
+            EntityReferenceIdentifier(r["right_id"], r["right_source"]),
+        )
+        for r in frame.iter_rows(named=True)
+        if r["label"] == 1
     ]
+
+
+def _split_of_clusters(generator, cluster_gt) -> dict[int, str]:
+    result = {}
+    for name, frame in generator._splits.items():
+        for ref in _frame_refs(frame):
+            if ref in cluster_gt:
+                result[cluster_gt[ref]] = name
+    return result
 
 
 @pytest.fixture
-def split_data():
-    clusters = {
-        0: ["a0", "a1", "x"],
-        1: ["b0", "b1", "w"],
-        2: ["c0", "c1", "y"],
-        3: ["d0", "d1"],
-        4: ["e0", "e1"],
-        5: ["f0", "f1"],
-    }
-    id_table = InMemoryIdTable()
-    cluster_gt = {}
-    for cluster, labels in clusters.items():
-        for label in labels:
-            ref = _ref(label)
-            id_table.put(ref)
-            cluster_gt[ref.id] = cluster
-    refs = {ref.id.label: ref.id for ref in id_table}
-    label_one = [
-        ("a0", "a1"),
-        ("a1", "x"),
-        ("b0", "b1"),
-        ("b0", "w"),
-        ("c0", "c1"),
-        ("c1", "y"),
-        ("d0", "d1"),
-        ("e0", "e1"),
-        ("f0", "f1"),
-    ]
-    # star: every bridge touches cluster 1, so only one can be kept
-    label_two = [("b0", "x"), ("b1", "y"), ("f0", "w")]
-    matcher_gt = {
-        **{(refs[left], refs[right]): 1 for left, right in label_one},
-        **{(refs[left], refs[right]): 2 for left, right in label_two},
-    }
-    return id_table, cluster_gt, matcher_gt, clusters
+def star_data():
+    return _build(*_star_data())
 
 
-def test_bad_triplet_split_keeps_clusters_disjoint(split_data, caplog):
-    id_table, cluster_gt, matcher_gt, _ = split_data
-    generator = BadTripletSplitGenerator(
-        split_ratio=RATIO,
-        log=logging.getLogger("bad-triplet-test"),
-    ).load(id_table, cluster_gt, matcher_gt)
+def test_bad_triplet_split_co_locates_all_bridge_records_in_one_split(
+    star_data, caplog
+):
+    id_table, cluster_gt, matcher_gt = star_data
+    logger = logging.getLogger("bad-triplet-test")
+    generator = BadTripletSplitGenerator(split_ratio=RATIO, log=logger)
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        generator.load(id_table, cluster_gt, matcher_gt).generate()
 
-    with caplog.at_level(logging.WARNING, logger="bad-triplet-test"):
-        generator.generate()
-
-    split_records = {
-        name: _frame_refs(frame) for name, frame in generator._splits.items()
-    }
+    bridges = {name: _label_two(frame) for name, frame in generator._splits.items()}
+    assert sorted(map(len, bridges.values())) == [0, 0, 3]
+    (bridged,) = [name for name, pairs in bridges.items() if pairs]
     split_clusters = {
-        name: {cluster_gt[ref_id] for ref_id in records if ref_id in cluster_gt}
-        for name, records in split_records.items()
+        name: {cluster_gt[ref] for ref in _frame_refs(frame) if ref in cluster_gt}
+        for name, frame in generator._splits.items()
     }
-
-    all_records = list(split_records.values())
-    assert sum(len(records) for records in all_records) == len(
-        set().union(*all_records)
-    )
-
-    bridges = {name: _label_two(frame) for name, frame in generator._splits.items()}
-    for name, pairs in bridges.items():
-        for left, right in pairs:
-            assert cluster_gt[left] in split_clusters[name]
-            assert cluster_gt[right] in split_clusters[name]
-
-    used = _bridge_clusters(bridges, cluster_gt)
-    assert len(used) == len(set(used))
-    assert {name: len(pairs) for name, pairs in bridges.items()} == {
-        "train": 1,
-        "valid": 0,
-        "test": 0,
-    }
-    assert caplog.text.count("dropping bridge") == 2
+    for left, right in bridges[bridged]:
+        for ref in (left, right):
+            assert cluster_gt[ref] in split_clusters[bridged]
     assert "splits without bridges" in caplog.text
+    assert "cannot be placed" not in caplog.text
+    assert "rule 4 cannot be satisfied" not in caplog.text
 
 
-def test_contested_winner_goes_to_train_and_eval_splits_get_bridges(caplog):
-    id_table, cluster_gt, matcher_gt = _build(*_contested_data())
-    generator = BadTripletSplitGenerator(
-        split_ratio=RATIO,
-        log=logging.getLogger("contested-test"),
-    ).load(id_table, cluster_gt, matcher_gt)
-
-    with caplog.at_level(logging.WARNING, logger="contested-test"):
-        generator.generate()
-
-    bridges = {name: _label_two(frame) for name, frame in generator._splits.items()}
-    assert all(bridges.values())
-    assert sum(map(len, bridges.values())) == 4
-    used = _bridge_clusters(bridges, cluster_gt)
-    assert len(used) == len(set(used))
-    assert any(cluster_gt[target] == 1 for target, _ in bridges["train"])
-    assert caplog.text.count("dropping bridge") == 1
-    assert len(generator.orphan_records) == 1
-
-    all_records = [_frame_refs(frame) for frame in generator._splits.values()]
-    assert sum(map(len, all_records)) == len(set().union(*all_records))
-
-
-def test_drop_orphans_removes_orphaned_bridge_records():
-    id_table, cluster_gt, matcher_gt = _build(*_contested_data())
+def test_bad_triplet_split_keeps_cluster_records_disjoint(star_data):
+    id_table, cluster_gt, matcher_gt = star_data
     generator = (
-        BadTripletSplitGenerator(split_ratio=RATIO, drop_orphans=True)
+        BadTripletSplitGenerator(split_ratio=RATIO)
         .load(id_table, cluster_gt, matcher_gt)
         .generate()
     )
 
-    (orphan,) = generator.orphan_records
-    assert all(orphan not in _frame_refs(f) for f in generator._splits.values())
+    split_records = [_frame_refs(frame) for frame in generator._splits.values()]
+    assert sum(map(len, split_records)) == len(set().union(*split_records))
+    assert set().union(*split_records) == set(cluster_gt)
 
 
-def test_chunks_fill_eval_splits_first_when_items_are_scarce():
-    generator = BadTripletSplitGenerator(split_ratio=RATIO)
-    assert generator._chunks([], [3, 1, 1]) == [[], [], []]
-    assert generator._chunks(["a", "b"], [3, 1, 1]) == [[], ["a"], ["b"]]
-    assert generator._chunks(list("abcde"), [3, 1, 1]) == [
-        ["a", "b", "c"],
-        ["d"],
-        ["e"],
+def test_contested_bridge_record_selects_one_target_cluster(caplog):
+    id_table, cluster_gt, matcher_gt = _build(*_contested_data())
+    logger = logging.getLogger("contested-test")
+    generator = BadTripletSplitGenerator(split_ratio=RATIO, log=logger)
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        generator.load(id_table, cluster_gt, matcher_gt).generate()
+
+    split_of = _split_of_clusters(generator, cluster_gt)
+    rows = [pair for frame in generator._splits.values() for pair in _label_two(frame)]
+    assert len(rows) == 1
+    target, bridge_record = rows[0]
+    winner = cluster_gt[target]
+    loser_target = 3 if winner == 1 else 1
+    assert bridge_record.label == "x"
+    assert split_of[winner] == split_of[cluster_gt[bridge_record]]
+    assert split_of[loser_target] != split_of[winner]
+    assert generator.orphan_records == set()
+    assert "rule 4 cannot be satisfied" not in caplog.text
+
+
+def test_unsplittable_target_clusters_keep_all_label_two_rows(caplog):
+    id_table, cluster_gt, matcher_gt = _build(*_pinned_data())
+    logger = logging.getLogger("pinned-test")
+    generator = BadTripletSplitGenerator(split_ratio=RATIO, log=logger)
+    with caplog.at_level(logging.WARNING, logger=logger.name):
+        generator.load(id_table, cluster_gt, matcher_gt).generate()
+
+    split_of = _split_of_clusters(generator, cluster_gt)
+    assert len({split_of[cluster] for cluster in (0, 1, 3)}) == 1
+    rows = {
+        (left.label, right.label)
+        for frame in generator._splits.values()
+        for left, right in _label_two(frame)
+    }
+    assert rows == {("a0", "y"), ("a1", "z"), ("b0", "x"), ("d0", "x")}
+    assert "rule 4 cannot be satisfied" in caplog.text
+
+
+def test_unplaceable_bridge_record_is_reported_as_orphan():
+    id_table, cluster_gt, matcher_gt = _build(*_stranded_data())
+    generator = BadTripletSplitGenerator(
+        split_ratio=RATIO, match_bridge_ratio=0, seed=SEED
+    )
+    generator.load(id_table, cluster_gt, matcher_gt).generate()
+
+    assert generator.orphan_records == {EntityReferenceIdentifier("x", "source")}
+    rows = [
+        (left.label, right.label)
+        for frame in generator._splits.values()
+        for left, right in _label_two(frame)
     ]
+    assert len(rows) == 2
+    label_one_rows = [
+        (left.label, right.label)
+        for frame in generator._splits.values()
+        for left, right in _label_one(frame)
+    ]
+    assert ("a1", "x") in label_one_rows
 
 
-def test_chunks_fill_train_first_when_bridge_units_are_scarce():
-    generator = BadTripletSplitGenerator(split_ratio=RATIO)
-    assert generator._chunks([], [3, 1, 1], eval_first=False) == [[], [], []]
-    assert generator._chunks(["a", "b"], [3, 1, 1], eval_first=False) == [
-        ["a", "b"],
-        [],
-        [],
+def test_drop_orphans_removes_unplaceable_bridge_record():
+    id_table, cluster_gt, matcher_gt = _build(*_stranded_data())
+    generator = BadTripletSplitGenerator(
+        split_ratio=RATIO, match_bridge_ratio=0, seed=SEED, drop_orphans=True
+    )
+    generator.load(id_table, cluster_gt, matcher_gt).generate()
+
+    all_refs = set().union(*(_frame_refs(f) for f in generator._splits.values()))
+    assert EntityReferenceIdentifier("x", "source") not in all_refs
+    rows = [pair for frame in generator._splits.values() for pair in _label_two(frame)]
+    assert len(rows) == 2
+
+
+def test_bridge_record_keeps_several_source_and_target_links():
+    id_table, cluster_gt, matcher_gt = _build(*_multi_link_data())
+    generator = (
+        BadTripletSplitGenerator(split_ratio=RATIO)
+        .load(id_table, cluster_gt, matcher_gt)
+        .generate()
+    )
+
+    rows = [
+        (left.label, right.label)
+        for frame in generator._splits.values()
+        for left, right in _label_two(frame)
     ]
-    assert generator._chunks(["a"], [3, 1, 1], eval_first=False) == [["a"], [], []]
-    assert generator._chunks(list("abcde"), [3, 1, 1], eval_first=False) == [
-        ["a", "b", "c"],
-        ["d"],
-        ["e"],
+    assert rows == [("b0", "x"), ("b1", "x")]
+    label_one_rows = [
+        (left.label, right.label)
+        for left, right in _label_one(generator._splits["train"])
     ]
+    assert ("a0", "x") in label_one_rows
 
 
 def test_bridge_units_and_positives_are_chunked_by_ratio():
@@ -244,12 +298,23 @@ def test_bridge_units_and_positives_are_chunked_by_ratio():
     }
     assert positives == {"train": 27, "valid": 9, "test": 9}
 
-    used = _bridge_clusters(bridges, cluster_gt)
-    assert len(used) == len(set(used))
+
+def test_quota_counts_fill_eval_splits_when_items_are_scarce():
+    generator = BadTripletSplitGenerator(split_ratio=RATIO)
+    assert generator._quota_counts(0) == [0, 0, 0]
+    assert generator._quota_counts(2) == [0, 1, 1]
+    assert generator._quota_counts(5) == [3, 1, 1]
 
 
-def test_bad_triplet_split_writes_configured_file_names(split_data, tmp_path):
-    id_table, cluster_gt, matcher_gt, _ = split_data
+def test_quota_counts_fill_train_when_bridge_records_are_scarce():
+    generator = BadTripletSplitGenerator(split_ratio=RATIO)
+    assert generator._quota_counts(2, eval_first=False) == [2, 0, 0]
+    assert generator._quota_counts(1, eval_first=False) == [1, 0, 0]
+    assert generator._quota_counts(5, eval_first=False) == [3, 1, 1]
+
+
+def test_bad_triplet_split_writes_configured_file_names(star_data, tmp_path):
+    id_table, cluster_gt, matcher_gt = star_data
     generator = (
         BadTripletSplitGenerator(split_ratio=RATIO)
         .load(id_table, cluster_gt, matcher_gt)
