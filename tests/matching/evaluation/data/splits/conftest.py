@@ -11,6 +11,8 @@ from matchescu.typing import EntityReferenceIdentifier as RefId
 from matchescu.matching.evaluation.data.splits import BadTripletSplitGenerator
 
 PAIR_SOURCE = "pairs"
+GENERATED_SOURCE = "ambiguity-generator"
+SOURCELESS_BRIDGE = RefId(108, GENERATED_SOURCE)
 
 SYNTHETIC = "bad_triplet_synthetic"
 SEED = 41
@@ -68,8 +70,10 @@ def split_ratio():
 
 
 @pytest.fixture
-def logger():
-    return logging.getLogger("bad-triplet-test")
+def logger(caplog):
+    log = logging.getLogger("bad-triplet-test")
+    caplog.set_level(logging.INFO, logger=log.name)
+    return log
 
 
 @pytest.fixture
@@ -94,14 +98,6 @@ def generated(make_generator, dataset):
 
 
 @pytest.fixture
-def generation_messages(make_generator, dataset, logger, caplog):
-    generator = make_generator(dataset)
-    with caplog.at_level(logging.INFO, logger=logger.name):
-        generator.generate()
-    return caplog.messages
-
-
-@pytest.fixture
 def split_rows(generated, tmp_path, split_ratio):
     generated.save(tmp_path, prefix=PREFIX)
     return {
@@ -118,6 +114,65 @@ def cluster_splits(split_rows, dataset):
             result[cluster_gt[left]].add(name)
             result[cluster_gt[right]].add(name)
     return result
+
+
+@pytest.fixture
+def label_two_rows(split_rows):
+    return {
+        name: {(left, right) for left, right, label in rows if label == 2}
+        for name, rows in split_rows.items()
+    }
+
+
+@pytest.fixture
+def label_two_truth(dataset):
+    _, _, matcher_gt = dataset
+    return {pair for pair, label in matcher_gt.items() if label == 2}
+
+
+@pytest.fixture
+def footprints(dataset, label_two_truth):
+    _, cluster_gt, _ = dataset
+    result = defaultdict(set)
+    for target, bridge in label_two_truth:
+        result[bridge] |= {cluster_gt[target], cluster_gt[bridge]}
+    return result
+
+
+@pytest.fixture
+def footprint_splits(footprints, cluster_splits):
+    return {
+        bridge: set().union(*(cluster_splits[cluster] for cluster in clusters))
+        for bridge, clusters in footprints.items()
+    }
+
+
+@pytest.fixture
+def sourceless_data(dataset):
+    id_table, cluster_gt, matcher_gt = dataset
+    kept = {
+        pair: label
+        for pair, label in matcher_gt.items()
+        if label != 1 or SOURCELESS_BRIDGE not in pair
+    }
+    return id_table, cluster_gt, kept
+
+
+@pytest.fixture
+def select_by_source():
+    def _select(matcher_gt):
+        refs = (ref for pair in matcher_gt for ref in pair)
+        return frozenset(ref for ref in refs if ref.source == GENERATED_SOURCE)
+
+    return _select
+
+
+@pytest.fixture
+def select_nothing():
+    def _select(_):
+        return frozenset()
+
+    return _select
 
 
 @pytest.fixture
@@ -140,7 +195,7 @@ def make_pair_data():
         cluster_gt = {ref: c for c, pair in enumerate(refs) for ref in pair}
         matcher_gt = {tuple(pair): 1 for pair in refs}
         matcher_gt.update(
-            {(refs[c][0], refs[c + 1][1]): 2 for c in range(label_two_count)}
+            {(refs[2 * c][0], refs[2 * c + 1][1]): 2 for c in range(label_two_count)}
         )
         return id_table, cluster_gt, matcher_gt
 
