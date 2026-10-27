@@ -136,15 +136,21 @@ class BadTripletSplitGenerator(SplitGenerator):
       to one split, largest first, wherever label-2 pairs are most lacking;
     - every split must receive label-2 pairs;
     - every bridge keeps all its label-2 pairs and a random sample of label-1
-      pairs from its home cluster, so the bad triplet stays complete;
+      pairs with ordinary members of its home cluster, so the bad triplet stays
+      complete;
     - label-1 pairs without a bridge fill the rest of the label-1 budget;
     - negatives never repeat a known pair and, by default, never join a bridge
-      with its target clusters, whose resemblance is deliberate.
+      with its target clusters, whose resemblance is deliberate;
+    - a warning flags components too large for the smallest split.
 
     .. note::
-       A cluster may be the home of one bridge at most. Several bridges per home
-       would make one cluster ambiguous towards several others, which the bad
-       triplet model does not cover.
+       A cluster may hold several bridges and be the target of several bridges.
+       Pairs between two bridges are never used: bridges are generated, so such
+       pairs do not exist in the original data, and using them would taint that
+       data more than the bridges already do. For the same reason a bridge may
+       not be the target of another bridge. A bridge keeps
+       ``min(c, round(match_bridge_ratio * t))`` label-1 pairs, where ``c`` counts
+       its label-1 pairs with ordinary home members and ``t`` its label-2 pairs.
 
     :param drop_orphans: Kept for backward compatibility. Orphan bridges are
         always dropped; ``False`` only logs a warning.
@@ -202,9 +208,9 @@ class BadTripletSplitGenerator(SplitGenerator):
             break a leak-freedom guarantee (an internal error).
         :raises ValueError: If the ground truth has classes other than 0, 1 and 2;
             a label-2 pair's right record is not a bridge, lacks a cluster or
-            shares its target's cluster; a cluster is home to several bridges; a
-            bridge has no label-1 pair in its home cluster; or a split would
-            receive no label-2 pairs.
+            shares its target's cluster; a label-2 target is itself a bridge; a
+            bridge has no label-1 pair with an ordinary member of its home
+            cluster; or a split would receive no label-2 pairs.
         """
         self._check_loaded()
         # validate the ground truth classes
@@ -262,14 +268,7 @@ class BadTripletSplitGenerator(SplitGenerator):
         for pair in sorted(label_two, key=_pair_key):
             self._check_link(pair, bridges)
             links[pair[1]].append(pair)
-        # one bridge per home cluster
-        self._check_homes(links)
         return dict(links)
-
-    def _check_homes(self, links: Links) -> None:
-        homes = Counter(self._cluster_gt[bridge] for bridge in links)
-        if shared := sorted(cluster for cluster, n in homes.items() if n > 1):
-            raise ValueError(f"clusters home to several bridges: {shared}")
 
     def _check_link(self, pair: Pair, bridges: AbstractSet[RefId]) -> None:
         target, bridge = pair
@@ -281,6 +280,10 @@ class BadTripletSplitGenerator(SplitGenerator):
             raise ValueError(f"bridge pair ({target}, {bridge}) lacks cluster labels")
         if self._cluster_gt[target] == self._cluster_gt[bridge]:
             raise ValueError(f"bridge pair ({target}, {bridge}) joins one cluster")
+        if target in bridges:
+            raise ValueError(
+                f"label-2 pair ({target}, {bridge}): {target} is itself a bridge"
+            )
 
     def _source_pairs(self, links: Links) -> Links:
         sources: Links = defaultdict(list)
@@ -294,17 +297,22 @@ class BadTripletSplitGenerator(SplitGenerator):
         left, right = pair
         if self._cluster_gt.get(left) != self._cluster_gt.get(right):
             return []
+        if left in links and right in links:
+            return []
         return [ref for ref in (right, left) if ref in links]
 
     @staticmethod
     def _check_sources(links: Links, sources: Links) -> None:
         missing = sorted(links.keys() - sources.keys(), key=_ref_key)
         if missing:
-            raise ValueError(f"bridges without a triplet source pair: {missing}")
+            raise ValueError(
+                "bridges without a triplet source pair "
+                f"(a label-1 pair with an ordinary home member): {missing}"
+            )
 
-    def _source_quota(self, bridge: RefId, links: Links) -> int:
-        home_size = len(self._clusters[self._cluster_gt[bridge]])
-        quota = min(home_size - 1, round(self.match_bridge_ratio * len(links[bridge])))
+    def _source_quota(self, bridge: RefId, links: Links, sources: Links) -> int:
+        wanted = round(self.match_bridge_ratio * len(links[bridge]))
+        quota = min(len(sources[bridge]), wanted)
         if self.source_links_per_bridge is None:
             return quota
         return min(quota, self.source_links_per_bridge)
@@ -360,6 +368,13 @@ class BadTripletSplitGenerator(SplitGenerator):
             "split label-2 targets: %s",
             ", ".join(f"{k}={v:.1f}" for k, v in targets.items()),
         )
+        if sizes and max(sizes) > (smallest := min(targets.values())):
+            self._log.warning(
+                "largest component has %d label-2 pairs and exceeds the smallest "
+                "split target %.1f",
+                max(sizes),
+                smallest,
+            )
 
     def _assign(self, components: list[Component], links: Links) -> dict[int, str]:
         split_of: dict[int, str] = {}
@@ -499,17 +514,16 @@ class BadTripletSplitGenerator(SplitGenerator):
         anchored = [
             CategorizedPair(p, TRIPLET_SOURCE, b)
             for b in bridges
-            for p in self._anchor(b, sources[b], links)
+            for p in self._anchor(b, links, sources)
         ]
         # label-1 pairs without a bridge fill the remaining label-1 budget
         budget = round(self.match_bridge_ratio * len(targets)) - len(anchored)
         extras = self._extra_matches(name, members, label_one, links, budget)
         return anchored + extras + targets
 
-    def _anchor(
-        self, bridge: RefId, candidates: list[Pair], links: Links
-    ) -> list[Pair]:
-        quota = self._source_quota(bridge, links)
+    def _anchor(self, bridge: RefId, links: Links, sources: Links) -> list[Pair]:
+        candidates = sources[bridge]
+        quota = self._source_quota(bridge, links, sources)
         picks = sorted(self._rng.choice(len(candidates), size=quota, replace=False))
         return [candidates[i] for i in picks]
 
@@ -652,7 +666,7 @@ class BadTripletSplitGenerator(SplitGenerator):
                 continue
             name = split_of[self._cluster_gt[bridge]]
             kept = sum(1 for p in sources[bridge] if (*p, 1) in present[name])
-            if kept != (quota := self._source_quota(bridge, links)):
+            if kept != (quota := self._source_quota(bridge, links, sources)):
                 _violation(f"{bridge} in {name}: {kept} triplet sources, not {quota}")
 
     def _check_negatives(self, rows: dict[str, list[Row]], links: Links) -> None:

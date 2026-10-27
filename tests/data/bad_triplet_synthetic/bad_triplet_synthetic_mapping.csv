@@ -69,9 +69,18 @@ left_id,left_source,right_id,right_source,label
 44,synthetic,45,synthetic,1
 44,synthetic,46,synthetic,1
 44,synthetic,47,synthetic,1
+44,synthetic,109,ambiguity-generator,1
+44,synthetic,110,ambiguity-generator,1
 45,synthetic,46,synthetic,1
 45,synthetic,47,synthetic,1
+45,synthetic,109,ambiguity-generator,1
+45,synthetic,110,ambiguity-generator,1
 46,synthetic,47,synthetic,1
+46,synthetic,109,ambiguity-generator,1
+46,synthetic,110,ambiguity-generator,1
+47,synthetic,109,ambiguity-generator,1
+47,synthetic,110,ambiguity-generator,1
+109,ambiguity-generator,110,ambiguity-generator,1
 48,synthetic,49,synthetic,1
 50,synthetic,51,synthetic,1
 50,synthetic,52,synthetic,1
@@ -96,3 +105,6 @@ left_id,left_source,right_id,right_source,label
 34,synthetic,108,ambiguity-generator,2
 35,synthetic,108,ambiguity-generator,2
 36,synthetic,108,ambiguity-generator,2
+50,synthetic,109,ambiguity-generator,2
+51,synthetic,110,ambiguity-generator,2
+52,synthetic,110,ambiguity-generator,2

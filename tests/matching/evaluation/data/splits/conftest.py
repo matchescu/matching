@@ -13,10 +13,8 @@ from matchescu.matching.evaluation.data.splits import BadTripletSplitGenerator
 PAIR_SOURCE = "pairs"
 GENERATED_SOURCE = "ambiguity-generator"
 SOURCELESS_BRIDGE = RefId(108, GENERATED_SOURCE)
-SECOND_BRIDGE = RefId(109, GENERATED_SOURCE)
-SHARED_HOME = 1
-SHARED_HOME_MEMBER = RefId(1, "synthetic")
-SECOND_BRIDGE_TARGET = RefId(39, "synthetic")
+TARGETED_BRIDGE = RefId(101, GENERATED_SOURCE)
+TARGETING_BRIDGE = RefId(104, GENERATED_SOURCE)
 
 SYNTHETIC = "bad_triplet_synthetic"
 SEED = 41
@@ -226,17 +224,35 @@ def target_negatives(negatives, dataset, target_clusters):
 
 
 @pytest.fixture
-def shared_home_data(dataset):
-    id_table, cluster_gt, matcher_gt = dataset
-    return (
-        id_table,
-        {**cluster_gt, SECOND_BRIDGE: SHARED_HOME},
-        {
-            **matcher_gt,
-            (SHARED_HOME_MEMBER, SECOND_BRIDGE): 1,
-            (SECOND_BRIDGE_TARGET, SECOND_BRIDGE): 2,
-        },
+def bridges(label_two_truth):
+    return {bridge for _, bridge in label_two_truth}
+
+
+@pytest.fixture
+def bridge_matches(split_rows, dataset, bridges):
+    _, _, matcher_gt = dataset
+    return [
+        (left, right)
+        for rows in split_rows.values()
+        for left, right, _ in rows
+        if {left, right} <= bridges and (left, right) in matcher_gt
+    ]
+
+
+@pytest.fixture
+def repeated_rows(split_rows):
+    rows = Counter(
+        frozenset((left, right))
+        for split in split_rows.values()
+        for left, right, _ in split
     )
+    return [pair for pair, count in rows.items() if count > 1]
+
+
+@pytest.fixture
+def bridge_target_data(dataset):
+    id_table, cluster_gt, matcher_gt = dataset
+    return id_table, cluster_gt, {**matcher_gt, (TARGETED_BRIDGE, TARGETING_BRIDGE): 2}
 
 
 @pytest.fixture

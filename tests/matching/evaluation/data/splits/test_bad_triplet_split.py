@@ -2,11 +2,12 @@ import polars as pl
 import pytest
 
 FILE_NAMES = {"train": "a.csv", "dev": "b.csv", "test": "c.csv"}
-SYNTHETIC_COMPONENTS = 5
-SYNTHETIC_LABEL_TWO = {"train": 9, "dev": 3, "test": 3}
+SYNTHETIC_COMPONENTS = 6
+SYNTHETIC_LABEL_TWO = {"train": 12, "dev": 3, "test": 3}
+FODORS = "amb_fodors_zagat_nophone_a050_dir"
 DATASETS = [
     "bad_triplet_synthetic",
-    "amb_fodors_zagat_nophone_a050_dir",
+    FODORS,
     "amb_affiliationstrings_a050_dir",
 ]
 SCATTERED_CLUSTERS = 20
@@ -21,8 +22,10 @@ SYNTHETIC_SOURCE_QUOTAS = {
     106: 3,
     107: 2,
     108: 1,
+    109: 2,
+    110: 4,
 }
-SYNTHETIC_LABEL_ONE = {"train": 18, "dev": 6, "test": 6}
+SYNTHETIC_LABEL_ONE = {"train": 24, "dev": 6, "test": 6}
 ONE_SOURCE_LINK = {"source_links_per_bridge": 1}
 OVERFLOWING_RATIO = 0.6
 META_COLUMNS = [
@@ -109,12 +112,12 @@ def test_generate_raises_when_a_split_receives_no_label_two_pairs(
         generator.generate()
 
 
-def test_generate_raises_when_a_cluster_is_home_to_several_bridges(
-    make_generator, shared_home_data
+def test_generate_raises_when_a_label_two_target_is_a_bridge(
+    make_generator, bridge_target_data
 ):
-    generator = make_generator(shared_home_data)
+    generator = make_generator(bridge_target_data)
 
-    with pytest.raises(ValueError, match="home to several bridges"):
+    with pytest.raises(ValueError, match="is itself a bridge"):
         generator.generate()
 
 
@@ -211,3 +214,28 @@ def test_negatives_are_never_known_pairs_in_either_orientation(negatives, datase
     known = [p for p in negatives if p in matcher_gt or p[::-1] in matcher_gt]
 
     assert known == []
+
+
+def test_matches_between_two_bridges_appear_in_no_split(bridge_matches):
+    assert bridge_matches == []
+
+
+def test_no_pair_appears_twice_across_splits(repeated_rows):
+    assert repeated_rows == []
+
+
+@pytest.mark.parametrize("dataset", [FODORS], indirect=True)
+def test_generate_warns_when_a_component_exceeds_the_smallest_split_target(
+    make_generator, dataset, caplog
+):
+    make_generator(dataset).generate()
+
+    assert "exceeds the smallest split target" in caplog.text
+
+
+def test_generate_does_not_warn_when_every_component_fits_every_split(
+    make_generator, dataset, caplog
+):
+    make_generator(dataset).generate()
+
+    assert "exceeds the smallest split target" not in caplog.text
