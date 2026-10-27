@@ -34,6 +34,7 @@ META_COLUMNS = [
     "bridge_id",
     "bridge_source",
 ]
+ALLOW_TARGET_NEGATIVES = {"allow_target_negatives": True}
 CATEGORIES = {"negative", "triplet_source", "extra_match", "triplet_target"}
 
 
@@ -105,6 +106,15 @@ def test_generate_raises_when_a_split_receives_no_label_two_pairs(
     generator = make_generator(make_pair_data(SCATTERED_CLUSTERS, TOO_FEW_BRIDGES))
 
     with pytest.raises(ValueError, match="without label-2 pairs"):
+        generator.generate()
+
+
+def test_generate_raises_when_a_cluster_is_home_to_several_bridges(
+    make_generator, shared_home_data
+):
+    generator = make_generator(shared_home_data)
+
+    with pytest.raises(ValueError, match="home to several bridges"):
         generator.generate()
 
 
@@ -182,3 +192,22 @@ def test_meta_file_has_one_row_per_split_row(meta_rows, split_rows):
     meta_lengths = {name: len(rows) for name, rows in meta_rows.items()}
 
     assert meta_lengths == {name: len(rows) for name, rows in split_rows.items()}
+
+
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_negatives_never_pair_a_bridge_with_its_target_clusters(target_negatives):
+    assert target_negatives == []
+
+
+@pytest.mark.parametrize("generator_options", [ALLOW_TARGET_NEGATIVES], indirect=True)
+def test_allow_target_negatives_admits_bridge_target_negatives(target_negatives):
+    assert target_negatives != []
+
+
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_negatives_are_never_known_pairs_in_either_orientation(negatives, dataset):
+    _, _, matcher_gt = dataset
+
+    known = [p for p in negatives if p in matcher_gt or p[::-1] in matcher_gt]
+
+    assert known == []

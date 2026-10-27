@@ -24,11 +24,16 @@ CATEGORY_LABELS = {NEGATIVE: 0, TRIPLET_SOURCE: 1, EXTRA_MATCH: 1, TRIPLET_TARGE
 
 
 class Component(NamedTuple):
-    """A connected component of the bridge graph.
+    """Group the clusters that must share a split because bridges join them.
 
-    :param clusters: the sorted ids of the clusters in the component
-    :param bridges: the sorted bridge records whose footprints form the component
-    :param label_two: the number of label-2 pairs of those bridges
+    A bridge's text derives from every cluster of its footprint, so splitting a
+    component would leak that text across splits. Components are therefore the
+    smallest units the generator may assign to a split.
+
+    :param clusters: Ids of the component's clusters, ascending.
+    :param bridges: Bridge records whose footprints form the component, sorted.
+    :param label_two: Label-2 pairs of those bridges; the component's weight when
+        balancing label-2 pairs across splits.
     """
 
     clusters: tuple[int, ...]
@@ -37,12 +42,18 @@ class Component(NamedTuple):
 
 
 class CategorizedPair(NamedTuple):
-    """A split row together with the role it plays in a bad triplet.
+    """Tag a split row with its role in a bad triplet, for the split metadata.
 
-    :param pair: the compared records, oriented as in the matcher ground truth
-    :param category: ``negative``, ``triplet_source``, ``extra_match`` or
-        ``triplet_target``
-    :param bridge: the bridge record of a triplet row, ``None`` for other rows
+    The split CSVs only carry the class label, which cannot tell a triplet source
+    from an extra match. Keeping the role and the bridge of every row lets
+    `BadTripletSplitGenerator.save` write meta files, so that evaluations can
+    report results per bad triplet rather than per class.
+
+    :param pair: Compared records, oriented as in the matcher ground truth.
+    :param category: One of ``negative``, ``triplet_source``, ``extra_match`` or
+        ``triplet_target``.
+    :param bridge: Bridge record of a triplet row; ``None`` for negatives and
+        extra matches.
     """
 
     pair: Pair
@@ -113,31 +124,37 @@ def _violation(detail: str) -> NoReturn:
 
 
 class BadTripletSplitGenerator(SplitGenerator):
-    """Distributes the bad triplets over the splits without leaking bridge text.
+    """Split bad-triplet data into train / dev / test without leaking bridge text.
 
-    A bridge record ``b`` is recognised by the bridge selector; by default it is
-    the right record of a label-2 pair ``(target, b)``. Its footprint is its home
-    cluster plus every target cluster: the clusters its text is derived from.
-    Every bridge links the clusters of its footprint; the connected components of
-    the resulting bridge graph are the units of assignment.
+    A bridge record resembles clusters it does not belong to. If any of those
+    clusters lands in another split, the model sees the bridge's text during
+    training and evaluation alike, which inflates evaluation scores. This
+    generator prevents that:
 
-    Components are placed whole, largest first, into the split with the largest
-    label-2 deficit against ``split_ratio``. Clusters with label-1 pairs follow,
-    placed by their label-1 deficit; the label-1 target of a split is proportional
-    to the label-2 pairs it received. The remaining clusters are spread by their
-    record count against ``split_ratio``. Every split must receive label-2 pairs.
+    - a bridge's footprint is its home cluster plus its target clusters;
+    - bridges join their footprints into components; each component goes whole
+      to one split, largest first, wherever label-2 pairs are most lacking;
+    - every split must receive label-2 pairs;
+    - every bridge keeps all its label-2 pairs and a random sample of label-1
+      pairs from its home cluster, so the bad triplet stays complete;
+    - label-1 pairs without a bridge fill the rest of the label-1 budget;
+    - negatives never repeat a known pair and, by default, never join a bridge
+      with its target clusters, whose resemblance is deliberate.
 
-    Every bridge keeps all its label-2 pairs (triplet targets) and a number of
-    label-1 pairs with members of its home cluster (triplet sources), drawn at
-    random. Label-1 pairs without a bridge (extra matches) fill the remaining
-    label-1 budget of the split, ``match_bridge_ratio`` times its label-2 pairs.
+    .. note::
+       A cluster may be the home of one bridge at most. Several bridges per home
+       would make one cluster ambiguous towards several others, which the bad
+       triplet model does not cover.
 
-    A bridge that cannot keep its footprint in one split is dropped and reported
-    in ``orphan_records`` with a reason; dropping is always on.
-
-    :param drop_orphans: kept for compatibility; ``False`` is ignored with a warning
-    :param source_links_per_bridge: the most triplet source pairs a bridge keeps;
-        ``None`` keeps as many as ``match_bridge_ratio`` and the home cluster allow
+    :param drop_orphans: Kept for backward compatibility. Orphan bridges are
+        always dropped; ``False`` only logs a warning.
+    :param source_links_per_bridge: Upper bound on the label-1 pairs kept per
+        bridge. Defaults to ``None``: keep as many as ``match_bridge_ratio`` and
+        the home cluster size allow.
+    :param allow_target_negatives: Let negatives join a bridge with members of its
+        target clusters. Defaults to ``False``.
+    :ivar orphan_records: Dropped bridges mapped to the reason they were dropped.
+        Filled by `generate`.
     """
 
     def __init__(
@@ -145,6 +162,7 @@ class BadTripletSplitGenerator(SplitGenerator):
         *args,
         drop_orphans: bool = True,
         source_links_per_bridge: int | None = None,
+        allow_target_negatives: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -153,31 +171,60 @@ class BadTripletSplitGenerator(SplitGenerator):
                 "drop_orphans=False is ignored: orphan bridges are always dropped"
             )
         self.source_links_per_bridge = source_links_per_bridge
+        self.allow_target_negatives = allow_target_negatives
         self.orphan_records: dict[RefId, str] = {}
         self._select_bridges: BridgeSelector = _label_two_right_records
         self._categorized: dict[str, list[CategorizedPair]] = {}
 
     def with_bridge_selector(self, selector: BridgeSelector) -> Self:
-        """Recognise bridge records with *selector* instead of the default."""
+        """Replace the rule that recognises bridge records.
+
+        Bridges are the right records of label-2 pairs by default. Data sources
+        that mark bridges differently, for example by their record source, can
+        plug in their own rule here without subclassing.
+
+        :param selector: Receives the matcher ground truth and returns the bridge
+            records. Every right record of a label-2 pair must be among them.
+        :returns: This generator, to allow chaining before `generate`.
+        """
         self._select_bridges = selector
         return self
 
     def generate(self) -> Self:
-        """Assign the clusters to splits and build the labelled rows of each split."""
+        """Assign every cluster to a split and build the labelled rows of each split.
+
+        Clusters, not pairs, are assigned so that no record appears in two
+        splits. The result is verified before returning, so a returned generator
+        always holds leak-free splits.
+
+        :returns: This generator, ready for `get_splits` or `save`.
+        :raises RuntimeError: If `load` was not called, or if the built splits
+            break a leak-freedom guarantee (an internal error).
+        :raises ValueError: If the ground truth has classes other than 0, 1 and 2;
+            a label-2 pair's right record is not a bridge, lacks a cluster or
+            shares its target's cluster; a cluster is home to several bridges; a
+            bridge has no label-1 pair in its home cluster; or a split would
+            receive no label-2 pairs.
+        """
         self._check_loaded()
+        # validate the ground truth classes
         by = self._pairs_by_class()
         if unsupported := by.keys() - {0, 1, 2}:
             raise ValueError(
                 f"bad triplet split does not support classes {unsupported}"
             )
+        # find each bridge's label-2 and label-1 pairs
         links = self._bridge_links()
         sources = self._source_pairs(links)
         self._check_sources(links, sources)
+        # group the clusters that must share a split
         components = self._components(links)
         self._log_components(components)
+        # assign clusters to splits, then build each split's rows
         split_of = self._assign(components, links)
         self.orphan_records = {}
         self._splits = self._build_splits(by.get(1, []), split_of, links, sources)
+        # verify that no bridge text leaks across splits
         self._check_invariants(split_of, links, sources)
         return self
 
@@ -187,10 +234,18 @@ class BadTripletSplitGenerator(SplitGenerator):
         prefix: str = "",
         file_names: Mapping[str, str] | None = None,
     ) -> Self:
-        """Write the split CSV files, then one ``{prefix}_{split}_meta.csv`` per split.
+        """Write the split CSV files and one metadata file per split.
 
-        A meta file lists the rows of its split in the same order, with the
-        bad-triplet category of every row and the bridge of every triplet row.
+        The split files keep the schema every matcher reads. The extra
+        ``{prefix}_{split}_meta.csv`` files list the same rows in the same
+        order, adding each row's category and bridge, so evaluations can group
+        results by bad triplet.
+
+        :param output_dir: Directory receiving all files; created if missing.
+        :param prefix: Prepended to every file name. Defaults to no prefix.
+        :param file_names: Custom names for the split files, by split name.
+            Meta files always use the prefix pattern. Defaults to ``None``.
+        :returns: This generator.
         """
         super().save(output_dir, prefix, file_names)
         for name, rows in self._categorized.items():
@@ -203,10 +258,18 @@ class BadTripletSplitGenerator(SplitGenerator):
         bridges = self._select_bridges(self._matcher_gt)
         links: Links = defaultdict(list)
         label_two = (pair for pair, label in self._matcher_gt.items() if label == 2)
+        # sorted, so that the result does not depend on hash order
         for pair in sorted(label_two, key=_pair_key):
             self._check_link(pair, bridges)
             links[pair[1]].append(pair)
+        # one bridge per home cluster
+        self._check_homes(links)
         return dict(links)
+
+    def _check_homes(self, links: Links) -> None:
+        homes = Counter(self._cluster_gt[bridge] for bridge in links)
+        if shared := sorted(cluster for cluster, n in homes.items() if n > 1):
+            raise ValueError(f"clusters home to several bridges: {shared}")
 
     def _check_link(self, pair: Pair, bridges: AbstractSet[RefId]) -> None:
         target, bridge = pair
@@ -300,8 +363,11 @@ class BadTripletSplitGenerator(SplitGenerator):
 
     def _assign(self, components: list[Component], links: Links) -> dict[int, str]:
         split_of: dict[int, str] = {}
+        # 1. whole components, balancing label-2 pairs
         label_two = self._assign_components(components, split_of)
+        # 2. clusters with label-1 pairs, in proportion to each split's label-2
         self._assign_match_clusters(self._match_counts(links), label_two, split_of)
+        # 3. the remaining clusters, balancing record counts
         self._assign_remaining(split_of)
         return split_of
 
@@ -402,8 +468,11 @@ class BadTripletSplitGenerator(SplitGenerator):
         sources: Links,
     ) -> list[CategorizedPair]:
         records = [ref for ref, c in self._cluster_gt.items() if split_of[c] == name]
+        # positives first: their count sets the number of negatives
         positives = self._positives(name, set(records), label_one, links, sources)
-        rows = self._negatives(records, len(positives)) + positives
+        # negatives from this split's records, avoiding excluded pairs
+        exclude = self._negative_exclusions(name, records, links)
+        rows = self._negatives(records, len(positives), exclude) + positives
         categories = Counter(row.category for row in rows)
         self._log.info(
             "split %s: %d records, %s",
@@ -422,14 +491,17 @@ class BadTripletSplitGenerator(SplitGenerator):
         sources: Links,
     ) -> list[CategorizedPair]:
         bridges = [bridge for bridge in links if bridge in members]
+        # every label-2 pair of every bridge in the split
         targets = [
             CategorizedPair(p, TRIPLET_TARGET, b) for b in bridges for p in links[b]
         ]
+        # a random sample of each bridge's label-1 pairs in its home cluster
         anchored = [
             CategorizedPair(p, TRIPLET_SOURCE, b)
             for b in bridges
             for p in self._anchor(b, sources[b], links)
         ]
+        # label-1 pairs without a bridge fill the remaining label-1 budget
         budget = round(self.match_bridge_ratio * len(targets)) - len(anchored)
         extras = self._extra_matches(name, members, label_one, links, budget)
         return anchored + extras + targets
@@ -468,13 +540,39 @@ class BadTripletSplitGenerator(SplitGenerator):
         selected = self._select_diverse(pool, budget)
         return [CategorizedPair(tuple(pair), EXTRA_MATCH) for pair in selected]
 
-    def _negatives(self, records: list[RefId], positives: int) -> list[CategorizedPair]:
+    def _negative_exclusions(
+        self, name: str, records: list[RefId], links: Links
+    ) -> set[Pair]:
+        excluded = self._target_pairs(records, links)
+        self._log.info(
+            "split %s: %d bridge-target candidate pairs excluded from negatives",
+            name,
+            len(excluded),
+        )
+        return set(self._matcher_gt) | excluded
+
+    def _target_pairs(self, records: list[RefId], links: Links) -> set[Pair]:
+        if self.allow_target_negatives:
+            return set()
+        members = set(records)
+        return {
+            (other, bridge)
+            for bridge, pairs in links.items()
+            if bridge in members
+            for cluster in self._footprint(bridge, pairs)
+            if cluster != self._cluster_gt[bridge]
+            for other in self._clusters[cluster]
+        }
+
+    def _negatives(
+        self, records: list[RefId], positives: int, exclude: set[Pair]
+    ) -> list[CategorizedPair]:
         count = min(
             round(self.neg_pos_ratio * positives), self._cross_cluster_pairs(records)
         )
         if count <= 0:
             return []
-        pairs = self._generate_negatives(count, set(self._matcher_gt), records)
+        pairs = self._generate_negatives(count, exclude, records)
         return [CategorizedPair(pair, NEGATIVE) for pair in pairs]
 
     def _cross_cluster_pairs(self, records: list[RefId]) -> int:
@@ -487,10 +585,16 @@ class BadTripletSplitGenerator(SplitGenerator):
     ) -> None:
         rows = {name: _frame_rows(frame) for name, frame in self._splits.items()}
         for name, split_rows in rows.items():
+            # each row lies within its clusters' split
             self._check_disjoint(name, split_rows, split_of)
+            # each bridge's footprint lies within the bridge's split
             self._check_footprints(name, split_rows, split_of, links)
+        # each kept bridge keeps all its label-2 pairs
         self._check_label_two(rows, split_of, links)
+        # each kept bridge keeps its quota of home label-1 pairs
         self._check_sources_kept(rows, split_of, links, sources)
+        # no negative repeats a known pair or a bridge-target pair
+        self._check_negatives(rows, links)
         self._warn_scarce_label_two(rows)
 
     def _check_disjoint(
@@ -550,6 +654,15 @@ class BadTripletSplitGenerator(SplitGenerator):
             kept = sum(1 for p in sources[bridge] if (*p, 1) in present[name])
             if kept != (quota := self._source_quota(bridge, links)):
                 _violation(f"{bridge} in {name}: {kept} triplet sources, not {quota}")
+
+    def _check_negatives(self, rows: dict[str, list[Row]], links: Links) -> None:
+        forbidden = set(self._matcher_gt) | self._target_pairs(
+            list(self._cluster_gt), links
+        )
+        for name, split_rows in rows.items():
+            for left, right, label in split_rows:
+                if label == 0 and {(left, right), (right, left)} & forbidden:
+                    _violation(f"negative ({left}, {right}) in {name} is excluded")
 
     def _warn_scarce_label_two(self, rows: dict[str, list[Row]]) -> None:
         for name, split_rows in rows.items():

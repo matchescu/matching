@@ -13,6 +13,10 @@ from matchescu.matching.evaluation.data.splits import BadTripletSplitGenerator
 PAIR_SOURCE = "pairs"
 GENERATED_SOURCE = "ambiguity-generator"
 SOURCELESS_BRIDGE = RefId(108, GENERATED_SOURCE)
+SECOND_BRIDGE = RefId(109, GENERATED_SOURCE)
+SHARED_HOME = 1
+SHARED_HOME_MEMBER = RefId(1, "synthetic")
+SECOND_BRIDGE_TARGET = RefId(39, "synthetic")
 
 SYNTHETIC = "bad_triplet_synthetic"
 SEED = 41
@@ -189,6 +193,50 @@ def footprint_splits(footprints, cluster_splits):
         bridge: set().union(*(cluster_splits[cluster] for cluster in clusters))
         for bridge, clusters in footprints.items()
     }
+
+
+@pytest.fixture
+def target_clusters(dataset, label_two_truth):
+    _, cluster_gt, _ = dataset
+    result = defaultdict(set)
+    for target, bridge in label_two_truth:
+        result[bridge].add(cluster_gt[target])
+    return result
+
+
+@pytest.fixture
+def negatives(split_rows):
+    return [
+        (left, right)
+        for rows in split_rows.values()
+        for left, right, label in rows
+        if label == 0
+    ]
+
+
+@pytest.fixture
+def target_negatives(negatives, dataset, target_clusters):
+    _, cluster_gt, _ = dataset
+    return [
+        (left, right)
+        for left, right in negatives
+        if cluster_gt[right] in target_clusters.get(left, set())
+        or cluster_gt[left] in target_clusters.get(right, set())
+    ]
+
+
+@pytest.fixture
+def shared_home_data(dataset):
+    id_table, cluster_gt, matcher_gt = dataset
+    return (
+        id_table,
+        {**cluster_gt, SECOND_BRIDGE: SHARED_HOME},
+        {
+            **matcher_gt,
+            (SHARED_HOME_MEMBER, SECOND_BRIDGE): 1,
+            (SECOND_BRIDGE_TARGET, SECOND_BRIDGE): 2,
+        },
+    )
 
 
 @pytest.fixture
