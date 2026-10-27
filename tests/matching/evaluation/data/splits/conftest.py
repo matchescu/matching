@@ -1,5 +1,5 @@
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import polars as pl
@@ -93,15 +93,59 @@ def make_generator(generator_class, split_ratio, logger):
 
 
 @pytest.fixture
-def generated(make_generator, dataset):
-    return make_generator(dataset).generate()
+def generator_options(request):
+    return getattr(request, "param", {})
 
 
 @pytest.fixture
-def split_rows(generated, tmp_path, split_ratio):
+def generated(make_generator, dataset, generator_options):
+    return make_generator(dataset, **generator_options).generate()
+
+
+@pytest.fixture
+def saved_dir(generated, tmp_path):
     generated.save(tmp_path, prefix=PREFIX)
+    return tmp_path
+
+
+@pytest.fixture
+def split_rows(saved_dir, split_ratio):
     return {
-        name: _labelled_rows(tmp_path / f"{PREFIX}_{name}.csv") for name in split_ratio
+        name: _labelled_rows(saved_dir / f"{PREFIX}_{name}.csv") for name in split_ratio
+    }
+
+
+@pytest.fixture
+def meta_paths(saved_dir, split_ratio):
+    return {name: saved_dir / f"{PREFIX}_{name}_meta.csv" for name in split_ratio}
+
+
+@pytest.fixture
+def meta_rows(meta_paths):
+    return {name: _rows(path) for name, path in meta_paths.items()}
+
+
+@pytest.fixture
+def category_counts(meta_rows):
+    return {
+        name: Counter(row["category"] for row in rows)
+        for name, rows in meta_rows.items()
+    }
+
+
+@pytest.fixture
+def source_counts(meta_rows):
+    rows = (row for split in meta_rows.values() for row in split)
+    return Counter(
+        int(row["bridge_id"]) for row in rows if row["category"] == "triplet_source"
+    )
+
+
+@pytest.fixture
+def label_one_counts(split_rows):
+    return {
+        name: sum(1 for *_, label in rows if label == 1)
+        for name, rows in split_rows.items()
     }
 
 
