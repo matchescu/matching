@@ -10,6 +10,7 @@ is resolved to a (trainer, evaluator, hyperparams_schema) triple.
 from __future__ import annotations
 
 import json
+import logging
 from os import PathLike
 from pathlib import Path
 from typing import Any
@@ -109,6 +110,7 @@ class TrainingConfig:
         data_dir: Path | None = None,
         discovery_packages: list[str] | None = None,
         default_evaluator: type[BaseEvaluator] | None = None,
+        logger: logging.Logger | None = None,
     ) -> TrainingConfig:
         if discovery_packages:
             CapabilityRegistry.discover(*discovery_packages)
@@ -167,20 +169,22 @@ class TrainingConfig:
 
         for ds_name, ds_raw in raw.get("datasets", {}).items():
             params = cfg._ds_adapter.validate_python(ds_raw)
-            cfg._data_builders[ds_name] = cfg.new_data_builder(params, data_dir)
+            cfg._data_builders[ds_name] = cfg.new_data_builder(params, data_dir, logger)
 
         return cfg
 
     @staticmethod
     def new_data_builder(
-        params: AnyDatasetConfig, data_dir: Path | None = None
+        params: AnyDatasetConfig,
+        data_dir: Path | None = None,
+        logger: logging.Logger | None = None,
     ) -> BenchmarkDataBuilder:
         """Given a validated dataset params object, return the right factory."""
         match params:
             case MagellanBenchmarkDataConfig():
-                return MagellanBenchmarkDataBuilder(params, data_dir)
+                return MagellanBenchmarkDataBuilder(params, data_dir, logger)
             case CsvBenchmarkDataConfig():
-                return CsvBenchmarkDataBuilder(params, data_dir)
+                return CsvBenchmarkDataBuilder(params, data_dir, logger)
             case _:
                 raise ValueError(f"Unsupported dataset params type: {type(params)}")
 

@@ -44,19 +44,23 @@ class PooledCrossAttention(nn.Module):
         key_padding_mask_a = mask_a == 0
         key_padding_mask_b = mask_b == 0
 
-        enc_a, _ = self.attn(
+        attn_a, _ = self.attn(
             query=pooled_a.unsqueeze(1),
             key=seg_b,
             value=seg_b,
             key_padding_mask=key_padding_mask_b,
         )
-        enc_b, _ = self.attn(
+        attn_b, _ = self.attn(
             query=pooled_b.unsqueeze(1),
             key=seg_a,
             value=seg_a,
             key_padding_mask=key_padding_mask_a,
         )
-        return enc_a.squeeze(1), enc_b.squeeze(1)
+        # add residual connections
+        enc_a = pooled_a + attn_a.squeeze(1)
+        enc_b = pooled_b + attn_b.squeeze(1)
+
+        return enc_a, enc_b
 
 
 class PerAttributeCrossAttention(nn.Module):

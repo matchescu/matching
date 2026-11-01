@@ -62,3 +62,22 @@ class FocalLoss(_Loss):
         elif self.reduction == "sum":
             return loss.sum()
         return loss  # 'none'
+
+
+class BitwiseLoss(_Loss):
+    INSIGNIFICANT_Q_BIT_VALUES = -100
+
+    def __init__(self, loss_p: _Loss, loss_q: _Loss, q_weight: float = 1.0) -> None:
+        super().__init__()
+        self.__loss_p = loss_p
+        self.__loss_q = loss_q
+        self.__q_weight = q_weight
+
+    def forward(self, logits: Tensor, bits: Tensor) -> Tensor:
+        loss = self.__loss_p(logits[:, 0], bits[:, 0])
+        mask_q = bits[:, 1] != self.INSIGNIFICANT_Q_BIT_VALUES
+        if mask_q.any():
+            loss = loss + self.__q_weight * self.__loss_q(
+                logits[mask_q, 1], bits[mask_q, 1]
+            )
+        return loss

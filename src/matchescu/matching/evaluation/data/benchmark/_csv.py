@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import ClassVar, cast
@@ -15,7 +16,11 @@ from matchescu.matching.config import (
     CsvBenchmarkDataConfig,
     PairwiseGroundTruthConfig,
 )
-from matchescu.matching.evaluation.data.splits import Split, SplitGenerator
+from matchescu.matching.evaluation.data.splits import (
+    BadTripletSplitGenerator,
+    Split,
+    SplitGenerator,
+)
 from matchescu.matching.evaluation.ground_truth import (
     EquivalenceClassPartitioner,
     read_clusters_csv,
@@ -125,6 +130,9 @@ class CsvBenchmarkData(BenchmarkData):
         bridge_class_ratio: float = 4.0,
         max_sample_count: int | None = None,
         save: bool = False,
+        split_mode: str = "pair",
+        file_names: Mapping[str, str] | None = None,
+        logger: logging.Logger | None = None,
     ) -> "CsvBenchmarkData":
         if self._id_table is None:
             raise RuntimeError("call load_data() before calling split()")
@@ -132,20 +140,32 @@ class CsvBenchmarkData(BenchmarkData):
             raise RuntimeError("call with_ideal_mapping() before calling split()")
         if self._cluster_gt is None:
             raise RuntimeError("call with_clusters() before calling split()")
+        generator_cls = self._generator_class(split_mode)
         splitter = (
-            SplitGenerator(
+            generator_cls(
                 split_ratios or self.__DEFAULT_SPLIT_RATIOS,
                 neg_pos_ratio,
                 bridge_class_ratio,
                 max_sample_count,
+                log=logger,
             )
             .load(self._id_table, self._cluster_gt, self._match_gt)
             .generate()
         )
         if save:
-            splitter.save(self._data_dir)
+            splitter.save(self._data_dir, file_names=file_names)
         self._splits = {f"{k}_split": v for k, v in splitter.get_splits().items()}
         return self
+
+    @staticmethod
+    def _generator_class(split_mode: str) -> type[SplitGenerator]:
+        match split_mode:
+            case "pair":
+                return SplitGenerator
+            case "bad_triplet":
+                return BadTripletSplitGenerator
+            case _:
+                raise ValueError(f"unsupported split mode: {split_mode}")
 
     @property
     def comparison_space_size(self) -> int:
@@ -213,9 +233,12 @@ class CsvBenchmarkDataBuilder(BenchmarkDataBuilder[CsvBenchmarkData]):
     """Create ``CsvBenchmarkData`` from config params."""
 
     def __init__(
-        self, params: CsvBenchmarkDataConfig, data_dir: Path | None = None
+        self,
+        params: CsvBenchmarkDataConfig,
+        data_dir: Path | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
-        super().__init__(params, data_dir)
+        super().__init__(params, data_dir, logger)
         self._params = cast(CsvBenchmarkDataConfig, self._params)
 
     def _create_instance(self) -> CsvBenchmarkData:
@@ -243,34 +266,46 @@ class CsvBenchmarkDataBuilder(BenchmarkDataBuilder[CsvBenchmarkData]):
 
         return self
 
-    def _all_split_files_exist(
+    def _missing_split_files(
         self, files: dict[str, str | PairwiseGroundTruthConfig]
-    ) -> bool:
-        for file in files.values():
-            if isinstance(file, str):
-                path = self._data_dir / file
-            else:
-                path = self._data_dir / file.file_name
-            if not path.exists():
-                return False
-        return True
+    ) -> list[Path]:
+        return [
+            self._data_dir / self._split_file_name(file)
+            for file in files.values()
+            if not (self._data_dir / self._split_file_name(file)).exists()
+        ]
+
+    @staticmethod
+    def _split_file_name(file: str | PairwiseGroundTruthConfig) -> str:
+        return file if isinstance(file, str) else file.file_name
+
+    def _configured_split_names(
+        self, files: dict[str, str | PairwiseGroundTruthConfig]
+    ) -> dict[str, str]:
+        return {name: self._split_file_name(file) for name, file in files.items()}
 
     def load_splits(self) -> "BenchmarkDataBuilder[CsvBenchmarkData]":
-        if (split_config := self._params.splits) is not None:
-            if (self._params.splits.files is not None) and self._all_split_files_exist(
-                self._params.splits.files
-            ):
-                self._load_existing_splits(self._params.splits.files)
-            else:
-                self._instance.split(
-                    split_config.ratios,
-                    split_config.neg_pos_ratio,
-                    split_config.match_bridge_ratio,
-                    split_config.max_total_sample_count,
-                    save=True,
-                )
-        else:
-            self._instance.split(save=True)
+        if (split_config := self._params.splits) is None:
+            self._instance.split(save=True, logger=self._log)
+            return self
+        files = split_config.files
+        if files is not None:
+            missing = self._missing_split_files(files)
+            if not missing:
+                self._load_existing_splits(files)
+                return self
+            for path in missing:
+                self._log.warning("split file %s is missing. regenerating", path)
+        self._instance.split(
+            split_config.ratios,
+            split_config.neg_pos_ratio,
+            split_config.match_bridge_ratio,
+            split_config.max_total_sample_count,
+            save=True,
+            split_mode=split_config.split_mode,
+            file_names=self._configured_split_names(files) if files else None,
+            logger=self._log,
+        )
         return self
 
     def _load_existing_splits(

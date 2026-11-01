@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Self, cast
 
 import torch
 from torch import nn
@@ -19,7 +19,6 @@ class MultiClassModule(nn.Module):
     we have class 2. [p0, q0] resolves to class 0, [p1, q1] resolves to class 1.
     """
 
-    _CLASSIFIER_OUTPUT_SIZE = 4
     _DEFAULT_MODEL = "bert-base-uncased"
 
     def __init__(self, params: MultiClassTrainingParams):
@@ -49,7 +48,6 @@ class MultiClassModule(nn.Module):
         self._classifier = ClassificationHead(
             self._asymmetric_head.output_size,
             hidden_size,
-            self._CLASSIFIER_OUTPUT_SIZE,
             params.dropout_p,
             dtype=self._bert.dtype,
         )
@@ -70,6 +68,10 @@ class MultiClassModule(nn.Module):
     @property
     def cross_attention(self) -> nn.Module | None:
         return self._cross_attn
+
+    @property
+    def asymmetric_head(self) -> AsymmetricHead:
+        return self._asymmetric_head
 
     @property
     def classifier_input_size(self) -> int:
@@ -156,7 +158,7 @@ class MultiClassModule(nn.Module):
             device if isinstance(device, torch.device) else torch.device(device)
         )
 
-    def train(self, mode: bool = True) -> "MultiClassModule":
+    def train(self, mode: bool = True) -> Self:
         super().train(mode)
         if not mode and self._device is not None:
             match self._device.type:

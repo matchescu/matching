@@ -1,4 +1,5 @@
 import pytest
+import torch
 
 from matchescu.matching.matchers.ml.multiclass._module import MultiClassModule
 from matchescu.matching.matchers.ml.multiclass._types import ArchitectureType
@@ -39,3 +40,17 @@ def test_eval_sets_module_training_flag(module):
     module.eval()
 
     assert module.training is False
+
+
+def test_eval_moves_model_to_cpu(module, monkeypatch):
+    moved = []
+    monkeypatch.setattr(module, "to", moved.append)
+
+    module.eval()
+
+    assert moved == [torch.device("cpu")]
+
+
+def test_to_sets_device_and_returns_none(module):
+    assert module.to("cpu") is None
+    assert module._device == torch.device("cpu")

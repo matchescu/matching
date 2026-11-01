@@ -1,10 +1,12 @@
 from collections.abc import Iterable
+from functools import partial
 from os import PathLike
 from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import Tensor
 from torch.nn import Module, Parameter
 from torch.nn.modules.loss import _Loss
@@ -14,7 +16,7 @@ from transformers import get_linear_schedule_with_warmup
 
 from matchescu.matching.matchers.ml.training import BaseTrainer
 
-from .._loss import FocalLoss
+from .._loss import BitwiseLoss, FocalLoss
 from .._module import MultiClassModule
 from .._params import MultiClassTrainingParams
 from .._types import LossType
@@ -30,6 +32,7 @@ class MultiClassTrainer(
 ):
     _FOCAL_GAMMA = 2.0
     _DIRECTIONAL_MARGIN = 2.0
+    _Q_LOSS_WEIGHT = 1.0
     hyperparams_schema = MultiClassTrainingParams
 
     def __init__(
@@ -76,25 +79,33 @@ class MultiClassTrainer(
         }
 
     @staticmethod
-    def _compute_weights(label_counts: np.ndarray) -> torch.Tensor:
+    def _compute_weights(label_counts: np.ndarray) -> tuple[torch.Tensor, torch.Tensor]:
         c0, c1, c2 = torch.as_tensor(label_counts, dtype=torch.float)
-        total_positive = 2 * c1 + c2
-        total_negative = 2 * c0 + c2
-        weights = torch.stack([1.0 / total_negative, 1.0 / total_positive])
-        weights = weights * (2.0 / weights.sum())
-        return weights
+        p_pos = 2 * c1 + c2
+        p_neg = 2 * c0 + c2
+        w_p = torch.stack([1.0 / p_neg, 1.0 / p_pos]).sqrt()
+        w_p = w_p * (2.0 / w_p.sum())
+
+        q_pos = 2 * c1
+        q_neg = c2
+        w_q = torch.stack([1.0 / q_neg, 1.0 / q_pos]).sqrt()
+        w_q = w_q * (2.0 / w_q.sum())
+        return w_p, w_q
+
+    def _create_loss_fn(self) -> partial[FocalLoss]:
+        match self._params.loss_type:
+            case LossType.WEIGHTED_CE:
+                return partial(FocalLoss, gamma=0.0)
+            case LossType.FOCAL:
+                return partial(FocalLoss, gamma=self._FOCAL_GAMMA)
 
     def _create_loss(
         self, data_loader: DataLoader[AsymmetricMultiClassDataset]
     ) -> _Loss:
         lc = cast(AsymmetricMultiClassDataset, data_loader.dataset).label_counts
-        weights = self._compute_weights(lc)
-
-        match self._params.loss_type:
-            case LossType.WEIGHTED_CE:
-                return FocalLoss(weights, gamma=0.0)
-            case LossType.FOCAL:
-                return FocalLoss(weights, gamma=self._FOCAL_GAMMA)
+        loss_fn = self._create_loss_fn()
+        w_p, w_q = self._compute_weights(lc)
+        return BitwiseLoss(loss_fn(alpha=w_p), loss_fn(alpha=w_q), self._Q_LOSS_WEIGHT)
 
     def _create_optimizer(self, model: MultiClassModule) -> Optimizer:
         base_lr = self._params.learning_rate
@@ -103,13 +114,6 @@ class MultiClassTrainer(
 
         num_layers = len(model.encoder_layers)
         param_groups = []
-
-        # classification head
-        param_groups.extend(
-            self._get_decay_model_params(
-                model.classifier, base_lr / decay_factor, weight_decay
-            )
-        )
 
         # encoder layers (for those that were frozen, decay to 0)
         for i, layer in enumerate(reversed(model.encoder_layers)):
@@ -124,11 +128,11 @@ class MultiClassTrainer(
             self._get_decay_model_params(model.embeddings_layer, emb_lr, weight_decay)
         )
 
-        if model.cross_attention is not None:
+        for head in [model.cross_attention, model.asymmetric_head, model.classifier]:
+            if head is None:
+                continue
             param_groups.extend(
-                self._get_decay_model_params(
-                    model.cross_attention, base_lr / decay_factor, weight_decay
-                )
+                self._get_decay_model_params(head, base_lr / decay_factor, weight_decay)
             )
 
         return torch.optim.AdamW(param_groups)
@@ -154,12 +158,27 @@ class MultiClassTrainer(
         x_fwd = {k: v.to(device) for k, v in x_fwd.items()}
         x_rev = {k: v.to(device) for k, v in x_rev.items()}
         y_fwd = y_fwd.to(device)
-        y_rev = torch.where(y_fwd == 2, torch.zeros_like(y_fwd), y_fwd).to(device)
 
         logits_fwd = model(**x_fwd)
         logits_rev = model(**x_rev)
-        bits_fwd = torch.stack(((y_fwd > 0), (y_fwd == 1)), dim=1).long().to(device)
-        bits_rev = torch.stack(((y_rev > 0), (y_rev == 1)), dim=1).long().to(device)
+
+        p_fwd = (y_fwd > 0).long()
+        p_rev = (y_fwd == 1).long()
+
+        # bit q is supervised only when p == 1
+        q_fwd = torch.where(
+            p_fwd == 1,
+            (y_fwd == 1).long(),
+            torch.full_like(y_fwd, BitwiseLoss.INSIGNIFICANT_Q_BIT_VALUES),
+        )
+        q_rev = torch.where(
+            p_rev == 1,
+            torch.ones_like(y_fwd),
+            torch.full_like(y_fwd, BitwiseLoss.INSIGNIFICANT_Q_BIT_VALUES),
+        )
+
+        bits_fwd = torch.stack((p_fwd, q_fwd), dim=1).long().to(device)
+        bits_rev = torch.stack((p_rev, q_rev), dim=1).long().to(device)
 
         return logits_fwd, logits_rev, bits_fwd, bits_rev
 
@@ -167,32 +186,43 @@ class MultiClassTrainer(
         self, epoch: int, loss_fn: _Loss, tensors: Iterable[Tensor]
     ) -> Any:
         logits_fwd, logits_rev, bits_fwd, bits_rev = tensors
+
         # rearrange logits as (N, bit, class)
         z_fwd = logits_fwd.float().view(-1, 2, 2)
         z_rev = logits_rev.float().view(-1, 2, 2)
-        bits_fwd = bits_fwd.long()
-        bits_rev = bits_rev.long()
 
-        # compute loss on 2 separate objectives in fwd and rev orders
-        loss_fwd = loss_fn(z_fwd[:, 0], bits_fwd[:, 0]) + loss_fn(
-            z_fwd[:, 1], bits_fwd[:, 1]
+        z_all = torch.cat((z_fwd, z_rev), dim=0)
+        bits_all = torch.cat((bits_fwd, bits_rev), dim=0)
+        total_loss = loss_fn(z_all, bits_all)
+
+        co_loss = (
+            self._params.cross_order_weight
+            * self._cross_order_consistency(z_fwd, z_rev, bits_fwd, bits_rev)
+            if self._params.cross_order_weight > 0
+            else 0.0
         )
-        loss_rev = loss_fn(z_rev[:, 0], bits_rev[:, 0]) + loss_fn(
-            z_rev[:, 1], bits_rev[:, 1]
-        )
-        co_loss = self._params.cross_order_weight * self._cross_order_consistency(
-            z_fwd, z_rev
-        )
-        return loss_fwd + loss_rev + co_loss
+
+        return total_loss + co_loss
 
     @staticmethod
-    def _cross_order_consistency(z_fwd: Tensor, z_rev: Tensor) -> Tensor:
-        # get the {0, 1} predictions in each direction (actual p and q values)
-        fwd_pos = z_fwd.softmax(dim=-1)[..., 1]
-        rev_pos = z_rev.softmax(dim=-1)[..., 1]
-        p_fwd, q_fwd = fwd_pos.unbind(dim=1)
-        p_rev, q_rev = rev_pos.unbind(dim=1)
-        # Mean-squared disagreement between the two estimates of each direction.
-        return (
-            (q_rev - p_fwd.detach()).pow(2) + (p_rev - q_fwd.detach()).pow(2)
-        ).mean()
+    def _cross_order_consistency(
+        z_fwd: Tensor, z_rev: Tensor, bits_fwd: Tensor, bits_rev: Tensor
+    ) -> Tensor:
+        probs_fwd = F.softmax(z_fwd, dim=-1)[:, :, 1]
+        probs_rev = F.softmax(z_rev, dim=-1)[:, :, 1]
+        p_fwd, q_fwd = probs_fwd[:, 0], probs_fwd[:, 1]
+        p_rev, q_rev = probs_rev[:, 0], probs_rev[:, 1]
+
+        mask_fwd = (
+            bits_fwd[:, 1] != BitwiseLoss.INSIGNIFICANT_Q_BIT_VALUES
+        )  # True where p_fwd == 1 (y_fwd in {1, 2})
+        mask_rev = (
+            bits_rev[:, 1] != BitwiseLoss.INSIGNIFICANT_Q_BIT_VALUES
+        )  # True where p_rev == 1 (y_fwd == 1)
+
+        loss = torch.tensor(0.0, device=z_fwd.device)
+        if mask_fwd.any():
+            loss = loss + (p_rev[mask_fwd] - q_fwd[mask_fwd].detach()).pow(2).mean()
+        if mask_rev.any():
+            loss = loss + (q_rev[mask_rev] - p_fwd[mask_rev].detach()).pow(2).mean()
+        return loss

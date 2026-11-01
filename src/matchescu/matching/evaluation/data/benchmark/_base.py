@@ -1,3 +1,4 @@
+import logging
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from pathlib import Path
@@ -6,6 +7,7 @@ from typing import ClassVar, Generic, TypeVar
 from matchescu.reference_store.id_table import IdTable, InMemoryIdTable
 from matchescu.typing import EntityReferenceIdentifier as RefId
 
+from matchescu.matching._logging import resolve_logger
 from matchescu.matching.config import BenchmarkDataConfig
 from matchescu.matching.evaluation.data.splits import Split
 
@@ -69,11 +71,17 @@ T = TypeVar("T", bound=BenchmarkData)
 
 
 class BenchmarkDataBuilder(ABC, Generic[T]):
-    def __init__(self, params: BenchmarkDataConfig, data_dir: Path | None) -> None:
+    def __init__(
+        self,
+        params: BenchmarkDataConfig,
+        data_dir: Path | None,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self._data_dir = Path(params.directory)
         if not self._data_dir.is_absolute() and data_dir is not None:
             self._data_dir = data_dir / self._data_dir
         self._params = params
+        self._log = resolve_logger(logger)
         self._instance = self._create_instance()
 
     @abstractmethod

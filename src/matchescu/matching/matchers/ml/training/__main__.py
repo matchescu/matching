@@ -26,6 +26,7 @@ from matchescu.matching.matchers.ml.multiclass.training import (
     AsymmetricMultiClassDataset,
     MultiClassTrainer,
 )
+from matchescu.matching.matchers.ml.torch import set_random_seed
 from matchescu.matching.matchers.ml.training import BaseEvaluator, BaseTrainer
 from matchescu.matching.matchers.ml.training._config import (
     DEFAULT_DATA_DIR,
@@ -100,6 +101,9 @@ def train_on_benchmark_data[TParams](
     if (model_and_ds := _TRAINER_MAPPINGS.get(trainer_cls)) is None:
         raise RuntimeError(f"unsupported trainer: {trainer_cls.__qualname__}")
     model_cls, ds_cls = model_and_ds
+    seed = getattr(train_params, "seed", None)
+    if seed is not None:
+        set_random_seed(seed)
     train, xv, test = get_benchmark_data_loaders(
         ds_cls, benchmark_data, tokenizer, train_params
     )
@@ -140,10 +144,12 @@ def train_on_benchmark_data[TParams](
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
     default=DEFAULT_MODEL_DIR / "config.json",
 )
+@click.option("--seed", type=int, default=None)
 def run_training(
     root_model_dir: Path,
     root_data_dir: Path,
     config_path: Path,
+    seed: int | None,
 ) -> None:
     root_model_dir = Path(root_model_dir)
     root_data_dir = Path(root_data_dir)
@@ -156,6 +162,7 @@ def run_training(
             f"{MATCHERS_ML_PACKAGE}.deeper.training",
             f"{MATCHERS_ML_PACKAGE}.multiclass.training",
         ],
+        logger=log,
     )
     with warnings.catch_warnings(action="ignore"):
         for dataset_name in config.included_datasets:
@@ -165,6 +172,8 @@ def run_training(
 
             for model_name in config.model_names:
                 train_params = config.get(model=model_name, dataset=dataset_name)
+                if seed is not None:
+                    train_params = train_params.model_copy(update={"seed": seed})
                 tokenizer = _new_fast_tokenizer(train_params.model_name or model_name)
                 trainer_cls = config.get_trainer(model_name)
                 eval_cls = config.get_evaluator(model_name)

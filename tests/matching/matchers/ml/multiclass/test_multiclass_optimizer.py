@@ -2,6 +2,7 @@ import pytest
 import torch
 from torch import nn
 
+from matchescu.matching.matchers.ml.multiclass._asymmetry import AsymmetricHead
 from matchescu.matching.matchers.ml.multiclass._classifier import ClassificationHead
 from matchescu.matching.matchers.ml.multiclass._cross_attention import (
     PerAttributeCrossAttention,
@@ -30,10 +31,15 @@ class _StubModel(nn.Module):
     def __init__(self):
         super().__init__()
         self._bert = _StubBert()
+        self._asym_head = AsymmetricHead(HIDDEN)
         self._classifier = ClassificationHead(
-            3 * HIDDEN, HIDDEN, 3, dropout_p=0.1, dtype=torch.float32
+            3 * HIDDEN, HIDDEN, dropout_p=0.1, dtype=torch.float32
         )
         self._cross_attn = PerAttributeCrossAttention(HIDDEN, dropout=0.1)
+
+    @property
+    def asymmetric_head(self):
+        return self._asym_head
 
     @property
     def classifier(self):
