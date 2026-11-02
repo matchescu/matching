@@ -1,6 +1,5 @@
 import logging
 import math
-import random
 from collections import Counter
 from collections.abc import Iterable
 from os import PathLike
@@ -56,14 +55,13 @@ class GroundTruthComparisonSpaceGenerator:
                 preserving the configured ratios as closely as possible.
                 ``None`` (default) means no limit.
             seed:
-                Seed for reproducibility.
+                Seed for all random choices and output ordering.
         """
         self.neg_pos_ratio = neg_pos_ratio
         self.match_bridge_ratio = match_bridge_ratio
         self.max_total_samples = max_total_samples
-        self.random_state = seed
         self._excluded = set(excluded) if excluded is not None else set()
-        self._rng = np.random.RandomState(seed)
+        self._rng = np.random.default_rng(seed)
         self._log = log or logging.getLogger(self.__class__.__name__)
         self._id_table = id_table
         self._matcher_gt = matcher_gt
@@ -80,6 +78,14 @@ class GroundTruthComparisonSpaceGenerator:
             len(self._cluster_gt),
             sum(1 for ref in self._id_table if ref not in self._ref_id_cluster_map),
         )
+
+    @property
+    def seed(self) -> int | None:
+        return getattr(self._rng.bit_generator.seed_seq, "entropy", None)
+
+    @seed.setter
+    def seed(self, seed: int) -> None:
+        self._rng = np.random.default_rng(seed)
 
     @staticmethod
     def __init_cluster_gt(
@@ -166,15 +172,21 @@ class GroundTruthComparisonSpaceGenerator:
         for c, n in targets.items():
             if c < 2:
                 continue
-            class_pool = random.sample(by[c], k=n) if n < raw_targets[c] else by[c]
+            if n < raw_targets[c]:
+                picked = self._rng.choice(len(by[c]), size=n, replace=False)
+                class_pool = [by[c][i] for i in picked]
+            else:
+                class_pool = by[c]
             samples.update({c: class_pool})
         exclude = self._excluded.union(set(self._matcher_gt))
         samples.update({0: self._generate_negatives(targets[0], exclude)})
 
+        comparisons = [comparison for items in samples.values() for comparison in items]
+        self._rng.shuffle(comparisons)
+
         comparison_space = InMemoryComparisonSpace()
-        for items in samples.values():
-            for left_id, right_id in items:
-                comparison_space.put(left_id, right_id)
+        for left_id, right_id in comparisons:
+            comparison_space.put(left_id, right_id)
 
         self._write_comparisons_csv(comparison_space, output_path)
 
@@ -257,8 +269,8 @@ class GroundTruthComparisonSpaceGenerator:
         result: list[tuple[RefId, RefId]] = []
         while len(result) < n and attempts < max_attempts:
             batch = min((n - len(result)) * 5, 100_000)
-            i1 = self._rng.randint(0, n_pool, size=batch)
-            i2 = self._rng.randint(0, n_pool, size=batch)
+            i1 = self._rng.integers(0, n_pool, size=batch)
+            i2 = self._rng.integers(0, n_pool, size=batch)
             attempts += batch
 
             for k in range(batch):
@@ -352,7 +364,7 @@ class GroundTruthComparisonSpaceGenerator:
                     "label": self._matcher_gt.get(tpl, 0),
                 }
             )
-        comparisons_df = pl.DataFrame(comparison_data).sample(fraction=1, shuffle=True)
+        comparisons_df = pl.DataFrame(comparison_data)
         self._log.info(
             "saving comparison space with match labels: %d comparisons, %s",
             len(comparisons_df),

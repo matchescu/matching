@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 from matchescu.reference_store.id_table import IdTable
 from matchescu.typing import EntityReferenceIdentifier as RefId
@@ -142,7 +141,6 @@ def test_init_stores_default_ratios(id_table, undirected_ground_truth, cluster_g
     assert csg.neg_pos_ratio == 5.0
     assert csg.match_bridge_ratio == 2.0
     assert csg.max_total_samples is None
-    assert csg.random_state == 42
 
 
 def test_init_ref_id_cluster_map_populated(csg_binary, ref_ids):
@@ -275,7 +273,7 @@ def test_select_diverse_is_deterministic(csg_binary, ref_ids):
     pool = [(ref_ids[i], ref_ids[i + 10]) for i in range(10)]
     r1 = csg_binary._select_diverse(pool, n=5)
     # Reset RNG to same state
-    csg_binary._rng = np.random.RandomState(42)
+    csg_binary.seed = 42
     r2 = csg_binary._select_diverse(pool, n=5)
     assert r1 == r2
 
@@ -454,3 +452,80 @@ def test_different_seeds_produce_different_negatives(
     cs2 = set(GroundTruthComparisonSpaceGenerator(seed=999, **kwargs)())
     # The positive pairs overlap, but negatives should differ
     assert cs1 != cs2
+
+
+def _capped_multiclass_data():
+    refs = _make_ref_ids(40, "S")
+    id_table = _StubIdTable(refs)
+    gt = {}
+    for i in range(10):
+        gt[(refs[i], refs[i + 10])] = 1
+    for i in range(10, 30):
+        gt[(refs[i], refs[i + 10])] = 2
+    cluster_gt = frozenset(frozenset({refs[i], refs[i + 10]}) for i in range(30))
+    return id_table, gt, cluster_gt
+
+
+def test_capped_multiclass_sampling_is_reproducible():
+    id_table, gt, cluster_gt = _capped_multiclass_data()
+    kwargs = {
+        "id_table": id_table,
+        "matcher_gt": gt,
+        "cluster_gt": cluster_gt,
+        "neg_pos_ratio": 1.0,
+        "match_bridge_ratio": 1.0,
+        "max_total_samples": 20,
+        "seed": 123,
+        "save": False,
+    }
+
+    first = list(GroundTruthComparisonSpaceGenerator(**kwargs)())
+    second = list(GroundTruthComparisonSpaceGenerator(**kwargs)())
+
+    assert first == second
+    labels = set(gt.values())
+    assert labels == {1, 2}
+
+
+def test_csv_matches_returned_order_and_is_reproducible(tmp_path):
+    refs = _make_ref_ids(20, "S")
+    id_table = _StubIdTable(refs)
+    gt = {(refs[i], refs[i + 10]): 1 for i in range(10)}
+    cluster_gt = frozenset(frozenset({refs[i], refs[i + 10]}) for i in range(10))
+    kwargs = {
+        "id_table": id_table,
+        "matcher_gt": gt,
+        "cluster_gt": cluster_gt,
+        "neg_pos_ratio": 2.0,
+        "seed": 77,
+        "save": True,
+    }
+
+    first_path = tmp_path / "first.csv"
+    second_path = tmp_path / "second.csv"
+    first_cs = list(
+        GroundTruthComparisonSpaceGenerator(**kwargs)(output_path=first_path)
+    )
+    second_cs = list(
+        GroundTruthComparisonSpaceGenerator(**kwargs)(output_path=second_path)
+    )
+
+    assert first_cs == second_cs
+    assert first_path.read_bytes() == second_path.read_bytes()
+
+    import polars as pl
+
+    csv_rows = list(pl.read_csv(first_path).iter_rows(named=True))
+    csv_pairs = [
+        (
+            row["left_id"],
+            row["left_source"],
+            row["right_id"],
+            row["right_source"],
+        )
+        for row in csv_rows
+    ]
+    returned_pairs = [
+        (left.label, left.source, right.label, right.source) for left, right in first_cs
+    ]
+    assert csv_pairs == returned_pairs
