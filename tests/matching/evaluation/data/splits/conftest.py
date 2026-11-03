@@ -12,10 +12,6 @@ from matchescu.matching.evaluation.data.splits import BadTripletSplitGenerator
 
 PAIR_SOURCE = "pairs"
 GENERATED_SOURCE = "ambiguity-generator"
-SOURCELESS_BRIDGE = RefId(108, GENERATED_SOURCE)
-TARGETED_BRIDGE = RefId(101, GENERATED_SOURCE)
-TARGETING_BRIDGE = RefId(104, GENERATED_SOURCE)
-
 SYNTHETIC = "bad_triplet_synthetic"
 SEED = 41
 PREFIX = "split"
@@ -66,6 +62,16 @@ def dataset(request, data_dir):
     return _id_table(directory), _cluster_gt(directory), _matcher_gt(directory)
 
 
+@pytest.fixture
+def binary_dataset(dataset):
+    id_table, cluster_gt, matcher_gt = dataset
+    return (
+        id_table,
+        cluster_gt,
+        {pair: 1 if label == 2 else label for pair, label in matcher_gt.items()},
+    )
+
+
 @pytest.fixture(scope="session")
 def split_ratio():
     return {"train": 3, "dev": 1, "test": 1}
@@ -85,9 +91,9 @@ def generator_class():
 
 @pytest.fixture
 def make_generator(generator_class, split_ratio, logger):
-    def _make(data, **kwargs):
+    def _make(data, ratios=None, **kwargs):
         generator = generator_class(
-            split_ratio=split_ratio, seed=SEED, log=logger, **kwargs
+            split_ratio=ratios or split_ratio, seed=SEED, log=logger, **kwargs
         )
         return generator.load(*data)
 
@@ -136,18 +142,60 @@ def category_counts(meta_rows):
 
 
 @pytest.fixture
-def source_counts(meta_rows):
-    rows = (row for split in meta_rows.values() for row in split)
-    return Counter(
-        int(row["bridge_id"]) for row in rows if row["category"] == "triplet_source"
-    )
+def link_counts(category_counts):
+    return {name: counts["triplet_target"] for name, counts in category_counts.items()}
 
 
 @pytest.fixture
-def label_one_counts(split_rows):
+def bridges(dataset):
+    id_table, _, _ = dataset
+    return frozenset(ref.id for ref in id_table if ref.id.source == GENERATED_SOURCE)
+
+
+@pytest.fixture
+def link_truth(dataset, bridges):
+    _, cluster_gt, matcher_gt = dataset
+    truth: dict[RefId, set] = defaultdict(set)
+    for pair, label in matcher_gt.items():
+        if not label:
+            continue
+        left, right = pair
+        if (left in bridges) == (right in bridges):
+            continue
+        bridge = left if left in bridges else right
+        target = right if left == bridge else left
+        if cluster_gt.get(target) == cluster_gt.get(bridge):
+            continue
+        truth[bridge].add((target, bridge))
+    return {bridge: frozenset(pairs) for bridge, pairs in truth.items()}
+
+
+@pytest.fixture
+def source_truth(dataset, bridges):
+    _, cluster_gt, matcher_gt = dataset
+    truth: dict[RefId, set] = defaultdict(set)
+    for pair, label in matcher_gt.items():
+        if not label:
+            continue
+        left, right = pair
+        if (left in bridges) == (right in bridges):
+            continue
+        bridge = left if left in bridges else right
+        home = right if left == bridge else left
+        if cluster_gt.get(home) != cluster_gt.get(bridge):
+            continue
+        truth[bridge].add((home, bridge))
+    return {bridge: frozenset(pairs) for bridge, pairs in truth.items()}
+
+
+@pytest.fixture
+def footprints(link_truth, dataset):
+    _, cluster_gt, _ = dataset
     return {
-        name: sum(1 for *_, label in rows if label == 1)
-        for name, rows in split_rows.items()
+        bridge: frozenset(
+            {cluster_gt[target] for target, _ in pairs} | {cluster_gt[bridge]}
+        )
+        for bridge, pairs in link_truth.items()
     }
 
 
@@ -163,29 +211,6 @@ def cluster_splits(split_rows, dataset):
 
 
 @pytest.fixture
-def label_two_rows(split_rows):
-    return {
-        name: {(left, right) for left, right, label in rows if label == 2}
-        for name, rows in split_rows.items()
-    }
-
-
-@pytest.fixture
-def label_two_truth(dataset):
-    _, _, matcher_gt = dataset
-    return {pair for pair, label in matcher_gt.items() if label == 2}
-
-
-@pytest.fixture
-def footprints(dataset, label_two_truth):
-    _, cluster_gt, _ = dataset
-    result = defaultdict(set)
-    for target, bridge in label_two_truth:
-        result[bridge] |= {cluster_gt[target], cluster_gt[bridge]}
-    return result
-
-
-@pytest.fixture
 def footprint_splits(footprints, cluster_splits):
     return {
         bridge: set().union(*(cluster_splits[cluster] for cluster in clusters))
@@ -194,12 +219,12 @@ def footprint_splits(footprints, cluster_splits):
 
 
 @pytest.fixture
-def target_clusters(dataset, label_two_truth):
+def target_clusters(dataset, link_truth):
     _, cluster_gt, _ = dataset
-    result = defaultdict(set)
-    for target, bridge in label_two_truth:
-        result[bridge].add(cluster_gt[target])
-    return result
+    return {
+        bridge: frozenset(cluster_gt[target] for target, _ in pairs)
+        for bridge, pairs in link_truth.items()
+    }
 
 
 @pytest.fixture
@@ -224,22 +249,6 @@ def target_negatives(negatives, dataset, target_clusters):
 
 
 @pytest.fixture
-def bridges(label_two_truth):
-    return {bridge for _, bridge in label_two_truth}
-
-
-@pytest.fixture
-def bridge_matches(split_rows, dataset, bridges):
-    _, _, matcher_gt = dataset
-    return [
-        (left, right)
-        for rows in split_rows.values()
-        for left, right, _ in rows
-        if {left, right} <= bridges and (left, right) in matcher_gt
-    ]
-
-
-@pytest.fixture
 def repeated_rows(split_rows):
     rows = Counter(
         frozenset((left, right))
@@ -250,35 +259,9 @@ def repeated_rows(split_rows):
 
 
 @pytest.fixture
-def bridge_target_data(dataset):
-    id_table, cluster_gt, matcher_gt = dataset
-    return id_table, cluster_gt, {**matcher_gt, (TARGETED_BRIDGE, TARGETING_BRIDGE): 2}
-
-
-@pytest.fixture
-def sourceless_data(dataset):
-    id_table, cluster_gt, matcher_gt = dataset
-    kept = {
-        pair: label
-        for pair, label in matcher_gt.items()
-        if label != 1 or SOURCELESS_BRIDGE not in pair
-    }
-    return id_table, cluster_gt, kept
-
-
-@pytest.fixture
 def select_by_source():
-    def _select(matcher_gt):
-        refs = (ref for pair in matcher_gt for ref in pair)
-        return frozenset(ref for ref in refs if ref.source == GENERATED_SOURCE)
-
-    return _select
-
-
-@pytest.fixture
-def select_nothing():
-    def _select(_):
-        return frozenset()
+    def _select(ref):
+        return ref.source == GENERATED_SOURCE
 
     return _select
 

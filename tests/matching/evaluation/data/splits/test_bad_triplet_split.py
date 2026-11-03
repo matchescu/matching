@@ -1,33 +1,23 @@
-import polars as pl
+from collections import Counter, defaultdict
+
 import pytest
+from matchescu.reference_store.id_table import InMemoryIdTable
+from matchescu.typing import EntityReference
+from matchescu.typing import EntityReferenceIdentifier as RefId
+
+from matchescu.matching.evaluation.data.splits._bad_triplet_generator import (
+    EXTRA_MATCH,
+    NEGATIVE,
+    TRIPLET_SOURCE,
+    TRIPLET_TARGET,
+)
 
 FILE_NAMES = {"train": "a.csv", "dev": "b.csv", "test": "c.csv"}
 SYNTHETIC_COMPONENTS = 6
-SYNTHETIC_LABEL_TWO = {"train": 12, "dev": 3, "test": 3}
+SYNTHETIC_LINKS = {"train": 12, "dev": 3, "test": 3}
 FODORS = "amb_fodors_zagat_nophone_a050_dir"
-DATASETS = [
-    "bad_triplet_synthetic",
-    FODORS,
-    "amb_affiliationstrings_a050_dir",
-]
-SCATTERED_CLUSTERS = 20
-SCATTERED_BRIDGES = 5
-TOO_FEW_BRIDGES = 2
-SYNTHETIC_SOURCE_QUOTAS = {
-    101: 3,
-    102: 3,
-    103: 2,
-    104: 2,
-    105: 3,
-    106: 3,
-    107: 2,
-    108: 1,
-    109: 2,
-    110: 4,
-}
-SYNTHETIC_LABEL_ONE = {"train": 24, "dev": 6, "test": 6}
-ONE_SOURCE_LINK = {"source_links_per_bridge": 1}
-OVERFLOWING_RATIO = 0.6
+AFFILIATIONSTRINGS = "amb_affiliationstrings_a050_dir"
+DATASETS = ["bad_triplet_synthetic", FODORS, AFFILIATIONSTRINGS]
 META_COLUMNS = [
     "left_id",
     "left_source",
@@ -37,8 +27,28 @@ META_COLUMNS = [
     "bridge_id",
     "bridge_source",
 ]
-ALLOW_TARGET_NEGATIVES = {"allow_target_negatives": True}
-CATEGORIES = {"negative", "triplet_source", "extra_match", "triplet_target"}
+CATEGORIES = {NEGATIVE, TRIPLET_SOURCE, EXTRA_MATCH, TRIPLET_TARGET}
+GENERATED = "ambiguity-generator"
+
+
+def _pair(row):
+    return (
+        RefId(int(row["left_id"]), row["left_source"]),
+        RefId(int(row["right_id"]), row["right_source"]),
+    )
+
+
+def _bridge(row):
+    return RefId(int(row["bridge_id"]), row["bridge_source"])
+
+
+def _rows_of(meta_rows, category):
+    return {
+        name: [
+            (_pair(row), _bridge(row)) for row in rows if row["category"] == category
+        ]
+        for name, rows in meta_rows.items()
+    }
 
 
 def test_generate_raises_when_matcher_ground_truth_has_class_three(
@@ -81,105 +91,230 @@ def test_bridge_footprint_lands_in_one_split(footprint_splits):
 
 
 @pytest.mark.parametrize("dataset", DATASETS, indirect=True)
-def test_splits_keep_every_label_two_pair(label_two_rows, label_two_truth):
-    kept = set().union(*label_two_rows.values())
+def test_link_rows_keep_every_link_of_active_bridges(meta_rows, link_truth):
+    for rows in meta_rows.values():
+        kept = defaultdict(set)
+        for row in rows:
+            if row["category"] != TRIPLET_TARGET:
+                continue
+            kept[_bridge(row)].add(_pair(row))
+        for bridge, pairs in kept.items():
+            assert pairs == link_truth[bridge]
 
-    assert kept == label_two_truth
+
+def test_link_rows_follow_split_ratio_when_components_allow(link_counts):
+    assert link_counts == SYNTHETIC_LINKS
 
 
-def test_label_two_rows_follow_split_ratio_when_components_allow(label_two_rows):
-    counts = {name: len(pairs) for name, pairs in label_two_rows.items()}
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_full_matches_follow_match_bridge_ratio(category_counts):
+    for counts in category_counts.values():
+        full = counts[TRIPLET_SOURCE] + counts[EXTRA_MATCH]
+        assert full == 2 * counts[TRIPLET_TARGET]
 
-    assert counts == SYNTHETIC_LABEL_TWO
+
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_extra_matches_do_not_involve_active_bridges(meta_rows):
+    for rows in meta_rows.values():
+        active = {_bridge(row) for row in rows if row["category"] == TRIPLET_TARGET}
+        for row in rows:
+            if row["category"] != EXTRA_MATCH:
+                continue
+            assert active.isdisjoint(_pair(row))
 
 
-def test_generate_warns_when_a_split_has_few_label_two_pairs(
-    make_generator, make_pair_data, caplog
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_bridge_rows_put_the_bridge_on_the_right(meta_rows, bridges):
+    for rows in meta_rows.values():
+        for row in rows:
+            left, right = _pair(row)
+            if left in bridges or right in bridges:
+                assert right in bridges
+                assert left not in bridges
+
+
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_directed_labels_follow_the_ground_truth(meta_rows, split_rows):
+    for name, rows in meta_rows.items():
+        labels = {(left, right): label for left, right, label in split_rows[name]}
+        for row in rows:
+            pair = _pair(row)
+            label = labels.get(pair, labels.get((pair[1], pair[0])))
+            if row["category"] == TRIPLET_TARGET:
+                assert label == 2
+            elif row["category"] == NEGATIVE:
+                assert label == 0
+            else:
+                assert label == 1
+
+
+@pytest.mark.parametrize("dataset", ["bad_triplet_synthetic"], indirect=True)
+def test_source_rows_are_capped_by_links_and_home_pairs(
+    meta_rows, source_truth, link_truth
 ):
-    data = make_pair_data(SCATTERED_CLUSTERS, SCATTERED_BRIDGES)
+    for rows in meta_rows.values():
+        kept = defaultdict(set)
+        for row in rows:
+            if row["category"] == TRIPLET_SOURCE:
+                kept[_bridge(row)].add(_pair(row))
+        for bridge, pairs in kept.items():
+            homes = source_truth.get(bridge, frozenset())
+            assert pairs <= homes
+            assert len(pairs) == min(len(link_truth[bridge]), len(homes))
 
-    make_generator(data).generate()
 
-    assert "fewer than MIN_PER_CLASS" in caplog.text
-
-
-def test_generate_raises_when_a_split_receives_no_label_two_pairs(
-    make_generator, make_pair_data
+def test_binary_ground_truth_produces_the_directed_structure(
+    make_generator, dataset, binary_dataset, select_by_source
 ):
-    generator = make_generator(make_pair_data(SCATTERED_CLUSTERS, TOO_FEW_BRIDGES))
+    directed = make_generator(dataset).generate()
+    binary = make_generator(binary_dataset, is_bridge=select_by_source).generate()
 
-    with pytest.raises(ValueError, match="without label-2 pairs"):
-        generator.generate()
+    for name in directed.split_ratio:
+        directed_rows = [
+            (row.pair, row.category) for row in directed._categorized[name]
+        ]
+        binary_rows = [(row.pair, row.category) for row in binary._categorized[name]]
+        assert directed_rows == binary_rows
 
 
-def test_generate_raises_when_a_label_two_target_is_a_bridge(
-    make_generator, bridge_target_data
+def test_binary_ground_truth_labels_every_positive_row_with_one(
+    make_generator, binary_dataset, select_by_source
 ):
-    generator = make_generator(bridge_target_data)
+    binary = make_generator(binary_dataset, is_bridge=select_by_source).generate()
 
-    with pytest.raises(ValueError, match="is itself a bridge"):
-        generator.generate()
-
-
-def test_generate_raises_when_bridge_has_no_triplet_source_pair(
-    make_generator, sourceless_data
-):
-    generator = make_generator(sourceless_data)
-
-    with pytest.raises(ValueError, match="triplet source pair"):
-        generator.generate()
+    for rows in binary._categorized.values():
+        assert {row.label for row in rows if row.category != NEGATIVE} == {1}
 
 
-def test_init_warns_when_drop_orphans_is_false(make_generator, dataset, caplog):
-    make_generator(dataset, drop_orphans=False)
+def test_generate_raises_when_a_bridge_is_orphaned(make_generator, dataset):
+    id_table, cluster_gt, matcher_gt = dataset
+    kept = {
+        pair: label
+        for pair, label in matcher_gt.items()
+        if label != 1 or RefId(108, GENERATED) not in pair
+    }
 
-    assert "drop_orphans=False is ignored" in caplog.text
-
-
-def test_generate_keeps_label_two_pairs_when_bridges_are_selected_by_source(
-    make_generator, dataset, select_by_source, label_two_truth
-):
-    generator = make_generator(dataset).with_bridge_selector(select_by_source)
-
-    splits = generator.generate().get_splits()
-
-    labels = [v for split in splits.values() for v in split.matcher_labels.values()]
-    assert labels.count(2) == len(label_two_truth)
+    with pytest.raises(ValueError, match="orphan bridges"):
+        make_generator((id_table, cluster_gt, kept)).generate()
 
 
-def test_generate_raises_when_label_two_pair_has_no_selected_bridge(
-    make_generator, dataset, select_nothing
-):
-    generator = make_generator(dataset).with_bridge_selector(select_nothing)
+def test_generate_raises_when_bridge_structure_is_malformed(make_generator, dataset):
+    id_table, cluster_gt, matcher_gt = dataset
+    stranger = RefId(9999, "elsewhere")
+    malformed = {**matcher_gt, (stranger, RefId(108, GENERATED)): 1}
 
-    with pytest.raises(ValueError, match="not a bridge"):
-        generator.generate()
-
-
-def test_each_bridge_gets_its_quota_of_triplet_source_rows(source_counts):
-    assert source_counts == SYNTHETIC_SOURCE_QUOTAS
+    with pytest.raises(ValueError, match="invalid bridge structure"):
+        make_generator((id_table, cluster_gt, malformed)).generate()
 
 
-@pytest.mark.parametrize("generator_options", [ONE_SOURCE_LINK], indirect=True)
-def test_source_links_per_bridge_caps_triplet_source_rows(source_counts):
-    assert set(source_counts.values()) == {ONE_SOURCE_LINK["source_links_per_bridge"]}
+def test_bridge_bridge_pairs_do_not_prevent_generation(generated, bridges):
+    for rows in generated._categorized.values():
+        for row in rows:
+            assert len([ref for ref in row.pair if ref in bridges]) <= 1
 
 
-def test_label_one_rows_follow_match_bridge_ratio(label_one_counts):
-    assert label_one_counts == SYNTHETIC_LABEL_ONE
+def _single_split_table():
+    home, bridge, target, other = (
+        RefId(1, "pairs"),
+        RefId(2, GENERATED),
+        RefId(3, "pairs"),
+        RefId(4, "pairs"),
+    )
+    table = InMemoryIdTable()
+    for ref in (home, bridge, target, other):
+        table.put(EntityReference(ref, {"id": ref.label}))
+    clusters = {home: 1, bridge: 1, target: 2, other: 3}
+    return table, clusters, {(home, bridge): 1, (target, bridge): 2}
 
 
-def test_generate_warns_when_triplet_sources_exceed_label_one_budget(
-    make_generator, make_pair_data, caplog
-):
-    data = make_pair_data(SCATTERED_CLUSTERS, SCATTERED_BRIDGES)
+def test_generate_raises_when_the_match_bridge_ratio_cannot_be_met(make_generator):
+    table, clusters, matcher_gt = _single_split_table()
 
-    make_generator(data, match_bridge_ratio=OVERFLOWING_RATIO).generate()
+    with pytest.raises(ValueError, match="match-bridge ratio not met"):
+        make_generator((table, clusters, matcher_gt), ratios={"train": 1}).generate()
 
-    assert "exceed the label-1 budget" in caplog.text
+
+def test_ratio_above_two_falls_back_to_the_split_pool(make_generator):
+    home_1, home_2, bridge, target = (
+        RefId(1, "pairs"),
+        RefId(2, "pairs"),
+        RefId(3, GENERATED),
+        RefId(4, "pairs"),
+    )
+    extra_1, extra_2 = RefId(5, "pairs"), RefId(6, "pairs")
+    table = InMemoryIdTable()
+    for ref in (home_1, home_2, bridge, target, extra_1, extra_2):
+        table.put(EntityReference(ref, {"id": ref.label}))
+    clusters = {home_1: 1, home_2: 1, bridge: 1, target: 2, extra_1: 3, extra_2: 3}
+    matcher_gt = {
+        (home_1, home_2): 1,
+        (home_1, bridge): 1,
+        (target, bridge): 2,
+        (extra_1, extra_2): 1,
+    }
+
+    generator = make_generator(
+        (table, clusters, matcher_gt), ratios={"train": 1}, match_bridge_ratio=3
+    ).generate()
+
+    rows = generator._categorized["train"]
+    counts = Counter(row.category for row in rows)
+    assert counts[TRIPLET_TARGET] == 1
+    assert counts[TRIPLET_SOURCE] == 1
+    assert counts[EXTRA_MATCH] == 2
+    pairs = {row.pair for row in rows if row.category == EXTRA_MATCH}
+    assert (home_1, home_2) in pairs
+    assert (extra_1, extra_2) in pairs
+
+
+@pytest.mark.parametrize("dataset", [FODORS], indirect=True)
+def test_ratio_falls_back_to_other_bridge_pairs_with_invalidation(generated, bridges):
+    invalidated = []
+    for rows in generated._categorized.values():
+        active = {row.bridge for row in rows if row.category == TRIPLET_TARGET}
+        for row in rows:
+            if row.category != EXTRA_MATCH:
+                continue
+            mentioned = {ref for ref in row.pair if ref in bridges}
+            if mentioned:
+                assert mentioned.isdisjoint(active)
+                invalidated.append(row)
+    assert invalidated
+
+
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_negatives_never_pair_a_bridge_with_its_target_clusters(target_negatives):
+    assert target_negatives == []
+
+
+@pytest.mark.parametrize(
+    "generator_options", [{"allow_target_negatives": True}], indirect=True
+)
+def test_allow_target_negatives_admits_bridge_target_negatives(target_negatives):
+    assert target_negatives != []
+
+
+@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
+def test_negatives_are_never_known_pairs_in_either_orientation(negatives, dataset):
+    _, _, matcher_gt = dataset
+
+    assert [p for p in negatives if p in matcher_gt or p[::-1] in matcher_gt] == []
+
+
+def test_negatives_put_bridges_on_the_right(negatives, bridges):
+    for left, right in negatives:
+        if left in bridges or right in bridges:
+            assert right in bridges
+            assert left not in bridges
+
+
+def test_no_pair_appears_twice_across_splits(repeated_rows):
+    assert repeated_rows == []
 
 
 def test_save_writes_meta_file_with_category_columns(meta_paths):
+    import polars as pl
+
     columns = [pl.read_csv(path).columns for path in meta_paths.values()]
 
     assert columns == [META_COLUMNS] * len(meta_paths)
@@ -193,35 +328,9 @@ def test_meta_file_marks_every_row_category(category_counts):
 
 def test_meta_file_has_one_row_per_split_row(meta_rows, split_rows):
     meta_lengths = {name: len(rows) for name, rows in meta_rows.items()}
+    split_lengths = {name: len(rows) for name, rows in split_rows.items()}
 
-    assert meta_lengths == {name: len(rows) for name, rows in split_rows.items()}
-
-
-@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
-def test_negatives_never_pair_a_bridge_with_its_target_clusters(target_negatives):
-    assert target_negatives == []
-
-
-@pytest.mark.parametrize("generator_options", [ALLOW_TARGET_NEGATIVES], indirect=True)
-def test_allow_target_negatives_admits_bridge_target_negatives(target_negatives):
-    assert target_negatives != []
-
-
-@pytest.mark.parametrize("dataset", DATASETS, indirect=True)
-def test_negatives_are_never_known_pairs_in_either_orientation(negatives, dataset):
-    _, _, matcher_gt = dataset
-
-    known = [p for p in negatives if p in matcher_gt or p[::-1] in matcher_gt]
-
-    assert known == []
-
-
-def test_matches_between_two_bridges_appear_in_no_split(bridge_matches):
-    assert bridge_matches == []
-
-
-def test_no_pair_appears_twice_across_splits(repeated_rows):
-    assert repeated_rows == []
+    assert meta_lengths == split_lengths
 
 
 @pytest.mark.parametrize("dataset", [FODORS], indirect=True)

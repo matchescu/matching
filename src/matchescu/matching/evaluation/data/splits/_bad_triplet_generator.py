@@ -1,26 +1,26 @@
 import os
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping
-from collections.abc import Set as AbstractSet
 from pathlib import Path
 from typing import NamedTuple, NoReturn, Self
 
 import polars as pl
+from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.typing import EntityReferenceIdentifier as RefId
 
+from matchescu.matching.evaluation.data.sampling import BadTripletSampler
+
+from ._split import Split
 from ._split_generator import MIN_PER_CLASS, SplitGenerator, _pairs_frame
 
 Pair = tuple[RefId, RefId]
 Row = tuple[RefId, RefId, int]
-BridgeSelector = Callable[[Mapping[Pair, int]], AbstractSet[RefId]]
-Links = dict[RefId, list[Pair]]
 Unit = tuple[tuple[int, ...], int]
 
 NEGATIVE = "negative"
 TRIPLET_SOURCE = "triplet_source"
 EXTRA_MATCH = "extra_match"
 TRIPLET_TARGET = "triplet_target"
-CATEGORY_LABELS = {NEGATIVE: 0, TRIPLET_SOURCE: 1, EXTRA_MATCH: 1, TRIPLET_TARGET: 2}
 
 
 class Component(NamedTuple):
@@ -32,13 +32,13 @@ class Component(NamedTuple):
 
     :param clusters: Ids of the component's clusters, ascending.
     :param bridges: Bridge records whose footprints form the component, sorted.
-    :param label_two: Label-2 pairs of those bridges; the component's weight when
-        balancing label-2 pairs across splits.
+    :param link_count: Bridge-link pairs of those bridges; the component's
+        weight when balancing link rows across splits.
     """
 
     clusters: tuple[int, ...]
     bridges: tuple[RefId, ...]
-    label_two: int
+    link_count: int
 
 
 class CategorizedPair(NamedTuple):
@@ -49,28 +49,28 @@ class CategorizedPair(NamedTuple):
     `BadTripletSplitGenerator.save` write meta files, so that evaluations can
     report results per bad triplet rather than per class.
 
-    :param pair: Compared records, oriented as in the matcher ground truth.
+    :param pair: Compared records, with any bridge on the right.
     :param category: One of ``negative``, ``triplet_source``, ``extra_match`` or
         ``triplet_target``.
     :param bridge: Bridge record of a triplet row; ``None`` for negatives and
         extra matches.
+    :param label: Label of the pair in the matcher ground truth. Bridge links
+        carry label 2 in directed ground truths and label 1 in binary ones.
     """
 
     pair: Pair
     category: str
     bridge: RefId | None = None
-
-
-def _label_two_right_records(matcher_gt: Mapping[Pair, int]) -> frozenset[RefId]:
-    return frozenset(bridge for (_, bridge), label in matcher_gt.items() if label == 2)
+    label: int = 0
 
 
 def _ref_key(ref: RefId) -> tuple[str, str]:
     return ref.source, str(ref.label)
 
 
-def _pair_key(pair: Pair) -> tuple[tuple[str, str], tuple[str, str]]:
-    return _ref_key(pair[1]), _ref_key(pair[0])
+def _counterpart(pair: Pair, ref: RefId) -> RefId:
+    left, right = pair
+    return right if left == ref else left
 
 
 def _find(parent: dict[int, int], node: int) -> int:
@@ -88,21 +88,10 @@ def _union(parent: dict[int, int], nodes: list[int]) -> None:
         parent[_find(parent, node)] = root
 
 
-def _frame_rows(frame: pl.DataFrame) -> list[Row]:
-    return [
-        (
-            RefId(row["left_id"], row["left_source"]),
-            RefId(row["right_id"], row["right_source"]),
-            row["label"],
-        )
-        for row in frame.iter_rows(named=True)
-    ]
-
-
 def _labelled_frame(rows: list[CategorizedPair]) -> pl.DataFrame:
     samples: dict[int, list[Pair]] = defaultdict(list)
     for row in rows:
-        samples[CATEGORY_LABELS[row.category]].append(row.pair)
+        samples[row.label].append(row.pair)
     return _pairs_frame(samples)
 
 
@@ -133,68 +122,52 @@ class BadTripletSplitGenerator(SplitGenerator):
 
     - a bridge's footprint is its home cluster plus its target clusters;
     - bridges join their footprints into components; each component goes whole
-      to one split, largest first, wherever label-2 pairs are most lacking;
-    - every split must receive label-2 pairs;
-    - every bridge keeps all its label-2 pairs and a random sample of label-1
-      pairs with ordinary members of its home cluster, so the bad triplet stays
-      complete;
-    - label-1 pairs without a bridge fill the rest of the label-1 budget;
+      to one split, largest first, wherever link rows are most lacking;
+    - every split must receive bridge links;
+    - every bridge keeps one triplet source per link, capped by the home pairs
+      available to it and sampled round-robin across the bridges that share a
+      home cluster;
+    - bridge links are always written with the bridge on the right, whatever
+      the labelling scheme of the ground truth;
+    - each bridge link receives ``match_bridge_ratio`` full-match rows: one
+      triplet source and the rest legitimate matches from the bridge's home
+      cluster that do not involve any bridge. When the home cluster cannot
+      supply them, the split's other clusters supply the remainder; as a last
+      resort, home pairs of other bridges are consumed, which invalidates those
+      bridges. A split that still misses the ratio raises;
     - negatives never repeat a known pair and, by default, never join a bridge
       with its target clusters, whose resemblance is deliberate;
     - a warning flags components too large for the smallest split.
 
     .. note::
-       A cluster may hold several bridges and be the target of several bridges.
-       Pairs between two bridges are never used: bridges are generated, so such
-       pairs do not exist in the original data, and using them would taint that
-       data more than the bridges already do. For the same reason a bridge may
-       not be the target of another bridge. A bridge keeps
-       ``min(c, round(match_bridge_ratio * t))`` label-1 pairs, where ``c`` counts
-       its label-1 pairs with ordinary home members and ``t`` its label-2 pairs.
+       Bridge records are declared by `is_bridge`, defaulting to the right
+       records of label-2 pairs. Binary ground truths mark bridges by another
+       rule, such as the record source. Pairs between two bridges are ignored:
+       they belong to no triplet. Orphan bridges are treated as a data error.
 
-    :param drop_orphans: Kept for backward compatibility. Orphan bridges are
-        always dropped; ``False`` only logs a warning.
-    :param source_links_per_bridge: Upper bound on the label-1 pairs kept per
-        bridge. Defaults to ``None``: keep as many as ``match_bridge_ratio`` and
-        the home cluster size allow.
-    :param allow_target_negatives: Let negatives join a bridge with members of its
-        target clusters. Defaults to ``False``.
-    :ivar orphan_records: Dropped bridges mapped to the reason they were dropped.
-        Filled by `generate`.
+    :param is_bridge: Predicate that marks bridge records. Defaults to ``None``,
+        which derives the predicate from label-2 pairs; binary ground truths
+        must supply their own rule.
+    :param allow_target_negatives: Let negatives join a bridge with members of
+        its target clusters. Defaults to ``False``.
     """
 
     def __init__(
         self,
         *args,
-        drop_orphans: bool = True,
-        source_links_per_bridge: int | None = None,
+        is_bridge: Callable[[RefId], bool] | None = None,
         allow_target_negatives: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
-        if not drop_orphans:
-            self._log.warning(
-                "drop_orphans=False is ignored: orphan bridges are always dropped"
-            )
-        self.source_links_per_bridge = source_links_per_bridge
+        self.is_bridge = is_bridge
         self.allow_target_negatives = allow_target_negatives
-        self.orphan_records: dict[RefId, str] = {}
-        self._select_bridges: BridgeSelector = _label_two_right_records
         self._categorized: dict[str, list[CategorizedPair]] = {}
-
-    def with_bridge_selector(self, selector: BridgeSelector) -> Self:
-        """Replace the rule that recognises bridge records.
-
-        Bridges are the right records of label-2 pairs by default. Data sources
-        that mark bridges differently, for example by their record source, can
-        plug in their own rule here without subclassing.
-
-        :param selector: Receives the matcher ground truth and returns the bridge
-            records. Every right record of a label-2 pair must be among them.
-        :returns: This generator, to allow chaining before `generate`.
-        """
-        self._select_bridges = selector
-        return self
+        self._bridges: frozenset[RefId] = frozenset()
+        self._targets: dict[RefId, tuple[RefId, ...]] = {}
+        self._homes: dict[RefId, tuple[RefId, ...]] = {}
+        self._extra_pools: dict[int, list[Pair]] = {}
+        self._split_state: dict[str, dict[RefId, tuple[list[RefId], list[Pair]]]] = {}
 
     def generate(self) -> Self:
         """Assign every cluster to a split and build the labelled rows of each split.
@@ -206,32 +179,21 @@ class BadTripletSplitGenerator(SplitGenerator):
         :returns: This generator, ready for `get_splits` or `save`.
         :raises RuntimeError: If `load` was not called, or if the built splits
             break a leak-freedom guarantee (an internal error).
-        :raises ValueError: If the ground truth has classes other than 0, 1 and 2;
-            a label-2 pair's right record is not a bridge, lacks a cluster or
-            shares its target's cluster; a label-2 target is itself a bridge; a
-            bridge has no label-1 pair with an ordinary member of its home
-            cluster; or a split would receive no label-2 pairs.
+        :raises ValueError: If the ground truth has classes other than 0, 1 and
+            2, the bridge structure is malformed, a bridge is orphaned, or a
+            split cannot reach the match-bridge ratio.
         """
         self._check_loaded()
-        # validate the ground truth classes
-        by = self._pairs_by_class()
-        if unsupported := by.keys() - {0, 1, 2}:
-            raise ValueError(
-                f"bad triplet split does not support classes {unsupported}"
-            )
-        # find each bridge's label-2 and label-1 pairs
-        links = self._bridge_links()
-        sources = self._source_pairs(links)
-        self._check_sources(links, sources)
-        # group the clusters that must share a split
-        components = self._components(links)
+        self._check_classes()
+        index = self._index()
+        self._validate_index(index)
+        self._load_structure(index)
+        components = self._components()
         self._log_components(components)
-        # assign clusters to splits, then build each split's rows
-        split_of = self._assign(components, links)
-        self.orphan_records = {}
-        self._splits = self._build_splits(by.get(1, []), split_of, links, sources)
-        # verify that no bridge text leaks across splits
-        self._check_invariants(split_of, links, sources)
+        split_of = self._assign(components)
+        self._split_state = {}
+        self._splits = self._build_splits(split_of)
+        self._check_invariants(split_of)
         return self
 
     def save(
@@ -248,7 +210,7 @@ class BadTripletSplitGenerator(SplitGenerator):
         results by bad triplet.
 
         :param output_dir: Directory receiving all files; created if missing.
-        :param prefix: Prepended to every file name. Defaults to no prefix.
+        :param prefix: Prepended to every file name. Defaults to none.
         :param file_names: Custom names for the split files, by split name.
             Meta files always use the prefix pattern. Defaults to ``None``.
         :returns: This generator.
@@ -260,86 +222,132 @@ class BadTripletSplitGenerator(SplitGenerator):
             pl.DataFrame(records, infer_schema_length=None).write_csv(path)
         return self
 
-    def _bridge_links(self) -> Links:
-        bridges = self._select_bridges(self._matcher_gt)
-        links: Links = defaultdict(list)
-        label_two = (pair for pair, label in self._matcher_gt.items() if label == 2)
-        # sorted, so that the result does not depend on hash order
-        for pair in sorted(label_two, key=_pair_key):
-            self._check_link(pair, bridges)
-            links[pair[1]].append(pair)
-        return dict(links)
+    def get_splits(self) -> dict[str, Split]:
+        """Return the generated splits as comparison spaces with ground truth.
 
-    def _check_link(self, pair: Pair, bridges: AbstractSet[RefId]) -> None:
-        target, bridge = pair
-        if bridge not in bridges:
+        Label lookup tolerates either orientation because this generator writes
+        bridge rows with the bridge on the right, which may reverse the
+        orientation recorded in the ground truth.
+
+        :returns: The generated splits, keyed by split name.
+        :raises RuntimeError: If `generate` was not called first.
+        """
+        if not self._splits:
+            raise RuntimeError("generate() before returning splits")
+        splits = {}
+        for split_name, frame in self._splits.items():
+            pairs = [
+                (
+                    RefId(row["left_id"], row["left_source"]),
+                    RefId(row["right_id"], row["right_source"]),
+                )
+                for row in frame.iter_rows(named=True)
+            ]
+            comparison_space = InMemoryComparisonSpace()
+            match_gt: dict[Pair, int] = {}
+            cluster_gt: dict[RefId, int] = {}
+            for x, y in pairs:
+                comparison_space.put(x, y)
+                label = self._label_of((x, y))
+                if label == 0:
+                    continue
+                match_gt[(x, y)] = label
+                for ref in (x, y):
+                    cluster = self._cluster_gt.get(ref)
+                    if cluster is not None:
+                        cluster_gt[ref] = cluster
+            clusters = defaultdict(set)
+            for ref, cluster in cluster_gt.items():
+                clusters[cluster].add(ref)
+            splits[split_name] = Split(comparison_space, match_gt, clusters)
+        return splits
+
+    def _check_classes(self) -> None:
+        classes = set(self._matcher_gt.values())
+        if unsupported := classes - {0, 1, 2}:
             raise ValueError(
-                f"label-2 pair ({target}, {bridge}): {bridge} is not a bridge"
-            )
-        if target not in self._cluster_gt or bridge not in self._cluster_gt:
-            raise ValueError(f"bridge pair ({target}, {bridge}) lacks cluster labels")
-        if self._cluster_gt[target] == self._cluster_gt[bridge]:
-            raise ValueError(f"bridge pair ({target}, {bridge}) joins one cluster")
-        if target in bridges:
-            raise ValueError(
-                f"label-2 pair ({target}, {bridge}): {target} is itself a bridge"
-            )
-
-    def _source_pairs(self, links: Links) -> Links:
-        sources: Links = defaultdict(list)
-        label_one = (pair for pair, label in self._matcher_gt.items() if label == 1)
-        for pair in sorted(label_one, key=_pair_key):
-            for bridge in self._bridges_anchored_by(pair, links):
-                sources[bridge].append(pair)
-        return sources
-
-    def _bridges_anchored_by(self, pair: Pair, links: Links) -> list[RefId]:
-        left, right = pair
-        if self._cluster_gt.get(left) != self._cluster_gt.get(right):
-            return []
-        if left in links and right in links:
-            return []
-        return [ref for ref in (right, left) if ref in links]
-
-    @staticmethod
-    def _check_sources(links: Links, sources: Links) -> None:
-        missing = sorted(links.keys() - sources.keys(), key=_ref_key)
-        if missing:
-            raise ValueError(
-                "bridges without a triplet source pair "
-                f"(a label-1 pair with an ordinary home member): {missing}"
+                f"bad triplet split does not support classes {unsupported}"
             )
 
-    def _source_quota(self, bridge: RefId, links: Links, sources: Links) -> int:
-        wanted = round(self.match_bridge_ratio * len(links[bridge]))
-        quota = min(len(sources[bridge]), wanted)
-        if self.source_links_per_bridge is None:
-            return quota
-        return min(quota, self.source_links_per_bridge)
+    def _index(self):
+        predicate = self.is_bridge or self._label_two_predicate()
+        return BadTripletSampler(
+            self._id_table,
+            self._matcher_gt,
+            self._cluster_gt,
+            predicate,
+            log=self._log,
+        ).index()
 
-    def _footprint(self, bridge: RefId, pairs: list[Pair]) -> list[int]:
-        targets = {self._cluster_gt[target] for target, _ in pairs}
+    def _label_two_predicate(self) -> Callable[[RefId], bool]:
+        bridges = frozenset(
+            right for (_, right), label in self._matcher_gt.items() if label == 2
+        )
+        return lambda ref: ref in bridges
+
+    def _validate_index(self, index) -> None:
+        fatal = [issue for issue in index.issues if issue[1] != "bridge_bridge"]
+        if fatal:
+            raise ValueError(f"invalid bridge structure: {fatal}")
+        if ignored := [issue for issue in index.issues if issue[1] == "bridge_bridge"]:
+            self._log.info("ignoring %d bridge-bridge pairs", len(ignored))
+        if index.orphan_bridges:
+            raise ValueError(f"orphan bridges: {index.orphan_bridges}")
+        if not index.link_pairs:
+            raise ValueError(
+                "no bridge links declared; binary ground truths must pass " "is_bridge"
+            )
+
+    def _load_structure(self, index) -> None:
+        self._bridges = frozenset(index.link_pairs)
+        self._targets = {
+            bridge: tuple(_counterpart(pair, bridge) for pair in pairs)
+            for bridge, pairs in index.link_pairs.items()
+        }
+        self._homes = {
+            bridge: tuple(_counterpart(pair, bridge) for pair in pairs)
+            for bridge, pairs in index.home_pairs.items()
+        }
+        self._extra_pools = self._full_match_pools()
+
+    def _full_match_pools(self) -> dict[int, list[Pair]]:
+        pools: dict[int, list[Pair]] = defaultdict(list)
+        seen: set[frozenset] = set()
+        for pair, label in self._matcher_gt.items():
+            if not label:
+                continue
+            left, right = pair
+            if left in self._bridges or right in self._bridges:
+                continue
+            cluster = self._cluster_gt.get(left)
+            if cluster is None or cluster != self._cluster_gt.get(right):
+                continue
+            key = frozenset(pair)
+            if key in seen:
+                continue
+            seen.add(key)
+            pools[cluster].append(pair)
+        return dict(pools)
+
+    def _footprint(self, bridge: RefId) -> list[int]:
+        targets = {self._cluster_gt[target] for target in self._targets[bridge]}
         return sorted(targets | {self._cluster_gt[bridge]})
 
-    def _bridge_forest(self, links: Links) -> dict[int, int]:
+    def _components(self) -> list[Component]:
         parent: dict[int, int] = {}
-        for bridge, pairs in links.items():
-            _union(parent, self._footprint(bridge, pairs))
-        return parent
-
-    def _components(self, links: Links) -> list[Component]:
-        parent = self._bridge_forest(links)
+        for bridge in self._targets:
+            _union(parent, self._footprint(bridge))
         clusters: dict[int, list[int]] = defaultdict(list)
         for cluster in sorted(parent):
             clusters[_find(parent, cluster)].append(cluster)
         bridges: dict[int, list[RefId]] = defaultdict(list)
-        for bridge in links:
+        for bridge in self._targets:
             bridges[_find(parent, self._cluster_gt[bridge])].append(bridge)
         components = (
             Component(
                 tuple(clusters[root]),
                 tuple(members),
-                sum(len(links[b]) for b in members),
+                sum(len(self._targets[b]) for b in members),
             )
             for root, members in bridges.items()
         )
@@ -350,11 +358,11 @@ class BadTripletSplitGenerator(SplitGenerator):
         return {name: total * r / weight for name, r in self.split_ratio.items()}
 
     def _log_components(self, components: list[Component]) -> None:
-        sizes = [component.label_two for component in components]
+        sizes = [component.link_count for component in components]
         total = sum(sizes)
         self._log.info("bridge graph: %d components", len(components))
         self._log.info(
-            "label-2 pairs per component: %s", dict(sorted(Counter(sizes).items()))
+            "bridge links per component: %s", dict(sorted(Counter(sizes).items()))
         )
         if total:
             self._log.info(
@@ -365,56 +373,50 @@ class BadTripletSplitGenerator(SplitGenerator):
             )
         targets = self._ratio_shares(total)
         self._log.info(
-            "split label-2 targets: %s",
+            "split link targets: %s",
             ", ".join(f"{k}={v:.1f}" for k, v in targets.items()),
         )
         if sizes and max(sizes) > (smallest := min(targets.values())):
             self._log.warning(
-                "largest component has %d label-2 pairs and exceeds the smallest "
+                "largest component has %d bridge links and exceeds the smallest "
                 "split target %.1f",
                 max(sizes),
                 smallest,
             )
 
-    def _assign(self, components: list[Component], links: Links) -> dict[int, str]:
+    def _assign(self, components: list[Component]) -> dict[int, str]:
         split_of: dict[int, str] = {}
-        # 1. whole components, balancing label-2 pairs
-        label_two = self._assign_components(components, split_of)
-        # 2. clusters with label-1 pairs, in proportion to each split's label-2
-        self._assign_match_clusters(self._match_counts(links), label_two, split_of)
-        # 3. the remaining clusters, balancing record counts
+        links = self._assign_components(components, split_of)
+        self._assign_match_clusters(self._extra_counts(), links, split_of)
         self._assign_remaining(split_of)
         return split_of
 
     def _assign_components(
         self, components: list[Component], split_of: dict[int, str]
     ) -> dict[str, float]:
-        ordered = sorted(components, key=lambda c: (-c.label_two, c.clusters[0]))
-        targets = self._ratio_shares(sum(c.label_two for c in components))
+        ordered = sorted(components, key=lambda c: (-c.link_count, c.clusters[0]))
+        targets = self._ratio_shares(sum(c.link_count for c in components))
         assigned = dict.fromkeys(self.split_ratio, 0.0)
-        units = [(c.clusters, c.label_two) for c in ordered]
+        units = [(c.clusters, c.link_count) for c in ordered]
         self._place_greedy(units, targets, assigned, split_of)
         self._log.info(
-            "split label-2 assigned: %s",
+            "split links assigned: %s",
             ", ".join(f"{k}={assigned[k]:.0f}/{v:.1f}" for k, v in targets.items()),
         )
         if empty := [name for name, count in assigned.items() if not count]:
-            raise ValueError(f"splits without label-2 pairs: {empty}")
+            raise ValueError(f"splits without bridge links: {empty}")
         return assigned
 
-    def _match_counts(self, links: Links) -> Counter[int]:
+    def _extra_counts(self) -> Counter[int]:
         counts: Counter[int] = Counter()
-        for (left, right), label in self._matcher_gt.items():
-            if label != 1 or left in links or right in links:
-                continue
-            if self._cluster_gt.get(left) == self._cluster_gt.get(right):
-                counts[self._cluster_gt.get(left)] += 1
+        for cluster, pairs in self._extra_pools.items():
+            counts[cluster] += len(pairs)
         return counts
 
     def _assign_match_clusters(
         self,
         counts: Counter[int],
-        label_two: dict[str, float],
+        links: dict[str, float],
         split_of: dict[int, str],
     ) -> None:
         assigned = dict.fromkeys(self.split_ratio, 0.0)
@@ -423,15 +425,15 @@ class BadTripletSplitGenerator(SplitGenerator):
         free = sorted(
             (c for c in counts if c not in split_of), key=lambda c: (-counts[c], c)
         )
-        targets = self._match_targets(counts.total(), label_two)
+        targets = self._match_targets(counts.total(), links)
         self._place_greedy(
             [((c,), counts[c]) for c in free], targets, assigned, split_of
         )
 
     @staticmethod
-    def _match_targets(total: int, label_two: dict[str, float]) -> dict[str, float]:
-        received = sum(label_two.values())
-        return {name: total * n / received for name, n in label_two.items()}
+    def _match_targets(total: int, links: dict[str, float]) -> dict[str, float]:
+        received = sum(links.values())
+        return {name: total * n / received for name, n in links.items()}
 
     def _assign_remaining(self, split_of: dict[int, str]) -> None:
         rest = [c for c in self._clusters if c not in split_of]
@@ -461,230 +463,333 @@ class BadTripletSplitGenerator(SplitGenerator):
         candidates = [name for name, deficit in deficits.items() if deficit == best]
         return candidates[self._rng.randint(len(candidates))]
 
-    def _build_splits(
-        self,
-        label_one: list[Pair],
-        split_of: dict[int, str],
-        links: Links,
-        sources: Links,
-    ) -> dict[str, pl.DataFrame]:
+    def _build_splits(self, split_of: dict[int, str]) -> dict[str, pl.DataFrame]:
         self._categorized = {
-            name: self._categorize(name, label_one, split_of, links, sources)
-            for name in self.split_ratio
+            name: self._compose(name, split_of) for name in self.split_ratio
         }
         return {name: _labelled_frame(rows) for name, rows in self._categorized.items()}
 
-    def _categorize(
-        self,
-        name: str,
-        label_one: list[Pair],
-        split_of: dict[int, str],
-        links: Links,
-        sources: Links,
-    ) -> list[CategorizedPair]:
+    def _compose(self, name: str, split_of: dict[int, str]) -> list[CategorizedPair]:
+        bridges = [b for b in self._targets if split_of[self._cluster_gt[b]] == name]
+        if not bridges:
+            raise ValueError(f"split {name}: no bridge links")
+        sources = self._pick_sources(bridges)
+        extras, active = self._pick_extras(name, split_of, bridges, sources)
+        self._split_state[name] = {
+            bridge: (sources[bridge], extras.get(bridge, [])) for bridge in active
+        }
+        rows: list[CategorizedPair] = []
+        for bridge in active:
+            rows.extend(
+                self._bridge_rows(bridge, sources[bridge], extras.get(bridge, []))
+            )
         records = [ref for ref, c in self._cluster_gt.items() if split_of[c] == name]
-        # positives first: their count sets the number of negatives
-        positives = self._positives(name, set(records), label_one, links, sources)
-        # negatives from this split's records, avoiding excluded pairs
-        exclude = self._negative_exclusions(name, records, links)
-        rows = self._negatives(records, len(positives), exclude) + positives
-        categories = Counter(row.category for row in rows)
+        rows.extend(self._negatives(records, len(rows)))
         self._log.info(
             "split %s: %d records, %s",
             name,
             len(records),
-            dict(sorted(categories.items())),
+            dict(sorted(Counter(row.category for row in rows).items())),
         )
         return rows
 
-    def _positives(
-        self,
-        name: str,
-        members: set[RefId],
-        label_one: list[Pair],
-        links: Links,
-        sources: Links,
+    def _bridge_rows(
+        self, bridge: RefId, sources: list[RefId], extras: list[Pair]
     ) -> list[CategorizedPair]:
-        bridges = [bridge for bridge in links if bridge in members]
-        # every label-2 pair of every bridge in the split
-        targets = [
-            CategorizedPair(p, TRIPLET_TARGET, b) for b in bridges for p in links[b]
-        ]
-        # a random sample of each bridge's label-1 pairs in its home cluster
-        anchored = [
-            CategorizedPair(p, TRIPLET_SOURCE, b)
-            for b in bridges
-            for p in self._anchor(b, links, sources)
-        ]
-        # label-1 pairs without a bridge fill the remaining label-1 budget
-        budget = round(self.match_bridge_ratio * len(targets)) - len(anchored)
-        extras = self._extra_matches(name, members, label_one, links, budget)
-        return anchored + extras + targets
-
-    def _anchor(self, bridge: RefId, links: Links, sources: Links) -> list[Pair]:
-        candidates = sources[bridge]
-        quota = self._source_quota(bridge, links, sources)
-        picks = sorted(self._rng.choice(len(candidates), size=quota, replace=False))
-        return [candidates[i] for i in picks]
-
-    def _extra_matches(
-        self,
-        name: str,
-        members: set[RefId],
-        label_one: list[Pair],
-        links: Links,
-        budget: int,
-    ) -> list[CategorizedPair]:
-        if budget < 0:
-            self._log.warning(
-                "split %s: triplet source pairs exceed the label-1 budget by %d; "
-                "no extra matches added",
-                name,
-                -budget,
+        rows = []
+        for target in self._targets[bridge]:
+            pair = (target, bridge)
+            rows.append(
+                CategorizedPair(pair, TRIPLET_TARGET, bridge, self._label_of(pair))
             )
-            return []
-        pool = [
-            pair
-            for pair in label_one
-            if pair[0] in members
-            and pair[1] in members
-            and pair[0] not in links
-            and pair[1] not in links
-        ]
-        selected = self._select_diverse(pool, budget)
-        return [CategorizedPair(tuple(pair), EXTRA_MATCH) for pair in selected]
+        for home in sources:
+            pair = (home, bridge)
+            rows.append(
+                CategorizedPair(pair, TRIPLET_SOURCE, bridge, self._label_of(pair))
+            )
+        for pair in extras:
+            rows.append(CategorizedPair(pair, EXTRA_MATCH, None, self._label_of(pair)))
+        return rows
 
-    def _negative_exclusions(
-        self, name: str, records: list[RefId], links: Links
-    ) -> set[Pair]:
-        excluded = self._target_pairs(records, links)
-        self._log.info(
-            "split %s: %d bridge-target candidate pairs excluded from negatives",
-            name,
-            len(excluded),
-        )
-        return set(self._matcher_gt) | excluded
+    def _label_of(self, pair: Pair) -> int:
+        if pair in self._matcher_gt:
+            return self._matcher_gt[pair]
+        return self._matcher_gt.get((pair[1], pair[0]), 0)
 
-    def _target_pairs(self, records: list[RefId], links: Links) -> set[Pair]:
-        if self.allow_target_negatives:
-            return set()
-        members = set(records)
-        return {
-            (other, bridge)
-            for bridge, pairs in links.items()
-            if bridge in members
-            for cluster in self._footprint(bridge, pairs)
-            if cluster != self._cluster_gt[bridge]
-            for other in self._clusters[cluster]
+    def _pick_sources(self, bridges: list[RefId]) -> dict[RefId, list[RefId]]:
+        groups: dict[int, list[RefId]] = defaultdict(list)
+        for bridge in bridges:
+            groups[self._cluster_gt[bridge]].append(bridge)
+        sources: dict[RefId, list[RefId]] = {}
+        for group in groups.values():
+            sources.update(self._sample_sources(group))
+        return sources
+
+    def _sample_sources(self, group: list[RefId]) -> dict[RefId, list[RefId]]:
+        pools = {}
+        for bridge in group:
+            pool = list(self._homes.get(bridge, ()))
+            self._rng.shuffle(pool)
+            pools[bridge] = pool
+        remaining = {bridge: len(self._targets[bridge]) for bridge in group}
+        counters = dict.fromkeys(group, 0)
+        chosen: dict[RefId, dict[RefId, None]] = {bridge: {} for bridge in group}
+        while any(remaining.values()):
+            order = [bridge for bridge in group if remaining[bridge] > 0]
+            self._rng.shuffle(order)
+            for bridge in order:
+                if remaining[bridge] <= 0:
+                    continue
+                pool = pools[bridge]
+                if pool:
+                    home = pool[counters[bridge] % len(pool)]
+                    counters[bridge] += 1
+                    chosen[bridge][home] = None
+                remaining[bridge] -= 1
+        return {bridge: list(homes) for bridge, homes in chosen.items()}
+
+    def _pick_extras(
+        self,
+        name: str,
+        split_of: dict[int, str],
+        bridges: list[RefId],
+        sources: dict[RefId, list[RefId]],
+    ) -> tuple[dict[RefId, list[Pair]], list[RefId]]:
+        needs = {
+            bridge: round(self.match_bridge_ratio * len(self._targets[bridge]))
+            - len(sources[bridge])
+            for bridge in bridges
         }
+        if missing := {b: n for b, n in needs.items() if n < 0}:
+            raise ValueError(f"split {name}: negative extra-match budget {missing}")
+        extras: dict[RefId, list[Pair]] = defaultdict(list)
+        used: set[frozenset] = set()
+        self._fill_home_extras(bridges, needs, extras, used)
+        self._fill_split_extras(name, split_of, bridges, needs, extras, used)
+        active = self._fill_bridge_extras(name, bridges, needs, extras, used)
+        if invalidated := len(bridges) - len(active):
+            self._log.warning(
+                "split %s: %d/%d bridges invalidated while filling the "
+                "match-bridge ratio",
+                name,
+                invalidated,
+                len(bridges),
+            )
+        if outstanding := {b: n for b, n in needs.items() if n > 0}:
+            raise ValueError(
+                f"split {name}: match-bridge ratio not met for {outstanding}"
+            )
+        return extras, active
 
-    def _negatives(
-        self, records: list[RefId], positives: int, exclude: set[Pair]
-    ) -> list[CategorizedPair]:
+    def _fill_home_extras(self, bridges, needs, extras, used) -> None:
+        groups: dict[int, list[RefId]] = defaultdict(list)
+        for bridge in bridges:
+            groups[self._cluster_gt[bridge]].append(bridge)
+        for cluster, group in groups.items():
+            candidates = list(self._extra_pools.get(cluster, ()))
+            self._rng.shuffle(candidates)
+            self._assign_pairs(candidates, group, needs, extras, used)
+
+    def _fill_split_extras(self, name, split_of, bridges, needs, extras, used) -> None:
+        candidates = []
+        for cluster, split in split_of.items():
+            if split == name:
+                candidates.extend(self._extra_pools.get(cluster, ()))
+        self._rng.shuffle(candidates)
+        self._assign_pairs(candidates, bridges, needs, extras, used)
+
+    def _assign_pairs(self, candidates, bridges, needs, extras, used) -> None:
+        index = 0
+        while index < len(candidates) and any(needs[b] > 0 for b in bridges):
+            order = [bridge for bridge in bridges if needs[bridge] > 0]
+            self._rng.shuffle(order)
+            for bridge in order:
+                if index >= len(candidates):
+                    break
+                pair = candidates[index]
+                index += 1
+                key = frozenset(pair)
+                if key in used:
+                    continue
+                used.add(key)
+                extras[bridge].append(pair)
+                needs[bridge] -= 1
+
+    def _fill_bridge_extras(self, name, bridges, needs, extras, used) -> list[RefId]:
+        active = list(bridges)
+        while active and any(needs[b] > 0 for b in active):
+            needy = [bridge for bridge in active if needs[bridge] > 0]
+            pair, owner = self._draw_bridge_pair(bridges, needy, used)
+            if pair is None:
+                return active
+            options = [bridge for bridge in needy if bridge != owner]
+            chosen = options[self._rng.randint(len(options))]
+            used.add(frozenset(pair))
+            extras[chosen].append(pair)
+            needs[chosen] -= 1
+            if owner in active:
+                active = self._invalidate(name, owner, active, needs, extras, used)
+        return active
+
+    def _draw_bridge_pair(self, bridges, needy, used):
+        candidates = [
+            ((home, owner), owner)
+            for owner in bridges
+            for home in self._homes.get(owner, ())
+            if frozenset((home, owner)) not in used
+        ]
+        self._rng.shuffle(candidates)
+        for pair, owner in candidates:
+            if any(bridge != owner for bridge in needy):
+                return pair, owner
+        return None, None
+
+    def _invalidate(self, name, owner, active, needs, extras, used) -> list[RefId]:
+        remaining = [bridge for bridge in active if bridge != owner]
+        needs.pop(owner, None)
+        for pair in extras.pop(owner, []):
+            used.discard(frozenset(pair))
+        if not remaining:
+            raise ValueError(
+                f"split {name}: every bridge was invalidated while filling "
+                "the match-bridge ratio"
+            )
+        return remaining
+
+    def _negatives(self, records: list[RefId], positives: int) -> list[CategorizedPair]:
         count = min(
             round(self.neg_pos_ratio * positives), self._cross_cluster_pairs(records)
         )
         if count <= 0:
             return []
-        pairs = self._generate_negatives(count, exclude, records)
+        blocked = set(self._matcher_gt) | self._target_pairs(records)
+        generated = self._generate_negatives(count, blocked, records)
+        pairs = [
+            self._orient(pair)
+            for pair in generated
+            if not (pair[0] in self._bridges and pair[1] in self._bridges)
+        ]
+        if len(pairs) < count:
+            self._log.warning("generated %d/%d negatives", len(pairs), count)
         return [CategorizedPair(pair, NEGATIVE) for pair in pairs]
+
+    def _orient(self, pair: Pair) -> Pair:
+        left, right = pair
+        if left in self._bridges and right not in self._bridges:
+            return right, left
+        return pair
+
+    def _target_pairs(self, records: list[RefId]) -> set[Pair]:
+        if self.allow_target_negatives:
+            return set()
+        members = set(records)
+        return {
+            (other, bridge)
+            for bridge in self._targets
+            if bridge in members
+            for cluster in self._footprint(bridge)
+            if cluster != self._cluster_gt[bridge]
+            for other in self._clusters[cluster]
+        }
 
     def _cross_cluster_pairs(self, records: list[RefId]) -> int:
         sizes = Counter(self._cluster_gt[r] for r in records)
         n = len(records)
         return (n * n - sum(s * s for s in sizes.values())) // 2
 
-    def _check_invariants(
-        self, split_of: dict[int, str], links: Links, sources: Links
-    ) -> None:
-        rows = {name: _frame_rows(frame) for name, frame in self._splits.items()}
+    def _check_invariants(self, split_of: dict[int, str]) -> None:
+        rows = self._categorized
         for name, split_rows in rows.items():
-            # each row lies within its clusters' split
             self._check_disjoint(name, split_rows, split_of)
-            # each bridge's footprint lies within the bridge's split
-            self._check_footprints(name, split_rows, split_of, links)
-        # each kept bridge keeps all its label-2 pairs
-        self._check_label_two(rows, split_of, links)
-        # each kept bridge keeps its quota of home label-1 pairs
-        self._check_sources_kept(rows, split_of, links, sources)
-        # no negative repeats a known pair or a bridge-target pair
-        self._check_negatives(rows, links)
-        self._warn_scarce_label_two(rows)
+            self._check_bridge_position(name, split_rows)
+            self._check_unique(name, split_rows)
+            self._check_links(name, split_rows)
+            self._check_sources(name, split_rows)
+            self._check_ratio(name, split_rows)
+            self._check_negatives(name, split_rows)
+            self._warn_scarce_links(name, split_rows)
 
     def _check_disjoint(
-        self, name: str, rows: list[Row], split_of: dict[int, str]
+        self, name: str, rows: list[CategorizedPair], split_of: dict[int, str]
     ) -> None:
-        for left, right, _ in rows:
-            splits = {split_of[self._cluster_gt[ref]] for ref in (left, right)}
+        for row in rows:
+            splits = {
+                split_of[self._cluster_gt[ref]]
+                for ref in row.pair
+                if ref in self._cluster_gt
+            }
             if len(splits) > 1:
-                _violation(f"row ({left}, {right}) spans {sorted(splits)}")
-            if splits != {name}:
-                _violation(f"row ({left}, {right}) in {name} belongs to {splits}")
+                _violation(f"row {row.pair} spans {sorted(splits)}")
+            if splits and splits != {name}:
+                _violation(f"row {row.pair} in {name} belongs to {splits}")
 
-    def _check_footprints(
-        self,
-        name: str,
-        rows: list[Row],
-        split_of: dict[int, str],
-        links: Links,
-    ) -> None:
-        mentioned = {ref for left, right, _ in rows for ref in (left, right)}
-        bridges = sorted(mentioned & links.keys(), key=_ref_key)
-        if orphans := [b for b in bridges if b in self.orphan_records]:
-            _violation(f"orphan bridges {orphans} appear in {name}")
-        for bridge in bridges:
-            footprint = self._footprint(bridge, links[bridge])
-            if outside := [c for c in footprint if split_of[c] != name]:
+    def _check_bridge_position(self, name: str, rows: list[CategorizedPair]) -> None:
+        for row in rows:
+            left, _ = row.pair
+            if left in self._bridges:
+                _violation(f"{name}: bridge {left} is on the left of {row.pair}")
+
+    def _check_unique(self, name: str, rows: list[CategorizedPair]) -> None:
+        seen: set[frozenset] = set()
+        for row in rows:
+            key = frozenset(row.pair)
+            if key in seen:
+                _violation(f"{name}: duplicate pair {row.pair}")
+            seen.add(key)
+
+    def _check_links(self, name: str, rows: list[CategorizedPair]) -> None:
+        present = {row.pair for row in rows if row.category == TRIPLET_TARGET}
+        for bridge in {row.bridge for row in rows if row.category == TRIPLET_TARGET}:
+            expected = {(target, bridge) for target in self._targets[bridge]}
+            if present & expected != expected:
+                _violation(f"{name}: bridge {bridge} misses link rows")
+
+    def _check_sources(self, name: str, rows: list[CategorizedPair]) -> None:
+        present = {
+            (row.bridge, row.pair) for row in rows if row.category == TRIPLET_SOURCE
+        }
+        for bridge, (sources, _) in self._split_state[name].items():
+            expected = {(bridge, (home, bridge)) for home in sources}
+            if present & expected != expected:
+                _violation(f"{name}: bridge {bridge} misses triplet source rows")
+
+    def _check_ratio(self, name: str, rows: list[CategorizedPair]) -> None:
+        active = self._split_state[name]
+        for row in rows:
+            if row.category != EXTRA_MATCH:
+                continue
+            for ref in row.pair:
+                if ref in self._bridges and ref in active:
+                    _violation(
+                        f"{name}: extra match {row.pair} involves active bridge {ref}"
+                    )
+        for bridge, (sources, extras) in active.items():
+            budget = round(self.match_bridge_ratio * len(self._targets[bridge]))
+            if len(sources) + len(extras) != budget:
                 _violation(
-                    f"{bridge} in {name}: footprint clusters {outside} elsewhere"
+                    f"{name}: bridge {bridge} has {len(sources) + len(extras)} "
+                    f"full matches, expected {budget}"
                 )
 
-    def _check_label_two(
-        self,
-        rows: dict[str, list[Row]],
-        split_of: dict[int, str],
-        links: Links,
-    ) -> None:
-        present = {name: set(split_rows) for name, split_rows in rows.items()}
-        for bridge, pairs in links.items():
-            if bridge in self.orphan_records:
+    def _check_negatives(self, name: str, rows: list[CategorizedPair]) -> None:
+        forbidden = set(self._matcher_gt) | self._target_pairs(list(self._cluster_gt))
+        for row in rows:
+            if row.label != 0:
                 continue
-            name = split_of[self._cluster_gt[bridge]]
-            if missing := [p for p in pairs if (*p, 2) not in present[name]]:
-                _violation(f"{bridge} in {name}: label-2 pairs {missing} missing")
+            left, right = row.pair
+            if {(left, right), (right, left)} & forbidden:
+                _violation(f"{name}: negative {row.pair} is excluded")
+            if left in self._bridges and right not in self._bridges:
+                _violation(f"{name}: misoriented bridge negative {row.pair}")
+            if left in self._bridges and right in self._bridges:
+                _violation(f"{name}: bridge pair {row.pair}")
 
-    def _check_sources_kept(
-        self,
-        rows: dict[str, list[Row]],
-        split_of: dict[int, str],
-        links: Links,
-        sources: Links,
-    ) -> None:
-        present = {name: set(split_rows) for name, split_rows in rows.items()}
-        for bridge in links:
-            if bridge in self.orphan_records:
-                continue
-            name = split_of[self._cluster_gt[bridge]]
-            kept = sum(1 for p in sources[bridge] if (*p, 1) in present[name])
-            if kept != (quota := self._source_quota(bridge, links, sources)):
-                _violation(f"{bridge} in {name}: {kept} triplet sources, not {quota}")
-
-    def _check_negatives(self, rows: dict[str, list[Row]], links: Links) -> None:
-        forbidden = set(self._matcher_gt) | self._target_pairs(
-            list(self._cluster_gt), links
-        )
-        for name, split_rows in rows.items():
-            for left, right, label in split_rows:
-                if label == 0 and {(left, right), (right, left)} & forbidden:
-                    _violation(f"negative ({left}, {right}) in {name} is excluded")
-
-    def _warn_scarce_label_two(self, rows: dict[str, list[Row]]) -> None:
-        for name, split_rows in rows.items():
-            count = sum(1 for *_, label in split_rows if label == 2)
-            if count < MIN_PER_CLASS:
-                self._log.warning(
-                    "split %s has %d label-2 pairs, fewer than MIN_PER_CLASS=%d",
-                    name,
-                    count,
-                    MIN_PER_CLASS,
-                )
+    def _warn_scarce_links(self, name: str, rows: list[CategorizedPair]) -> None:
+        count = sum(1 for row in rows if row.category == TRIPLET_TARGET)
+        if count < MIN_PER_CLASS:
+            self._log.warning(
+                "split %s has %d bridge links, fewer than MIN_PER_CLASS=%d",
+                name,
+                count,
+                MIN_PER_CLASS,
+            )
