@@ -1,9 +1,11 @@
+import math
 import os
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import NamedTuple, NoReturn, Self
 
+import numpy as np
 import polars as pl
 from matchescu.reference_store.comparison_space import InMemoryComparisonSpace
 from matchescu.typing import EntityReferenceIdentifier as RefId
@@ -168,7 +170,9 @@ class BadTripletSplitGenerator(SplitGenerator):
         self._targets: dict[RefId, tuple[RefId, ...]] = {}
         self._homes: dict[RefId, tuple[RefId, ...]] = {}
         self._extra_pools: dict[int, list[Pair]] = {}
-        self._split_state: dict[str, dict[RefId, tuple[list[RefId], list[Pair]]]] = {}
+        self._split_state: dict[
+            str, dict[RefId, tuple[tuple[RefId, ...], list[RefId], list[Pair]]]
+        ] = {}
 
     def generate(self) -> Self:
         """Assign every cluster to a split and build the labelled rows of each split.
@@ -192,8 +196,9 @@ class BadTripletSplitGenerator(SplitGenerator):
         components = self._components()
         self._log_components(components)
         split_of = self._assign(components)
+        retained = self._retained_bridge_links(split_of)
         self._split_state = {}
-        self._splits = self._build_splits(split_of)
+        self._splits = self._build_splits(split_of, retained)
         self._check_invariants(split_of)
         return self
 
@@ -464,25 +469,160 @@ class BadTripletSplitGenerator(SplitGenerator):
         candidates = [name for name, deficit in deficits.items() if deficit == best]
         return candidates[self._rng.randint(len(candidates))]
 
-    def _build_splits(self, split_of: dict[int, str]) -> dict[str, pl.DataFrame]:
-        self._categorized = {
-            name: self._compose(name, split_of) for name in self.split_ratio
+    def _link_budgets(self) -> dict[str, int]:
+        full_per_link = max(1, round(self.match_bridge_ratio))
+        cost = (1 + full_per_link) * (1 + self.neg_pos_ratio)
+        total = math.floor(self.max_total_samples / cost)
+        minimum = sum(self.split_ratio.values())
+        if total < minimum:
+            raise ValueError(
+                f"max_total_samples={self.max_total_samples} is too small: "
+                f"split ratio {self.split_ratio} needs at least {minimum} links "
+                f"({minimum * cost:g} rows) at matchBridgeRatio="
+                f"{self.match_bridge_ratio} and negPosRatio={self.neg_pos_ratio}"
+            )
+        weight = sum(self.split_ratio.values())
+        targets = {
+            name: total * ratio / weight for name, ratio in self.split_ratio.items()
         }
+        allocation = dict.fromkeys(self.split_ratio, 1)
+        remaining = total - len(self.split_ratio)
+        while remaining > 0:
+            name = max(
+                self.split_ratio,
+                key=lambda item: (
+                    targets[item] - allocation[item],
+                    self.split_ratio[item],
+                    -list(self.split_ratio).index(item),
+                ),
+            )
+            allocation[name] += 1
+            remaining -= 1
+        return allocation
+
+    def _retained_bridge_links(
+        self, split_of: dict[int, str]
+    ) -> dict[str, dict[RefId, tuple[RefId, ...]]]:
+        if self.max_total_samples is None:
+            return {
+                name: {
+                    bridge: self._targets[bridge]
+                    for bridge in self._targets
+                    if split_of[self._cluster_gt[bridge]] == name
+                }
+                for name in self.split_ratio
+            }
+        budgets = self._link_budgets()
+        full_per_link = max(1, round(self.match_bridge_ratio))
+        rng = np.random.default_rng(self._seed)
+        retained: dict[str, dict[RefId, tuple[RefId, ...]]] = {}
+        for name in self.split_ratio:
+            bridges = [
+                bridge
+                for bridge in self._targets
+                if split_of[self._cluster_gt[bridge]] == name
+            ]
+            candidates = [
+                (bridge, target)
+                for bridge in bridges
+                for target in self._targets[bridge]
+            ]
+            rng.shuffle(candidates)
+            chosen: dict[RefId, set[RefId]] = defaultdict(set)
+            positive_budget = budgets[name] * (1 + full_per_link)
+            positives = 0
+            for bridge, target in candidates:
+                delta = 1 + full_per_link
+                if positives + delta > positive_budget:
+                    continue
+                chosen[bridge].add(target)
+                positives += delta
+            retained[name] = {
+                bridge: tuple(
+                    target
+                    for target in self._targets[bridge]
+                    if target in chosen[bridge]
+                )
+                for bridge in bridges
+                if chosen[bridge]
+            }
+            if not retained[name]:
+                raise ValueError(f"split {name}: cap removed every bridge link")
+            self._log.info(
+                "split %s: capped bridge links %d -> %d",
+                name,
+                len(candidates),
+                sum(len(targets) for targets in retained[name].values()),
+            )
+        return retained
+
+    def _build_splits(
+        self,
+        split_of: dict[int, str],
+        retained: dict[str, dict[RefId, tuple[RefId, ...]]],
+    ) -> dict[str, pl.DataFrame]:
+        self._categorized = {
+            name: self._compose(name, split_of, retained[name])
+            for name in self.split_ratio
+        }
+        self._apply_row_cap()
         return {name: _labelled_frame(rows) for name, rows in self._categorized.items()}
 
-    def _compose(self, name: str, split_of: dict[int, str]) -> list[CategorizedPair]:
-        bridges = [b for b in self._targets if split_of[self._cluster_gt[b]] == name]
+    def _apply_row_cap(self) -> None:
+        if self.max_total_samples is None:
+            return
+        total = sum(len(rows) for rows in self._categorized.values())
+        excess = total - self.max_total_samples
+        if excess <= 0:
+            return
+        for name in self.split_ratio:
+            if excess <= 0:
+                break
+            rows = self._categorized[name]
+            negatives = [
+                index for index, row in enumerate(rows) if row.category == NEGATIVE
+            ]
+            drop = min(excess, len(negatives))
+            if not drop:
+                continue
+            dropped = set(negatives[-drop:])
+            self._categorized[name] = [
+                row for index, row in enumerate(rows) if index not in dropped
+            ]
+            excess -= drop
+        self._log.warning(
+            "cap: trimmed %d negative rows to respect max_total_samples",
+            total - sum(len(rows) for rows in self._categorized.values()),
+        )
+
+    def _compose(
+        self,
+        name: str,
+        split_of: dict[int, str],
+        retained: dict[RefId, tuple[RefId, ...]],
+    ) -> list[CategorizedPair]:
+        bridges = [bridge for bridge, targets in retained.items() if targets]
         if not bridges:
             raise ValueError(f"split {name}: no bridge links")
-        sources = self._pick_sources(bridges)
-        extras, active = self._pick_extras(name, split_of, bridges, sources)
+        sources = self._pick_sources(bridges, retained)
+        extras, active = self._pick_extras(name, split_of, bridges, sources, retained)
         self._split_state[name] = {
-            bridge: (sources[bridge], extras.get(bridge, [])) for bridge in active
+            bridge: (
+                retained[bridge],
+                sources[bridge],
+                extras.get(bridge, []),
+            )
+            for bridge in active
         }
         rows: list[CategorizedPair] = []
         for bridge in active:
             rows.extend(
-                self._bridge_rows(bridge, sources[bridge], extras.get(bridge, []))
+                self._bridge_rows(
+                    bridge,
+                    retained[bridge],
+                    sources[bridge],
+                    extras.get(bridge, []),
+                )
             )
         records = [ref for ref, c in self._cluster_gt.items() if split_of[c] == name]
         rows.extend(self._negatives(records, len(rows)))
@@ -495,10 +635,14 @@ class BadTripletSplitGenerator(SplitGenerator):
         return rows
 
     def _bridge_rows(
-        self, bridge: RefId, sources: list[RefId], extras: list[Pair]
+        self,
+        bridge: RefId,
+        targets: tuple[RefId, ...],
+        sources: list[RefId],
+        extras: list[Pair],
     ) -> list[CategorizedPair]:
         rows = []
-        for target in self._targets[bridge]:
+        for target in targets:
             pair = (target, bridge)
             rows.append(
                 CategorizedPair(pair, TRIPLET_TARGET, bridge, self._label_of(pair))
@@ -517,22 +661,30 @@ class BadTripletSplitGenerator(SplitGenerator):
             return self._matcher_gt[pair]
         return self._matcher_gt.get((pair[1], pair[0]), 0)
 
-    def _pick_sources(self, bridges: list[RefId]) -> dict[RefId, list[RefId]]:
+    def _pick_sources(
+        self,
+        bridges: list[RefId],
+        retained: dict[RefId, tuple[RefId, ...]],
+    ) -> dict[RefId, list[RefId]]:
         groups: dict[int, list[RefId]] = defaultdict(list)
         for bridge in bridges:
             groups[self._cluster_gt[bridge]].append(bridge)
         sources: dict[RefId, list[RefId]] = {}
         for group in groups.values():
-            sources.update(self._sample_sources(group))
+            sources.update(self._sample_sources(group, retained))
         return sources
 
-    def _sample_sources(self, group: list[RefId]) -> dict[RefId, list[RefId]]:
+    def _sample_sources(
+        self,
+        group: list[RefId],
+        retained: dict[RefId, tuple[RefId, ...]],
+    ) -> dict[RefId, list[RefId]]:
         pools = {}
         for bridge in group:
             pool = list(self._homes.get(bridge, ()))
             self._rng.shuffle(pool)
             pools[bridge] = pool
-        remaining = {bridge: len(self._targets[bridge]) for bridge in group}
+        remaining = {bridge: len(retained[bridge]) for bridge in group}
         counters = dict.fromkeys(group, 0)
         chosen: dict[RefId, dict[RefId, None]] = {bridge: {} for bridge in group}
         while any(remaining.values()):
@@ -555,9 +707,10 @@ class BadTripletSplitGenerator(SplitGenerator):
         split_of: dict[int, str],
         bridges: list[RefId],
         sources: dict[RefId, list[RefId]],
+        retained: dict[RefId, tuple[RefId, ...]],
     ) -> tuple[dict[RefId, list[Pair]], list[RefId]]:
         needs = {
-            bridge: round(self.match_bridge_ratio * len(self._targets[bridge]))
+            bridge: round(self.match_bridge_ratio * len(retained[bridge]))
             - len(sources[bridge])
             for bridge in bridges
         }
@@ -708,6 +861,10 @@ class BadTripletSplitGenerator(SplitGenerator):
 
     def _check_invariants(self, split_of: dict[int, str]) -> None:
         rows = self._categorized
+        if self.max_total_samples is not None:
+            total = sum(len(split_rows) for split_rows in rows.values())
+            if total > self.max_total_samples:
+                _violation(f"cap violated: {total} rows > {self.max_total_samples}")
         for name, split_rows in rows.items():
             self._check_disjoint(name, split_rows, split_of)
             self._check_bridge_position(name, split_rows)
@@ -748,8 +905,8 @@ class BadTripletSplitGenerator(SplitGenerator):
 
     def _check_links(self, name: str, rows: list[CategorizedPair]) -> None:
         present = {row.pair for row in rows if row.category == TRIPLET_TARGET}
-        for bridge in {row.bridge for row in rows if row.category == TRIPLET_TARGET}:
-            expected = {(target, bridge) for target in self._targets[bridge]}
+        for bridge, (targets, _, _) in self._split_state[name].items():
+            expected = {(target, bridge) for target in targets}
             if present & expected != expected:
                 _violation(f"{name}: bridge {bridge} misses link rows")
 
@@ -757,7 +914,7 @@ class BadTripletSplitGenerator(SplitGenerator):
         present = {
             (row.bridge, row.pair) for row in rows if row.category == TRIPLET_SOURCE
         }
-        for bridge, (sources, _) in self._split_state[name].items():
+        for bridge, (_, sources, _) in self._split_state[name].items():
             expected = {(bridge, (home, bridge)) for home in sources}
             if present & expected != expected:
                 _violation(f"{name}: bridge {bridge} misses triplet source rows")
@@ -772,8 +929,8 @@ class BadTripletSplitGenerator(SplitGenerator):
                     _violation(
                         f"{name}: extra match {row.pair} involves active bridge {ref}"
                     )
-        for bridge, (sources, extras) in active.items():
-            budget = round(self.match_bridge_ratio * len(self._targets[bridge]))
+        for bridge, (targets, sources, extras) in active.items():
+            budget = round(self.match_bridge_ratio * len(targets))
             if len(sources) + len(extras) != budget:
                 _violation(
                     f"{name}: bridge {bridge} has {len(sources) + len(extras)} "

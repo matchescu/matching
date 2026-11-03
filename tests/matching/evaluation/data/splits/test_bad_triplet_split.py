@@ -357,3 +357,78 @@ def test_negative_rows_match_the_neg_pos_ratio(generated):
         negatives = sum(1 for row in rows if row.label == 0)
 
         assert negatives == round(generated.neg_pos_ratio * positives)
+
+
+def _two_link_data():
+    homes = [RefId(1, "pairs"), RefId(2, "pairs")]
+    bridge = RefId(3, GENERATED)
+    targets = [RefId(4, "pairs"), RefId(5, "pairs")]
+    id_table = InMemoryIdTable()
+    for ref in [*homes, bridge, *targets]:
+        id_table.put(EntityReference(ref, {"record_id": ref.label}))
+    cluster_gt = {homes[0]: 1, homes[1]: 1, bridge: 1, targets[0]: 2, targets[1]: 3}
+    matcher_gt = {
+        (homes[0], homes[1]): 1,
+        (homes[0], bridge): 1,
+        (homes[1], bridge): 1,
+        (targets[0], bridge): 2,
+        (targets[1], bridge): 2,
+    }
+    return id_table, cluster_gt, matcher_gt
+
+
+@pytest.mark.parametrize("dataset", [FODORS], indirect=True)
+def test_cap_bounds_rows_and_preserves_ratios(make_generator, dataset):
+    generator = make_generator(dataset, max_total_samples=3000).generate()
+
+    total = 0
+    for rows in generator._categorized.values():
+        labels = Counter(row.label for row in rows)
+        positives = labels[1] + labels[2]
+        total += len(rows)
+        assert labels[2] > 0
+        assert labels[1] == round(generator.match_bridge_ratio * labels[2])
+        assert labels[0] <= round(generator.neg_pos_ratio * positives)
+    assert total <= 3000
+
+
+@pytest.mark.parametrize("dataset", [FODORS], indirect=True)
+def test_cap_at_the_minimum_keeps_the_split_ratio(make_generator, dataset):
+    generator = make_generator(dataset, max_total_samples=90).generate()
+
+    expected = {"train": 3, "dev": 1, "test": 1}
+    for name, rows in generator._categorized.items():
+        labels = Counter(row.label for row in rows)
+        assert labels[2] == expected[name]
+        assert labels[1] == 2 * expected[name]
+        assert labels[0] == 15 * expected[name]
+        assert len(rows) == 18 * expected[name]
+
+
+def test_cap_below_the_split_ratio_minimum_raises(make_generator, dataset):
+    generator = make_generator(dataset, max_total_samples=89)
+
+    with pytest.raises(ValueError, match="too small"):
+        generator.generate()
+
+
+def test_cap_keeps_one_complete_bridge_unit_when_links_exceed_budget(
+    make_generator,
+):
+    generator = make_generator(
+        _two_link_data(), ratios={"train": 1}, max_total_samples=18
+    ).generate()
+
+    rows = generator._categorized["train"]
+    categories = Counter(row.category for row in rows)
+    assert categories[TRIPLET_TARGET] == 1
+    assert categories[TRIPLET_SOURCE] + categories[EXTRA_MATCH] == 2
+    assert len(rows) <= 18
+
+
+def test_cap_is_deterministic_for_the_same_seed(make_generator, dataset):
+    first = make_generator(dataset, max_total_samples=150).generate()
+    second = make_generator(dataset, max_total_samples=150).generate()
+
+    for name in first.split_ratio:
+        assert first._categorized[name] == second._categorized[name]

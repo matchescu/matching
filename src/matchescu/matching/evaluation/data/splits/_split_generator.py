@@ -86,6 +86,7 @@ class SplitGenerator:
         self.match_bridge_ratio = match_bridge_ratio
         self.max_total_samples = max_total_samples
         self.random_state = seed
+        self._seed = seed
         self._rng = np.random.RandomState(seed)
         self._log = resolve_logger(log)
 
