@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import ClassVar, cast
 
@@ -10,6 +10,7 @@ from matchescu.comparison_space.persistence import (
 from matchescu.extraction import Traits
 from matchescu.extraction.csv import CsvRecordExtraction
 from matchescu.reference_store.id_table import InMemoryIdTable
+from matchescu.typing import EntityReferenceIdentifier as RefId
 
 from matchescu.matching.config import (
     ClusterGroundTruthConfig,
@@ -133,6 +134,7 @@ class CsvBenchmarkData(BenchmarkData):
         split_mode: str = "pair",
         file_names: Mapping[str, str] | None = None,
         logger: logging.Logger | None = None,
+        bridge_source: str | None = None,
     ) -> "CsvBenchmarkData":
         if self._id_table is None:
             raise RuntimeError("call load_data() before calling split()")
@@ -141,13 +143,17 @@ class CsvBenchmarkData(BenchmarkData):
         if self._cluster_gt is None:
             raise RuntimeError("call with_clusters() before calling split()")
         generator_cls = self._generator_class(split_mode)
+        generator_options = {}
+        if split_mode == "bad_triplet":
+            generator_options["is_bridge"] = self._bridge_predicate(bridge_source)
         splitter = (
             generator_cls(
-                split_ratios or self.__DEFAULT_SPLIT_RATIOS,
-                neg_pos_ratio,
-                bridge_class_ratio,
-                max_sample_count,
+                split_ratio=split_ratios or self.__DEFAULT_SPLIT_RATIOS,
+                neg_pos_ratio=neg_pos_ratio,
+                match_bridge_ratio=bridge_class_ratio,
+                max_total_samples=max_sample_count,
                 log=logger,
+                **generator_options,
             )
             .load(self._id_table, self._cluster_gt, self._match_gt)
             .generate()
@@ -156,6 +162,14 @@ class CsvBenchmarkData(BenchmarkData):
             splitter.save(self._data_dir, file_names=file_names)
         self._splits = {f"{k}_split": v for k, v in splitter.get_splits().items()}
         return self
+
+    @staticmethod
+    def _bridge_predicate(
+        bridge_source: str | None,
+    ) -> Callable[[RefId], bool] | None:
+        if bridge_source is None:
+            return None
+        return lambda ref_id: ref_id.source == bridge_source
 
     @staticmethod
     def _generator_class(split_mode: str) -> type[SplitGenerator]:
@@ -305,6 +319,7 @@ class CsvBenchmarkDataBuilder(BenchmarkDataBuilder[CsvBenchmarkData]):
             split_mode=split_config.split_mode,
             file_names=self._configured_split_names(files) if files else None,
             logger=self._log,
+            bridge_source=split_config.bridge_source,
         )
         return self
 

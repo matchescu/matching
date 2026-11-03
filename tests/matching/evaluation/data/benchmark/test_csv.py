@@ -2,6 +2,7 @@ import logging
 from unittest.mock import MagicMock
 
 import pytest
+from matchescu.typing import EntityReferenceIdentifier as RefId
 
 from matchescu.matching.config import CsvBenchmarkDataConfig
 from matchescu.matching.config._dataset_config import SourceFileConfig, SplitConfig
@@ -168,6 +169,89 @@ def test_missing_split_files_warn_and_regenerate_to_configured_names(tmp_path, c
         "test": "test-trial.csv",
     }
     assert builder._instance.split.call_args.kwargs["split_mode"] == "pair"
+
+
+def test_split_config_parses_bridge_source_alias():
+    config = SplitConfig.model_validate({"bridgeSource": "ambiguity-generator"})
+
+    assert config.bridge_source == "ambiguity-generator"
+    assert config.model_dump(by_alias=True)["bridgeSource"] == "ambiguity-generator"
+
+
+def _directed_with_source_data(affils_dir, affils_id_col, affils_traits):
+    return (
+        CsvBenchmarkData(affils_dir, ["affiliationstrings_ids_with_source.csv"])
+        .load_data([affils_traits], [affils_id_col], ["source"])
+        .with_ideal_mapping(
+            "directed_with_label.csv",
+            id_cols=(0, 2),
+            source_cols=(1, 3),
+            label_col=4,
+            has_header=True,
+        )
+        .with_clusters("affiliationstrings_clusters.csv")
+    )
+
+
+def test_split_forwards_bridge_predicate_to_bad_triplet_generator(
+    affils_dir, affils_id_col, affils_traits, monkeypatch
+):
+    generator = MagicMock()
+    monkeypatch.setattr(
+        "matchescu.matching.evaluation.data.benchmark._csv.BadTripletSplitGenerator",
+        generator,
+    )
+    data = _directed_with_source_data(affils_dir, affils_id_col, affils_traits)
+
+    data.split(split_mode="bad_triplet", bridge_source="ambiguity-generator")
+
+    is_bridge = generator.call_args.kwargs["is_bridge"]
+    assert is_bridge(RefId(1, "ambiguity-generator"))
+    assert not is_bridge(RefId(1, "other"))
+
+
+def test_split_without_bridge_source_passes_no_predicate(
+    affils_dir, affils_id_col, affils_traits, monkeypatch
+):
+    generator = MagicMock()
+    monkeypatch.setattr(
+        "matchescu.matching.evaluation.data.benchmark._csv.BadTripletSplitGenerator",
+        generator,
+    )
+    data = _directed_with_source_data(affils_dir, affils_id_col, affils_traits)
+
+    data.split(split_mode="bad_triplet")
+
+    assert generator.call_args.kwargs["is_bridge"] is None
+
+
+def test_load_splits_forwards_bridge_source(tmp_path):
+    builder = object.__new__(CsvBenchmarkDataBuilder)
+    builder._data_dir = tmp_path
+    builder._log = logging.getLogger("builder-test")
+    builder._instance = MagicMock()
+    builder._params = CsvBenchmarkDataConfig(
+        directory=tmp_path,
+        sources=[SourceFileConfig(file_name="ids.csv")],
+        pairwise_mapping="mapping.csv",
+        splits=SplitConfig(
+            files={
+                "train": "train.csv",
+                "valid": "valid.csv",
+                "test": "test.csv",
+            },
+            split_mode="bad_triplet",
+            bridge_source="ambiguity-generator",
+        ),
+    )
+
+    builder.load_splits()
+
+    assert (
+        builder._instance.split.call_args.kwargs["bridge_source"]
+        == "ambiguity-generator"
+    )
+    assert builder._instance.split.call_args.kwargs["split_mode"] == "bad_triplet"
 
 
 @pytest.mark.parametrize(

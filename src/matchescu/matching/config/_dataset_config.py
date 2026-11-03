@@ -55,6 +55,7 @@ class SplitConfig(ConfigModel):
     neg_pos_ratio: float = 8.0
     match_bridge_ratio: float = 2.0
     split_mode: Literal["pair", "bad_triplet"] = "pair"
+    bridge_source: str | None = None
 
 
 class CsvBenchmarkDataConfig(BenchmarkDataConfig):
