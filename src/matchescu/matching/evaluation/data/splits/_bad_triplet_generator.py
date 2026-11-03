@@ -21,6 +21,7 @@ NEGATIVE = "negative"
 TRIPLET_SOURCE = "triplet_source"
 EXTRA_MATCH = "extra_match"
 TRIPLET_TARGET = "triplet_target"
+MAX_NEGATIVE_ROUNDS = 5
 
 
 class Component(NamedTuple):
@@ -663,12 +664,20 @@ class BadTripletSplitGenerator(SplitGenerator):
         if count <= 0:
             return []
         blocked = set(self._matcher_gt) | self._target_pairs(records)
-        generated = self._generate_negatives(count, blocked, records)
-        pairs = [
-            self._orient(pair)
-            for pair in generated
-            if not (pair[0] in self._bridges and pair[1] in self._bridges)
-        ]
+        pairs: list[Pair] = []
+        for _ in range(MAX_NEGATIVE_ROUNDS):
+            missing = count - len(pairs)
+            if missing <= 0:
+                break
+            batch = self._generate_negatives(missing, blocked, records)
+            if not batch:
+                break
+            for pair in batch:
+                blocked.add(pair)
+                blocked.add((pair[1], pair[0]))
+                if pair[0] in self._bridges and pair[1] in self._bridges:
+                    continue
+                pairs.append(self._orient(pair))
         if len(pairs) < count:
             self._log.warning("generated %d/%d negatives", len(pairs), count)
         return [CategorizedPair(pair, NEGATIVE) for pair in pairs]

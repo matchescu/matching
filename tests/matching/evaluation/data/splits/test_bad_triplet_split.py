@@ -348,3 +348,12 @@ def test_generate_does_not_warn_when_every_component_fits_every_split(
     make_generator(dataset).generate()
 
     assert "exceeds the smallest split target" not in caplog.text
+
+
+@pytest.mark.parametrize("dataset", [FODORS], indirect=True)
+def test_negative_rows_match_the_neg_pos_ratio(generated):
+    for rows in generated._categorized.values():
+        positives = sum(1 for row in rows if row.label > 0)
+        negatives = sum(1 for row in rows if row.label == 0)
+
+        assert negatives == round(generated.neg_pos_ratio * positives)
