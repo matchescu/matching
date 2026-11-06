@@ -25,11 +25,18 @@ class DittoModel(nn.Module):
         enc = self._bert_encode(x1, x2)
         return self._classifier(enc).squeeze(1)
 
+    def _attention_mask(self, x: torch.Tensor) -> torch.Tensor:
+        pad_id = self._bert.config.pad_token_id
+        if pad_id is None:
+            pad_id = 0
+        return (x != pad_id).long()
+
     def _bert_encode(self, x1, x2=None):
         if x2 is not None:
             # MixDA
             x_concat = torch.cat((x1, x2))
-            enc = self._bert(x_concat)[0][:, 0, :]
+            mask = self._attention_mask(x_concat)
+            enc = self._bert(x_concat, attention_mask=mask)[0][:, 0, :]
             batch_size = len(x1)
             enc1 = enc[:batch_size]  # (batch_size, emb_size)
             enc2 = enc[batch_size:]  # (batch_size, emb_size)
@@ -37,7 +44,8 @@ class DittoModel(nn.Module):
             aug_lam = np.random.beta(self._alpha_aug, self._alpha_aug)
             enc = enc1 * aug_lam + enc2 * (1.0 - aug_lam)
         else:
-            enc = self._bert(x1)[0][:, 0, :]
+            mask = self._attention_mask(x1)
+            enc = self._bert(x1, attention_mask=mask)[0][:, 0, :]
         return enc
 
     def with_frozen_bert_layers(self, frozen_layer_count: int = 6) -> "DittoModel":
