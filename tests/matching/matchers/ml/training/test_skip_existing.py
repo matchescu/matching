@@ -119,9 +119,7 @@ def test_clean_tensorboard_removes_stale_events_by_default(
     assert not stale_event.parent.exists()
 
 
-def test_no_clean_tensorboard_preserves_stale_events(
-    tmp_path, cli_args, trained_calls
-):
+def test_no_clean_tensorboard_preserves_stale_events(tmp_path, cli_args, trained_calls):
     stale_event = tmp_path / DATASET / MODEL / "tensorboard" / "events.out.tfevents.old"
     stale_event.parent.mkdir(parents=True)
     stale_event.touch()
