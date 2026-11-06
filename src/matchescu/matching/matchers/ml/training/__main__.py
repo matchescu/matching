@@ -1,3 +1,4 @@
+import shutil
 import time
 import warnings
 from contextlib import contextmanager
@@ -91,10 +92,10 @@ def get_benchmark_data_loaders(
 
 @timer(start_message="train on benchmark data")
 def train_on_benchmark_data[TParams](
-    model_save_dir: Path,
     model_name: str,
     trainer: BaseTrainer,
     evaluator_cls: type[BaseEvaluator],
+    tb_log_dir: Path,
     benchmark_data: BenchmarkData,
     tokenizer: PreTrainedTokenizerFast,
     train_params: TParams,
@@ -108,7 +109,6 @@ def train_on_benchmark_data[TParams](
         ds_cls, benchmark_data, tokenizer, train_params
     )
     matcher_model = model_cls(train_params)
-    tb_log_dir = model_save_dir / model_name / "tensorboard"
     with evaluator_cls(model_name, xv, test, tb_log_dir, logger) as evaluator:
         trainer.run_training(matcher_model, train, evaluator, True)
 
@@ -139,12 +139,14 @@ def train_on_benchmark_data[TParams](
 )
 @click.option("--seed", type=int, default=None)
 @click.option("--skip-existing", is_flag=True, default=False)
+@click.option("--clean-tensorboard/--no-clean-tensorboard", default=True)
 def run_training(
     root_model_dir: Path,
     root_data_dir: Path,
     config_path: Path,
     seed: int | None,
     skip_existing: bool,
+    clean_tensorboard: bool,
 ) -> None:
     root_model_dir = Path(root_model_dir)
     root_data_dir = Path(root_data_dir)
@@ -187,11 +189,15 @@ def run_training(
                 if skip_existing and trainer.model_checkpoint_path.exists():
                     continue
 
+                tb_log_dir = ds_model_dir / model_name / "tensorboard"
+                if clean_tensorboard:
+                    shutil.rmtree(tb_log_dir, ignore_errors=True)
+
                 train_on_benchmark_data(
-                    ds_model_dir,
                     model_name,
                     trainer,
                     eval_cls,
+                    tb_log_dir,
                     benchmark_data,
                     tokenizer,
                     train_params,
