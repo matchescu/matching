@@ -3,6 +3,7 @@ import warnings
 from contextlib import contextmanager
 from datetime import timedelta
 from functools import partial
+from logging import Logger
 from pathlib import Path
 
 import click
@@ -92,15 +93,14 @@ def get_benchmark_data_loaders(
 def train_on_benchmark_data[TParams](
     model_save_dir: Path,
     model_name: str,
-    trainer_cls: type[BaseTrainer],
+    trainer: BaseTrainer,
     evaluator_cls: type[BaseEvaluator],
     benchmark_data: BenchmarkData,
     tokenizer: PreTrainedTokenizerFast,
     train_params: TParams,
+    logger: Logger,
 ):
-    if (model_and_ds := _TRAINER_MAPPINGS.get(trainer_cls)) is None:
-        raise RuntimeError(f"unsupported trainer: {trainer_cls.__qualname__}")
-    model_cls, ds_cls = model_and_ds
+    model_cls, ds_cls = _TRAINER_MAPPINGS[type(trainer)]
     seed = getattr(train_params, "seed", None)
     if seed is not None:
         set_random_seed(seed)
@@ -108,15 +108,8 @@ def train_on_benchmark_data[TParams](
         ds_cls, benchmark_data, tokenizer, train_params
     )
     matcher_model = model_cls(train_params)
-    dataset_logger = log.getChild(benchmark_data.name)
-    trainer = trainer_cls(
-        model_name,
-        train_params,
-        model_save_dir,
-        logger=dataset_logger,
-    )
     tb_log_dir = model_save_dir / model_name / "tensorboard"
-    with evaluator_cls(model_name, xv, test, tb_log_dir, dataset_logger) as evaluator:
+    with evaluator_cls(model_name, xv, test, tb_log_dir, logger) as evaluator:
         trainer.run_training(matcher_model, train, evaluator, True)
 
 
@@ -145,11 +138,13 @@ def train_on_benchmark_data[TParams](
     default=DEFAULT_MODEL_DIR / "config.json",
 )
 @click.option("--seed", type=int, default=None)
+@click.option("--skip-existing", is_flag=True, default=False)
 def run_training(
     root_model_dir: Path,
     root_data_dir: Path,
     config_path: Path,
     seed: int | None,
+    skip_existing: bool,
 ) -> None:
     root_model_dir = Path(root_model_dir)
     root_data_dir = Path(root_data_dir)
@@ -178,14 +173,29 @@ def run_training(
                 trainer_cls = config.get_trainer(model_name)
                 eval_cls = config.get_evaluator(model_name)
 
+                if _TRAINER_MAPPINGS.get(trainer_cls) is None:
+                    raise RuntimeError(
+                        f"unsupported trainer: {trainer_cls.__qualname__}"
+                    )
+                dataset_logger = log.getChild(benchmark_data.name)
+                trainer: BaseTrainer = trainer_cls(
+                    model_name,
+                    train_params,
+                    ds_model_dir,
+                    logger=dataset_logger,
+                )
+                if skip_existing and trainer.model_checkpoint_path.exists():
+                    continue
+
                 train_on_benchmark_data(
                     ds_model_dir,
                     model_name,
-                    trainer_cls,
+                    trainer,
                     eval_cls,
                     benchmark_data,
                     tokenizer,
                     train_params,
+                    dataset_logger,
                 )
 
 

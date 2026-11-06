@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
+from functools import cached_property
 from logging import Logger, getLogger
 from os import PathLike
 from pathlib import Path
@@ -51,6 +52,16 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         if capability:
             cls.capability = capability
             CapabilityRegistry.register_trainer(capability, cls)
+
+    @cached_property
+    def task_model_dir(self) -> Path:
+        task_model_dir = self._model_dir / self._task
+        task_model_dir.mkdir(parents=True, exist_ok=True)
+        return task_model_dir
+
+    @property
+    def model_checkpoint_path(self) -> Path:
+        return self.task_model_dir / "model.pt"
 
     def _get_device(self):
         device = torch.device("cpu")
@@ -197,9 +208,7 @@ class BaseTrainer(ABC, Generic[TModel, TParams, TDataset]):
         scheduler: LRScheduler,
         additional_info: AdditionalModelInfo[TParams],
     ):
-        task_model_dir = self._model_dir / self._task
-        task_model_dir.mkdir(parents=True, exist_ok=True)
-        ckpt_path = task_model_dir / "model.pt"
+        ckpt_path = self.model_checkpoint_path
         ckpt = {
             "model": model.state_dict(),
             "optimizer": optimizer.state_dict(),
