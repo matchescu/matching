@@ -106,6 +106,30 @@ def test_skip_existing_trains_when_checkpoint_missing(
     assert len(trained_calls) == 1
 
 
+def test_clean_tensorboard_removes_stale_events_by_default(
+    tmp_path, cli_args, trained_calls
+):
+    stale_event = tmp_path / DATASET / MODEL / "tensorboard" / "events.out.tfevents.old"
+    stale_event.parent.mkdir(parents=True)
+    stale_event.touch()
+
+    result = CliRunner().invoke(run_training, cli_args)
+
+    assert result.exit_code == 0, result.output
+    assert not stale_event.parent.exists()
+
+
+def test_no_clean_tensorboard_preserves_stale_events(tmp_path, cli_args, trained_calls):
+    stale_event = tmp_path / DATASET / MODEL / "tensorboard" / "events.out.tfevents.old"
+    stale_event.parent.mkdir(parents=True)
+    stale_event.touch()
+
+    result = CliRunner().invoke(run_training, cli_args + ["--no-clean-tensorboard"])
+
+    assert result.exit_code == 0, result.output
+    assert stale_event.exists()
+
+
 def test_trainer_model_checkpoint_path_points_into_task_model_dir(
     tmp_path, make_trainer
 ):
