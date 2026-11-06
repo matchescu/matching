@@ -1,8 +1,10 @@
+from types import SimpleNamespace
 from typing import ClassVar
 
 from click.testing import CliRunner
 
 from matchescu.matching.matchers.ml.core import ModelTrainingParams
+from matchescu.matching.matchers.ml.multiclass.training import MultiClassTrainer
 from matchescu.matching.matchers.ml.training.__main__ import run_training
 
 
@@ -14,7 +16,7 @@ class _FakeBuilder:
         return self
 
     def create(self):
-        return object()
+        return SimpleNamespace(name="dataset")
 
 
 class _FakeConfig:
@@ -26,7 +28,7 @@ class _FakeConfig:
         return ModelTrainingParams(model_name="model")
 
     def get_trainer(self, model):
-        return object
+        return MultiClassTrainer
 
     def get_evaluator(self, model):
         return object
@@ -46,7 +48,7 @@ def test_cli_seed_overrides_config(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(
         "matchescu.matching.matchers.ml.training.__main__.train_on_benchmark_data",
-        lambda *args, **kwargs: captured.update(seed=args[-1].seed),
+        lambda *args, **kwargs: captured.update(seed=args[6].seed),
     )
 
     result = CliRunner().invoke(
