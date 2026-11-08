@@ -2,6 +2,8 @@ from pydantic import Field
 
 from matchescu.matching.config import ConfigModel
 
+DEFAULT_SEED = 42
+
 
 class ModelTrainingParams(ConfigModel):
     """
@@ -18,10 +20,14 @@ class ModelTrainingParams(ConfigModel):
     :type epochs: int
     :param batch_size: split the training data into batches of this size
     :type batch_size: int
+    :param seed: seed for the random number generators used during training.
+        ``None`` leaves the generators unseeded. The default makes training
+        repeatable unless a ``None`` is passed in the config or via ``--seed``.
+    :type seed: int | None
     """
 
     learning_rate: float = Field(default=3e-5)
     epochs: int = Field(default=10)
     batch_size: int = Field(default=32)
     model_name: str | None = None
-    seed: int | None = Field(default=None)
+    seed: int | None = Field(default=DEFAULT_SEED)
