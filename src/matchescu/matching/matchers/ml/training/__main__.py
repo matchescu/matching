@@ -137,7 +137,13 @@ def train_on_benchmark_data[TParams](
     type=click.Path(exists=True, file_okay=True, dir_okay=False, readable=True),
     default=DEFAULT_MODEL_DIR / "config.json",
 )
-@click.option("--seed", type=int, default=None)
+@click.option(
+    "--seed",
+    type=int,
+    default=None,
+    help="Seed overriding the one in the config. Defaults to the config value, "
+    "which is 42 unless the config sets another.",
+)
 @click.option("--skip-existing", is_flag=True, default=False)
 @click.option("--clean-tensorboard/--no-clean-tensorboard", default=True)
 def run_training(
