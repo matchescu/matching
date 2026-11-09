@@ -18,6 +18,13 @@ from ._module import MultiClassModule
 from ._params import MultiClassTrainingParams
 
 
+class MultiClassLoadError(Exception):
+    def __init__(self, path: str | PathLike, message: str | None = None) -> None:
+        message = message or "failed to load model from path"
+        super().__init__(f"{path}: {message}")
+        self.path = path
+
+
 class MultiClassSimilarity:
     def __init__(
         self,
@@ -37,23 +44,27 @@ class MultiClassSimilarity:
 
     def load_from_file(self, path: str | PathLike) -> "MultiClassSimilarity":
         path = Path(path)
-
         if not path.exists():
             raise FileNotFoundError(path)
-        model_dict = torch.load(path)
 
+        model_dict = torch.load(path)
         if (additional_info := model_dict.get("additional_info")) is None:
-            raise ValueError("expected hyperparameters to be bundled with model")
+            raise MultiClassLoadError(
+                path, "expected hyperparameters to be bundled with model"
+            )
         additional_info = AdditionalModelInfo[MultiClassTrainingParams].model_validate(
             additional_info
         )
 
-        with suppress_transformer_modeling_utils_warnings():
-            self.__model = MultiClassModule(additional_info.hyperparameters)
-            self.__model.load_state_dict(model_dict["model"], strict=True)
-            self.__model.training = False
-            self.__model.train(False)
-            self.__model.eval()
+        try:
+            with suppress_transformer_modeling_utils_warnings():
+                self.__model = MultiClassModule(additional_info.hyperparameters)
+                self.__model.load_state_dict(model_dict["model"], strict=True)
+                self.__model.training = False
+                self.__model.train(False)
+                self.__model.eval()
+        except Exception as e:
+            raise MultiClassLoadError(path, str(e)) from e
         return self
 
     def __call__(self, a: EntityReference, b: EntityReference) -> MatchResult:
