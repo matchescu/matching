@@ -8,24 +8,15 @@ from matchescu.typing import EntityReference
 from transformers import PreTrainedTokenizerFast
 
 from matchescu.matching.matchers.ml.core import AdditionalModelInfo
-from matchescu.matching.matchers.ml.transformers import (
-    suppress_transformer_modeling_utils_warnings,
-)
 
+from ..torch import TorchMatcher
 from ._decoder import decode_logits, per_class_probabilities
 from ._encoder import to_ditto_text
 from ._module import MultiClassModule
 from ._params import MultiClassTrainingParams
 
 
-class MultiClassLoadError(Exception):
-    def __init__(self, path: str | PathLike, message: str | None = None) -> None:
-        message = message or "failed to load model from path"
-        super().__init__(f"{path}: {message}")
-        self.path = path
-
-
-class MultiClassSimilarity:
+class MultiClassSimilarity(TorchMatcher[MultiClassModule, MultiClassTrainingParams]):
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerFast,
@@ -34,38 +25,24 @@ class MultiClassSimilarity:
         left_cols: Iterable[str] | None = None,
         right_cols: Iterable[str] | None = None,
     ) -> None:
+        super().__init__()
         model_dir = model_dir or curdir
         self.__tokenizer = tokenizer
         self.__max_len = max_len
         self.__model_dir = Path(model_dir)
-        self.__model = None
         self.__left_cols = left_cols
         self.__right_cols = right_cols
 
-    def load_from_file(self, path: str | PathLike) -> "MultiClassSimilarity":
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(path)
+    def _validate(
+        self, path: Path, info: dict
+    ) -> AdditionalModelInfo[MultiClassTrainingParams]:
+        return AdditionalModelInfo[MultiClassTrainingParams].model_validate(info)
 
-        model_dict = torch.load(path)
-        if (additional_info := model_dict.get("additional_info")) is None:
-            raise MultiClassLoadError(
-                path, "expected hyperparameters to be bundled with model"
-            )
-        additional_info = AdditionalModelInfo[MultiClassTrainingParams].model_validate(
-            additional_info
-        )
-
-        try:
-            with suppress_transformer_modeling_utils_warnings():
-                self.__model = MultiClassModule(additional_info.hyperparameters)
-                self.__model.load_state_dict(model_dict["model"], strict=True)
-                self.__model.training = False
-                self.__model.train(False)
-                self.__model.eval()
-        except Exception as e:
-            raise MultiClassLoadError(path, str(e)) from e
-        return self
+    @classmethod
+    def _new_model(
+        cls, info: AdditionalModelInfo[MultiClassTrainingParams]
+    ) -> MultiClassModule:
+        return MultiClassModule(info.hyperparameters)
 
     def __call__(self, a: EntityReference, b: EntityReference) -> MatchResult:
         with torch.no_grad():
@@ -89,7 +66,7 @@ class MultiClassSimilarity:
                 else torch.tensor([[-1]], dtype=torch.long)
             )
             encoding["col_positions"] = col_positions
-            cls_logits = self.__model(**encoding)
+            cls_logits = self._model(**encoding)
             prediction: int = decode_logits(cls_logits).item()
             cls_weights = per_class_probabilities(cls_logits).squeeze(0).tolist()
         return MatchResult(a.id, b.id, prediction, cls_weights)

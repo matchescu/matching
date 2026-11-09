@@ -1,5 +1,4 @@
 from collections.abc import Iterable
-from os import PathLike
 from pathlib import Path
 
 import torch
@@ -14,11 +13,14 @@ from matchescu.matching.matchers.ml.deepmatcher._encoder import (
     to_deepmatcher_repr,
 )
 
+from ..torch import TorchMatcher
 from ._module import DeepMatcherModule
 from ._params import DeepMatcherModelTrainingParams
 
 
-class DeepMatcherSimilarity:
+class DeepMatcherSimilarity(
+    TorchMatcher[DeepMatcherModule, DeepMatcherModelTrainingParams]
+):
     def __init__(
         self,
         tokenizer: PreTrainedTokenizerBase,
@@ -26,26 +28,22 @@ class DeepMatcherSimilarity:
         max_len: int = 30,
         excluded_attrs: Iterable[str | int] | None = None,
     ) -> None:
-        self._model = None
+        super().__init__()
         self._tokenizer = tokenizer
         self._attrs = attr_map
         self._max_len = max_len
         self._excluded = set(excluded_attrs or ())
 
-    def load_from_file(self, path: str | PathLike) -> "DeepMatcherSimilarity":
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(path)
-        model_dict = torch.load(path)
-        if (additional_info := model_dict.get("additional_info")) is None:
-            raise ValueError("expected hyperparameters to be bundled with model")
+    def _validate(
+        self, path: Path, info: dict
+    ) -> AdditionalModelInfo[DeepMatcherModelTrainingParams]:
+        return AdditionalModelInfo[DeepMatcherModelTrainingParams].model_validate(info)
 
-        additional_info = AdditionalModelInfo[
-            DeepMatcherModelTrainingParams
-        ].model_validate(additional_info)
-        self._model = DeepMatcherModule(additional_info.hyperparameters)
-        self._model.load_state_dict(model_dict["model"], strict=True)
-        return self
+    @classmethod
+    def _new_model(
+        cls, info: AdditionalModelInfo[DeepMatcherModelTrainingParams]
+    ) -> DeepMatcherModule:
+        return DeepMatcherModule(info.hyperparameters)
 
     def __call__(self, a: EntityReference, b: EntityReference) -> MatchResult:
         if self._model is None:
